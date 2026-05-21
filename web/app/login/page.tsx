@@ -28,15 +28,24 @@ export default function LoginPage() {
 
   async function verifyCode(e: React.FormEvent) {
     e.preventDefault();
-    if (code.length < 6) return;
+    if (code.length < 4) return;
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
+    // Probar primero como 'email' (OTP login), si falla probar 'magiclink' (signup/magic link)
+    let { error } = await supabase.auth.verifyOtp({
       email,
       token: code.trim(),
       type: "email",
     });
+    if (error) {
+      const retry = await supabase.auth.verifyOtp({
+        email,
+        token: code.trim(),
+        type: "magiclink",
+      });
+      error = retry.error;
+    }
     setLoading(false);
     if (error) {
       setError(error.message);
@@ -105,13 +114,13 @@ export default function LoginPage() {
                 <input
                   type="text"
                   inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
+                  pattern="[0-9]+"
+                  maxLength={12}
                   required
-                  placeholder="123456"
+                  placeholder="código"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  className="input mono text-2xl tracking-[0.4em] text-center font-bold"
+                  className="input mono text-2xl tracking-[0.3em] text-center font-bold"
                   autoFocus
                 />
               </div>
