@@ -122,6 +122,47 @@ export default function SongEditor() {
     setLyrics(lyrics.filter(l => l.id !== lyricId));
   }
 
+  // ===== CUE inline para una letra =====
+  // Buscar el cue asociado a una línea de letra (por matching de timestamp ±0.5s)
+  function findCueForLyric(l: any) {
+    return cues.find(c => Math.abs(c.jump_to_seconds - l.start_time_seconds) < 0.5);
+  }
+  async function setCueOnLyric(lyric: any, noteName: string) {
+    const noteNum = noteNameToNum(noteName);
+    if (noteNum === null || noteNum < 0 || noteNum > 127) return;
+    const existing = findCueForLyric(lyric);
+    if (existing) {
+      await supabase.from("midi_cues").update({
+        midi_note: noteNum,
+        label: lyric.text.slice(0, 60),
+      }).eq("id", existing.id);
+      setCues(cues.map(c => c.id === existing.id
+        ? { ...c, midi_note: noteNum, label: lyric.text.slice(0, 60) } : c));
+    } else {
+      const maxOrder = cues.length ? Math.max(...cues.map(c => c.order_index)) : -1;
+      const { data } = await supabase.from("midi_cues").insert({
+        song_id: id, order_index: maxOrder + 1,
+        midi_note: noteNum, label: lyric.text.slice(0, 60),
+        jump_to_seconds: lyric.start_time_seconds,
+      }).select().single();
+      if (data) setCues([...cues, data]);
+    }
+  }
+  async function removeCueFromLyric(lyric: any) {
+    const existing = findCueForLyric(lyric);
+    if (!existing) return;
+    await supabase.from("midi_cues").delete().eq("id", existing.id);
+    setCues(cues.filter(c => c.id !== existing.id));
+  }
+  // Sync del cue cuando cambia el tiempo de la letra
+  async function syncCueTimeWithLyric(lyric: any, oldTime: number, newTime: number) {
+    if (oldTime === newTime) return;
+    const cue = cues.find(c => Math.abs(c.jump_to_seconds - oldTime) < 0.5);
+    if (!cue) return;
+    await supabase.from("midi_cues").update({ jump_to_seconds: newTime }).eq("id", cue.id);
+    setCues(cues.map(c => c.id === cue.id ? { ...c, jump_to_seconds: newTime } : c));
+  }
+
   // ===== CUES MIDI =====
   async function addCue() {
     const lastCue = cues.at(-1);
@@ -250,18 +291,23 @@ export default function SongEditor() {
       {tab === "lyrics" && (
         <div className="space-y-2">
           <p className="text-xs text-neutral-500 mb-2">
-            Cada línea con su tiempo desde el inicio. Podés escribir <code className="text-cyan-400">90</code> o <code className="text-cyan-400">1:30</code> (es lo mismo).
+            Cada línea con su tiempo desde el inicio (<code className="text-cyan-400">90</code> o <code className="text-cyan-400">1:30</code> es lo mismo).
+            En la columna <span className="text-purple-400">♪ Cue</span> podés asignar una nota MIDI (ej: <code className="text-purple-400">D4</code>) — Logic mandará esa nota para anclar la posición a esta línea.
           </p>
-          {lyrics.map(l => (
+          {lyrics.map(l => {
+            const linkedCue = findCueForLyric(l);
+            return (
             <div key={l.id} className="card flex items-center gap-2">
               <input type="text"
                      defaultValue={formatTime(l.start_time_seconds)}
                      key={`t-${l.id}-${l.start_time_seconds}`}
                      onBlur={(e) => {
+                       const oldTime = l.start_time_seconds;
                        const sec = parseTimeInput(e.target.value);
                        e.target.value = formatTime(sec);
                        updateLyric(l.id, { start_time_seconds: sec });
                        saveLyric(l.id);
+                       syncCueTimeWithLyric(l, oldTime, sec);
                      }}
                      className="input w-20 text-center mono text-xs"
                      placeholder="1:30" />
@@ -269,6 +315,21 @@ export default function SongEditor() {
                      onChange={e => updateLyric(l.id, { text: e.target.value })}
                      onBlur={() => saveLyric(l.id)}
                      className="input flex-1" />
+              <div className="flex items-center gap-1">
+                <span className="mono text-[10px] text-purple-400" title="Cue MIDI">♪</span>
+                <input type="text"
+                       defaultValue={linkedCue ? noteNumToName(linkedCue.midi_note) : ''}
+                       key={`cue-${l.id}-${linkedCue?.midi_note || 'none'}`}
+                       onBlur={(e) => {
+                         const val = e.target.value.trim();
+                         if (val) setCueOnLyric(l, val);
+                         else if (linkedCue) removeCueFromLyric(l);
+                       }}
+                       title="Nota MIDI que dispara salto a esta línea (ej: D4)"
+                       className="input w-14 text-center mono uppercase text-xs"
+                       placeholder="—"
+                       style={linkedCue ? { borderColor: 'var(--accent-purple)' } : {}} />
+              </div>
               <button onClick={() => insertLyricAfter(l.id)}
                       title="Insertar línea abajo"
                       className="text-neutral-600 hover:text-cyan-400 px-2 text-lg leading-none">+</button>
@@ -276,7 +337,8 @@ export default function SongEditor() {
                       title="Borrar línea"
                       className="text-neutral-600 hover:text-red-400 px-2">×</button>
             </div>
-          ))}
+            );
+          })}
           <div className="flex gap-2">
             <button onClick={addLyric} className="flex-1 card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition">
               + Agregar línea
