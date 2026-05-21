@@ -125,28 +125,60 @@ export default function SongEditor() {
   // ===== CUE inline para una letra =====
   // Buscar el cue asociado a una línea de letra (por matching de timestamp ±0.5s)
   function findCueForLyric(l: any) {
-    return cues.find(c => Math.abs(c.jump_to_seconds - l.start_time_seconds) < 0.5);
+    const target = Number(l.start_time_seconds);
+    return cues.find(c => Math.abs(Number(c.jump_to_seconds) - target) < 0.5);
   }
   async function setCueOnLyric(lyric: any, noteName: string) {
     const noteNum = noteNameToNum(noteName);
-    if (noteNum === null || noteNum < 0 || noteNum > 127) return;
-    const existing = findCueForLyric(lyric);
-    if (existing) {
-      await supabase.from("midi_cues").update({
-        midi_note: noteNum,
-        label: lyric.text.slice(0, 60),
-      }).eq("id", existing.id);
-      setCues(cues.map(c => c.id === existing.id
-        ? { ...c, midi_note: noteNum, label: lyric.text.slice(0, 60) } : c));
-    } else {
-      const maxOrder = cues.length ? Math.max(...cues.map(c => c.order_index)) : -1;
-      const { data } = await supabase.from("midi_cues").insert({
-        song_id: id, order_index: maxOrder + 1,
-        midi_note: noteNum, label: lyric.text.slice(0, 60),
-        jump_to_seconds: lyric.start_time_seconds,
-      }).select().single();
-      if (data) setCues([...cues, data]);
+    if (noteNum === null || noteNum < 0 || noteNum > 127) {
+      alert(`"${noteName}" no es una nota MIDI válida. Usá formato C4, D#4, Bb3, etc.`);
+      return;
     }
+    const existingByTime = findCueForLyric(lyric);
+    const existingByNote = cues.find(c => c.midi_note === noteNum);
+
+    // Caso 1: ya existe un cue en esta línea (por tiempo) — actualizar su nota
+    if (existingByTime) {
+      // Si la nueva nota ya está usada por OTRO cue, hay que liberarla primero
+      // (unique constraint song_id+midi_note)
+      if (existingByNote && existingByNote.id !== existingByTime.id) {
+        await supabase.from("midi_cues").delete().eq("id", existingByNote.id);
+      }
+      const { error } = await supabase.from("midi_cues").update({
+        midi_note: noteNum, label: lyric.text.slice(0, 60),
+      }).eq("id", existingByTime.id);
+      if (error) { alert("Error guardando: " + error.message); return; }
+      setCues(cues
+        .filter(c => !(existingByNote && c.id === existingByNote.id))
+        .map(c => c.id === existingByTime.id
+          ? { ...c, midi_note: noteNum, label: lyric.text.slice(0, 60) } : c));
+      return;
+    }
+
+    // Caso 2: la nota ya existe en otra línea — moverla a esta línea
+    if (existingByNote) {
+      const { error } = await supabase.from("midi_cues").update({
+        jump_to_seconds: lyric.start_time_seconds,
+        label: lyric.text.slice(0, 60),
+      }).eq("id", existingByNote.id);
+      if (error) { alert("Error moviendo cue: " + error.message); return; }
+      setCues(cues.map(c => c.id === existingByNote.id
+        ? { ...c, jump_to_seconds: lyric.start_time_seconds, label: lyric.text.slice(0, 60) } : c));
+      return;
+    }
+
+    // Caso 3: cue nuevo, no conflicto — insertar
+    const maxOrder = cues.length ? Math.max(...cues.map(c => c.order_index)) : -1;
+    const { data, error } = await supabase.from("midi_cues").insert({
+      song_id: id, order_index: maxOrder + 1,
+      midi_note: noteNum, label: lyric.text.slice(0, 60),
+      jump_to_seconds: lyric.start_time_seconds,
+    }).select().single();
+    if (error) {
+      alert("Error creando cue: " + error.message);
+      return;
+    }
+    if (data) setCues([...cues, data]);
   }
   async function removeCueFromLyric(lyric: any) {
     const existing = findCueForLyric(lyric);
@@ -315,21 +347,20 @@ export default function SongEditor() {
                      onChange={e => updateLyric(l.id, { text: e.target.value })}
                      onBlur={() => saveLyric(l.id)}
                      className="input flex-1" />
-              <div className="flex items-center gap-1">
-                <span className="mono text-[10px] text-purple-400" title="Cue MIDI">♪</span>
-                <input type="text"
-                       defaultValue={linkedCue ? noteNumToName(linkedCue.midi_note) : ''}
-                       key={`cue-${l.id}-${linkedCue?.midi_note || 'none'}`}
-                       onBlur={(e) => {
-                         const val = e.target.value.trim();
-                         if (val) setCueOnLyric(l, val);
-                         else if (linkedCue) removeCueFromLyric(l);
-                       }}
-                       title="Nota MIDI que dispara salto a esta línea (ej: D4)"
-                       className="input w-14 text-center mono uppercase text-xs"
-                       placeholder="—"
-                       style={linkedCue ? { borderColor: 'var(--accent-purple)' } : {}} />
-              </div>
+              <input type="text"
+                     defaultValue={linkedCue ? noteNumToName(linkedCue.midi_note) : ''}
+                     key={`cue-${l.id}-${linkedCue?.midi_note || 'none'}`}
+                     onBlur={(e) => {
+                       const val = e.target.value.trim();
+                       if (val) setCueOnLyric(l, val);
+                       else if (linkedCue) removeCueFromLyric(l);
+                     }}
+                     title="Nota MIDI que dispara salto a esta línea (ej: D4). Dejá vacío para no usar cue."
+                     className="input w-20 text-center mono uppercase text-xs"
+                     placeholder="♪ cue"
+                     style={linkedCue
+                       ? { borderColor: '#a78bfa', color: '#a78bfa', fontWeight: 700 }
+                       : { borderStyle: 'dashed' }} />
               <button onClick={() => insertLyricAfter(l.id)}
                       title="Insertar línea abajo"
                       className="text-neutral-600 hover:text-cyan-400 px-2 text-lg leading-none">+</button>

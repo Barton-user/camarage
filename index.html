@@ -56,6 +56,37 @@
       user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
+    /* IMPORTANTE: re-habilitar selección y edición de texto en inputs.
+       Sin esto, Android WebView bloquea el typing en los campos. */
+    input, textarea, [contenteditable="true"] {
+      user-select: text;
+      -webkit-user-select: text;
+      -webkit-touch-callout: default;
+    }
+    /* Estilo .input — antes solo existía en web admin, sin esto el texto era
+       blanco sobre fondo blanco (invisible) en el celu. */
+    .input {
+      width: 100%;
+      background: #000;
+      border: 1px solid #1f1f1f;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 14px;
+      color: #fff;
+      transition: border-color 0.2s ease;
+      box-sizing: border-box;
+    }
+    .input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+    }
+    .input::placeholder { color: #525252; }
+    /* Forzar fondo oscuro en inputs del autofill de Chrome/Android */
+    input:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 1000px #000 inset !important;
+      -webkit-text-fill-color: #fff !important;
+      caret-color: #fff;
+    }
     .mono { font-family: 'JetBrains Mono', monospace; }
 
     .btn-stage { transition: transform .05s ease, background .2s ease; }
@@ -339,24 +370,68 @@
           <p class="mono text-[9px] text-neutral-600 mt-2">Editá los cues desde Setlist → Editar canción</p>
         </div>
 
-        <!-- Sincronización con Supabase -->
+        <!-- Login Supabase — necesario para que RLS permita leer datos -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Cuenta</p>
+            <span id="ms_authStatus" class="mono text-[10px] text-neutral-500">verificando…</span>
+          </div>
+          <!-- Estado deslogueado: muestra form -->
+          <div id="ms_loginForm">
+            <input id="ms_loginEmail" type="email" placeholder="vos@ejemplo.com"
+                   class="input w-full text-xs mb-1" autocomplete="email" inputmode="email" />
+            <input id="ms_loginPass" type="password" placeholder="contraseña"
+                   class="input w-full text-xs mb-2" autocomplete="current-password" />
+            <button id="ms_loginBtn"
+                    class="w-full rounded-lg py-2 text-xs font-black uppercase tracking-wider"
+                    style="background: var(--accent-green); color: #000;">
+              Entrar
+            </button>
+            <p class="mono text-[9px] text-neutral-600 mt-2">
+              Usá el mismo mail y contraseña que en la web admin.
+              Una vez logueado, la sesión queda guardada (no la tenés que poner cada vez).
+            </p>
+          </div>
+          <!-- Estado logueado: muestra info + botón salir -->
+          <div id="ms_loggedIn" class="hidden-screen">
+            <p class="text-xs mb-2">Logueado como <b id="ms_userEmail" class="text-cyan-400">—</b></p>
+            <button id="ms_logoutBtn"
+                    class="w-full rounded-lg border border-[rgba(239,68,68,0.35)] py-2 text-xs font-bold"
+                    style="color: var(--accent-red);">
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+
+        <!-- Sincronización con Supabase — pre-configurada, auto al abrir la app -->
         <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
           <div class="flex items-center justify-between mb-2">
             <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Sync · Supabase</p>
             <span id="ms_syncStatus" class="mono text-[10px] text-neutral-500">—</span>
           </div>
-          <input id="ms_supabaseUrl" type="text" placeholder="https://xxxx.supabase.co"
-                 class="input w-full text-xs mono mb-1" />
-          <input id="ms_supabaseKey" type="text" placeholder="anon key (eyJhbGc...)"
-                 class="input w-full text-xs mono mb-2" />
-          <div class="grid grid-cols-2 gap-2">
-            <button id="ms_saveSync" class="rounded-lg border border-neutral-800 py-2 text-xs font-bold active:bg-neutral-900">
-              Guardar
-            </button>
-            <button id="ms_syncNow" class="rounded-lg py-2 text-xs font-black uppercase tracking-wider"
-                    style="background: var(--accent-cyan); color: #000;">↻ Sincronizar</button>
-          </div>
-          <p class="mono text-[9px] text-neutral-600 mt-2">Pull setlist + canciones + letras + cues desde la web</p>
+          <button id="ms_syncNow" class="w-full rounded-lg py-3 text-sm font-black uppercase tracking-wider mb-2"
+                  style="background: var(--accent-cyan); color: #000;">↻ Sincronizar ahora</button>
+          <p class="mono text-[9px] text-neutral-600">
+            Sincroniza solo al abrir la app. Tocá acá si querés forzar pull manual.
+          </p>
+          <details class="mt-3">
+            <summary class="mono text-[9px] uppercase tracking-widest text-neutral-500 cursor-pointer hover:text-neutral-300">
+              Configuración avanzada (opcional)
+            </summary>
+            <div class="mt-2 space-y-1">
+              <input id="ms_supabaseUrl" type="text" placeholder="https://xxxx.supabase.co"
+                     class="input w-full text-xs mono" />
+              <input id="ms_supabaseKey" type="text" placeholder="anon key (eyJhbGc...)"
+                     class="input w-full text-xs mono" />
+              <button id="ms_saveSync" class="w-full rounded-lg border border-neutral-800 py-2 text-xs font-bold active:bg-neutral-900">
+                Guardar override
+              </button>
+              <p class="mono text-[9px] text-neutral-600">
+                Por default usa la base de datos pre-configurada de CAMARAGE.
+                Llenar solo si querés apuntar a otro proyecto Supabase.
+              </p>
+            </div>
+          </details>
         </div>
 
         <!-- Calibración de latencia del click -->
@@ -2325,6 +2400,31 @@
       renderMidiSettings();
     });
 
+    // Login
+    const loginBtn = document.getElementById('ms_loginBtn');
+    const logoutBtn = document.getElementById('ms_logoutBtn');
+    const emailInput = document.getElementById('ms_loginEmail');
+    const passInput = document.getElementById('ms_loginPass');
+    if (loginBtn) loginBtn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      const password = passInput.value;
+      if (!email || !password){ alert('Completá mail y contraseña'); return; }
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Entrando…';
+      const { error } = await window.doLogin(email, password);
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Entrar';
+      if (error){
+        alert('Error al loguear: ' + error.message);
+      } else {
+        passInput.value = '';
+      }
+    });
+    if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+      await window.doLogout();
+    });
+    window.refreshAuthUI();
+
     // Sync con Supabase
     const urlInput = document.getElementById('ms_supabaseUrl');
     const keyInput = document.getElementById('ms_supabaseKey');
@@ -2415,10 +2515,15 @@
   const SUPABASE_CACHE_KEY = 'camarage_setlist_cache';
   const SUPABASE_BAND_KEY = 'camarage_active_band_id';
 
+  // DEFAULTS hardcodeados — funciona sin configurar nada.
+  // localStorage tiene precedencia si el usuario quiere apuntar a otro proyecto.
+  const DEFAULT_SUPABASE_URL = 'https://ccytqubmroxjaiwtzsfh.supabase.co';
+  const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjeXRxdWJtcm94amFpd3R6c2ZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMjc2NjgsImV4cCI6MjA5NDkwMzY2OH0.a8cq6qpHOqV-0DCkuFyPxmHNvbuNzrItgYdaAoc1YBI';
+
   let supabaseClient = null;
   function initSupabaseClient(){
-    const url = localStorage.getItem(SUPABASE_URL_KEY);
-    const key = localStorage.getItem(SUPABASE_KEY_KEY);
+    const url = localStorage.getItem(SUPABASE_URL_KEY) || DEFAULT_SUPABASE_URL;
+    const key = localStorage.getItem(SUPABASE_KEY_KEY) || DEFAULT_SUPABASE_KEY;
     if (!url || !key || !window.supabase) return null;
     if (!supabaseClient){
       supabaseClient = window.supabase.createClient(url, key, {
@@ -2432,6 +2537,12 @@
     const client = initSupabaseClient();
     if (!client){
       updateSyncStatus('sin credenciales', 'var(--accent-yellow)');
+      return false;
+    }
+    // Verificar que estamos logueados — sin sesión, RLS bloquea todo
+    const { data: { user } } = await client.auth.getUser();
+    if (!user){
+      updateSyncStatus('login requerido en ⚙ Cuenta', 'var(--accent-yellow)');
       return false;
     }
     updateSyncStatus('sincronizando…', 'var(--accent-cyan)');
@@ -2545,6 +2656,61 @@
     if (el){ el.textContent = text; el.style.color = color || ''; }
   }
 
+  /* ----- AUTH state management ----- */
+  async function getCurrentUser(){
+    const client = initSupabaseClient();
+    if (!client) return null;
+    const { data: { user } } = await client.auth.getUser();
+    return user;
+  }
+
+  function showLoggedInUI(user){
+    const status = document.getElementById('ms_authStatus');
+    const form = document.getElementById('ms_loginForm');
+    const logged = document.getElementById('ms_loggedIn');
+    const emailEl = document.getElementById('ms_userEmail');
+    if (status){ status.textContent = 'conectado'; status.style.color = 'var(--accent-green)'; }
+    if (form) form.classList.add('hidden-screen');
+    if (logged) logged.classList.remove('hidden-screen');
+    if (emailEl) emailEl.textContent = user.email || user.id.slice(0,8);
+  }
+  function showLoggedOutUI(){
+    const status = document.getElementById('ms_authStatus');
+    const form = document.getElementById('ms_loginForm');
+    const logged = document.getElementById('ms_loggedIn');
+    if (status){ status.textContent = 'no logueado'; status.style.color = 'var(--accent-yellow)'; }
+    if (form) form.classList.remove('hidden-screen');
+    if (logged) logged.classList.add('hidden-screen');
+  }
+  async function refreshAuthUI(){
+    const user = await getCurrentUser();
+    if (user) showLoggedInUI(user);
+    else showLoggedOutUI();
+  }
+
+  async function doLogin(email, password){
+    const client = initSupabaseClient();
+    if (!client) return { error: { message: 'Supabase no inicializado' } };
+    const result = await client.auth.signInWithPassword({ email, password });
+    if (!result.error){
+      await refreshAuthUI();
+      // Después de loguear, pull data automáticamente
+      pullFromSupabase();
+    }
+    return result;
+  }
+  async function doLogout(){
+    const client = initSupabaseClient();
+    if (!client) return;
+    await client.auth.signOut();
+    showLoggedOutUI();
+    updateSyncStatus('—', '');
+  }
+  // Exponer
+  window.doLogin = doLogin;
+  window.doLogout = doLogout;
+  window.refreshAuthUI = refreshAuthUI;
+
   // Exponer al modal
   window.pullFromSupabase = pullFromSupabase;
   window.saveSupabaseCreds = function(url, key){
@@ -2560,18 +2726,15 @@
     };
   };
 
-  // Auto-sync al abrir si hay credenciales
+  // Auto-sync al abrir — siempre intenta (defaults hardcodeados garantizan credenciales).
+  // Primero carga del cache local (instantáneo), después pull de Supabase si hay internet.
   document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
-      const url = localStorage.getItem(SUPABASE_URL_KEY);
-      const key = localStorage.getItem(SUPABASE_KEY_KEY);
-      if (url && key){
-        // Primero cargo del cache (instantáneo) y después intento pull
-        loadFromCache();
-        renderSetlistEditor();
-        loadSong(0);
-        pullFromSupabase();
-      }
+      // Cache primero (rápido, offline-friendly)
+      const cached = loadFromCache();
+      if (cached){ renderSetlistEditor(); loadSong(0); }
+      // Pull en background — si éxito, reemplaza cache con data fresca
+      pullFromSupabase();
     }, 500);
   });
   </script>
