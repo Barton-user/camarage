@@ -1,27 +1,61 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">("email");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function sendCode(e: React.FormEvent) {
     e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    // SIN emailRedirectTo → Supabase manda código numérico en vez de link
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    });
+    setLoading(false);
+    if (error) setError(error.message);
+    else setStep("code");
+  }
+
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (code.length < 6) return;
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code.trim(),
+      type: "email",
+    });
+    setLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      router.push("/dashboard");
+      router.refresh();
+    }
+  }
+
+  async function resend() {
     setLoading(true);
     setError(null);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { shouldCreateUser: true },
     });
     setLoading(false);
     if (error) setError(error.message);
-    else setSent(true);
   }
 
   return (
@@ -37,33 +71,66 @@ export default function LoginPage() {
         </div>
 
         <h1 className="text-3xl font-black mb-2">Entrá</h1>
-        <p className="text-neutral-400 mb-6 text-sm">Te mandamos un link al mail para entrar sin contraseña.</p>
 
-        {sent ? (
-          <div className="card">
-            <p className="mono text-[10px] uppercase tracking-widest text-green-500 mb-1">Mail enviado</p>
-            <p className="text-sm">Revisá <b>{email}</b> y tocá el link para entrar. Si no llega, mirá en spam.</p>
-          </div>
+        {step === "email" ? (
+          <>
+            <p className="text-neutral-400 mb-6 text-sm">Te mandamos un código de 6 dígitos al mail.</p>
+            <form onSubmit={sendCode} className="space-y-3">
+              <div>
+                <label className="label">Email</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="vos@ejemplo.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input"
+                  autoFocus
+                />
+              </div>
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              <button type="submit" disabled={loading} className="btn btn-primary w-full disabled:opacity-50">
+                {loading ? "Enviando..." : "Enviar código"}
+              </button>
+            </form>
+          </>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label className="label">Email</label>
-              <input
-                type="email"
-                required
-                placeholder="vos@ejemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input"
-              />
-            </div>
-            {error && (
-              <p className="text-xs text-red-400">{error}</p>
-            )}
-            <button type="submit" disabled={loading} className="btn btn-primary w-full disabled:opacity-50">
-              {loading ? "Enviando..." : "Enviar link mágico"}
-            </button>
-          </form>
+          <>
+            <p className="text-neutral-400 mb-6 text-sm">
+              Mandamos un código a <b className="text-white">{email}</b>. Revisá tu mail y pegalo acá.
+            </p>
+            <form onSubmit={verifyCode} className="space-y-3">
+              <div>
+                <label className="label">Código de 6 dígitos</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  required
+                  placeholder="123456"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  className="input mono text-2xl tracking-[0.4em] text-center font-bold"
+                  autoFocus
+                />
+              </div>
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              <button type="submit" disabled={loading || code.length < 6}
+                      className="btn btn-primary w-full disabled:opacity-50">
+                {loading ? "Verificando..." : "Entrar"}
+              </button>
+              <div className="flex items-center justify-between text-xs text-neutral-500 pt-2">
+                <button type="button" onClick={() => { setStep("email"); setCode(""); setError(null); }}
+                        className="hover:text-white">
+                  ← Usar otro mail
+                </button>
+                <button type="button" onClick={resend} disabled={loading} className="hover:text-white disabled:opacity-50">
+                  Reenviar código
+                </button>
+              </div>
+            </form>
+          </>
         )}
 
         <p className="mono text-[10px] uppercase tracking-widest text-neutral-600 mt-8 text-center">
