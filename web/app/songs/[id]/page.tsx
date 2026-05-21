@@ -14,6 +14,31 @@ function noteNameToNum(s: string): number | null {
   return n + (parseInt(m[3],10)+1)*12;
 }
 
+// Parse "1:30", "1:30.5", "90", "90.5" → segundos. Tolera espacios y formatos mezclados.
+function parseTimeInput(value: string): number {
+  if (!value) return 0;
+  const v = value.toString().trim();
+  if (v.includes(':')) {
+    const parts = v.split(':');
+    const min = parseFloat(parts[0]) || 0;
+    const sec = parseFloat(parts[1]) || 0;
+    return min * 60 + sec;
+  }
+  return parseFloat(v) || 0;
+}
+// Formatea segundos → "mm:ss" si >= 60, sino "ss". Conserva decimales.
+function formatTime(seconds: number): string {
+  if (seconds == null) return '0';
+  const s = Number(seconds);
+  if (s < 60) return Number.isInteger(s) ? String(s) : s.toString();
+  const min = Math.floor(s / 60);
+  const sec = s - min * 60;
+  const secStr = Number.isInteger(sec)
+    ? sec.toString().padStart(2, '0')
+    : sec.toFixed(1).padStart(4, '0');
+  return `${min}:${secStr}`;
+}
+
 export default function SongEditor() {
   const supabase = createClient();
   const { id } = useParams<{ id: string }>();
@@ -184,14 +209,22 @@ export default function SongEditor() {
 
       {tab === "lyrics" && (
         <div className="space-y-2">
-          <p className="text-xs text-neutral-500 mb-2">Cada línea con su timestamp en segundos (desde el inicio de la canción).</p>
+          <p className="text-xs text-neutral-500 mb-2">
+            Cada línea con su tiempo desde el inicio. Podés escribir <code className="text-cyan-400">90</code> o <code className="text-cyan-400">1:30</code> (es lo mismo).
+          </p>
           {lyrics.map(l => (
             <div key={l.id} className="card flex items-center gap-2">
-              <input type="number" min="0" step="0.5" value={l.start_time_seconds}
-                     onChange={e => updateLyric(l.id, { start_time_seconds: parseFloat(e.target.value)||0 })}
-                     onBlur={() => saveLyric(l.id)}
-                     className="input w-20 text-center mono text-xs" />
-              <span className="mono text-[10px] text-neutral-500">s</span>
+              <input type="text"
+                     defaultValue={formatTime(l.start_time_seconds)}
+                     key={`t-${l.id}-${l.start_time_seconds}`}
+                     onBlur={(e) => {
+                       const sec = parseTimeInput(e.target.value);
+                       e.target.value = formatTime(sec);
+                       updateLyric(l.id, { start_time_seconds: sec });
+                       saveLyric(l.id);
+                     }}
+                     className="input w-20 text-center mono text-xs"
+                     placeholder="1:30" />
               <input value={l.text}
                      onChange={e => updateLyric(l.id, { text: e.target.value })}
                      onBlur={() => saveLyric(l.id)}
@@ -199,15 +232,25 @@ export default function SongEditor() {
               <button onClick={() => removeLyric(l.id)} className="text-neutral-600 hover:text-red-400 px-2">×</button>
             </div>
           ))}
-          <button onClick={addLyric} className="w-full card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition">
-            + Agregar línea
-          </button>
+          <div className="flex gap-2">
+            <button onClick={addLyric} className="flex-1 card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition">
+              + Agregar línea
+            </button>
+            <button onClick={() => {
+              const sorted = [...lyrics].sort((a,b) => a.start_time_seconds - b.start_time_seconds);
+              setLyrics(sorted);
+            }} className="card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition px-4">
+              ↕ Ordenar por tiempo
+            </button>
+          </div>
         </div>
       )}
 
       {tab === "cues" && (
         <div className="space-y-2">
-          <p className="text-xs text-neutral-500 mb-2">Cada Note On que Logic mande dispara un salto a un segundo específico.</p>
+          <p className="text-xs text-neutral-500 mb-2">
+            Cada Note On que Logic mande dispara un salto. Tiempo en <code className="text-cyan-400">segundos</code> o <code className="text-cyan-400">mm:ss</code>.
+          </p>
           {cues.map(c => (
             <div key={c.id} className="card flex items-center gap-2">
               <input value={noteNumToName(c.midi_note)}
@@ -218,17 +261,31 @@ export default function SongEditor() {
                      onChange={e => updateCue(c.id, { label: e.target.value })}
                      onBlur={() => saveCue(c.id)}
                      className="input flex-1" placeholder="Verse 1" />
-              <input type="number" min="0" step="0.5" value={c.jump_to_seconds}
-                     onChange={e => updateCue(c.id, { jump_to_seconds: parseFloat(e.target.value)||0 })}
-                     onBlur={() => saveCue(c.id)}
-                     className="input w-20 text-center mono text-xs" />
-              <span className="mono text-[10px] text-neutral-500">s</span>
+              <input type="text"
+                     defaultValue={formatTime(c.jump_to_seconds)}
+                     key={`ct-${c.id}-${c.jump_to_seconds}`}
+                     onBlur={(e) => {
+                       const sec = parseTimeInput(e.target.value);
+                       e.target.value = formatTime(sec);
+                       updateCue(c.id, { jump_to_seconds: sec });
+                       saveCue(c.id);
+                     }}
+                     className="input w-20 text-center mono text-xs"
+                     placeholder="1:30" />
               <button onClick={() => removeCue(c.id)} className="text-neutral-600 hover:text-red-400 px-2">×</button>
             </div>
           ))}
-          <button onClick={addCue} className="w-full card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition">
-            + Agregar cue MIDI
-          </button>
+          <div className="flex gap-2">
+            <button onClick={addCue} className="flex-1 card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition">
+              + Agregar cue MIDI
+            </button>
+            <button onClick={() => {
+              const sorted = [...cues].sort((a,b) => a.jump_to_seconds - b.jump_to_seconds);
+              setCues(sorted);
+            }} className="card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition px-4">
+              ↕ Ordenar por tiempo
+            </button>
+          </div>
         </div>
       )}
 
