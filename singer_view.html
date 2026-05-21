@@ -1,0 +1,618 @@
+<!--
+  =========================================================================
+  CAMARAGE — Vista del Cantante (Singer Master View)
+  -------------------------------------------------------------------------
+  Maqueta funcional de la vista "Master" que controla la banda en vivo.
+  Stack: HTML + TailwindCSS (CDN) + Vanilla JS (sin frameworks).
+  Pensada para correr en mobile / iPad en orientación vertical u horizontal.
+
+  ZONAS DE INTEGRACIÓN FUTURA (marcadas en el JS):
+    [BLE-MIDI] => puntos donde se enchufa Web Bluetooth + WebMIDI para
+                  conectar con Ableton Live o Logic Pro y enviar/recibir
+                  MIDI Clock, MIDI Program Change y Transport (Start/Stop).
+  =========================================================================
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <title>CAMARAGE · Singer View</title>
+
+  <!-- TailwindCSS vía CDN (para prototipado rápido) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Tipografía gruesa y muy legible a distancia -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800;900&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-deep:        #000000;
+      --bg-card:        #0a0a0a;
+      --bg-card-2:      #111111;
+      --border-soft:    #1f1f1f;
+      --text-primary:   #ffffff;
+      --text-secondary: #a3a3a3;
+      --accent-cyan:    #22d3ee;   /* cian — info / acentos */
+      --accent-yellow:  #facc15;   /* amarillo — atención */
+      --accent-green:   #22c55e;   /* verde — play / activo */
+      --accent-red:     #ef4444;   /* rojo — stop */
+    }
+
+    html, body { background: var(--bg-deep); }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* Botón táctil grande — no permitir errores en escenario */
+    .btn-stage {
+      transition: transform .05s ease, box-shadow .15s ease, background .2s ease;
+    }
+    .btn-stage:active { transform: scale(.96); }
+
+    /* Auto-scroll de letras: máscara superior e inferior para que el texto se
+       desvanezca en los bordes del visor, ayudando a la lectura. */
+    .lyrics-mask {
+      -webkit-mask-image: linear-gradient(to bottom,
+        transparent 0%, #000 18%, #000 82%, transparent 100%);
+              mask-image: linear-gradient(to bottom,
+        transparent 0%, #000 18%, #000 82%, transparent 100%);
+    }
+
+    .lyrics-line {
+      transition: color .35s ease, opacity .35s ease, transform .35s ease, font-size .35s ease;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+    .lyrics-line.active {
+      color: #ffffff;
+      opacity: 1;
+      transform: scale(1.02);
+    }
+    .lyrics-line.past   { color: #4b5563; opacity: .45; }
+    .lyrics-line.future { color: #6b7280; opacity: .65; }
+
+    /* Beat pulse del metrónomo visual */
+    @keyframes beatPulse {
+      0%   { transform: scale(1);   opacity: 1; }
+      40%  { transform: scale(1.6); opacity: .25; }
+      100% { transform: scale(1);   opacity: 1; }
+    }
+    .beat-pulse { animation: beatPulse .25s ease-out; }
+
+    /* "Recording dot" — pestañea cuando está en PLAY */
+    @keyframes softBlink {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .25; }
+    }
+    .blink { animation: softBlink 1s ease-in-out infinite; }
+
+    /* Indicador de conexión BLE */
+    .led {
+      width: 8px; height: 8px; border-radius: 9999px;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    /* Scrollbar fuera de vista */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+  <!-- ============================================================
+       HEADER · Estado de conexión + canción cargada + BPM
+       ============================================================ -->
+  <header class="px-5 pt-5 pb-3 flex items-center justify-between border-b border-[var(--border-soft)]">
+    <!-- Estado BLE MIDI -->
+    <div class="flex items-center gap-2">
+      <span id="bleLed" class="led" style="color: var(--accent-green); background: var(--accent-green);"></span>
+      <span class="mono text-[11px] uppercase tracking-[0.18em] text-neutral-400">
+        <span id="bleStatusText">BLE MIDI · Ableton</span>
+      </span>
+    </div>
+
+    <!-- Rol activo -->
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Rol</span>
+      <span class="text-[11px] font-extrabold uppercase tracking-[0.15em]"
+            style="color: var(--accent-cyan);">Cantante · Master</span>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       SUB-HEADER · Setlist · Canción · Tempo
+       ============================================================ -->
+  <section class="px-5 py-3 flex items-center justify-between gap-3">
+    <div class="min-w-0">
+      <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">Setlist · 03 / 12</p>
+      <h1 id="songTitle" class="text-xl sm:text-2xl font-black truncate">Lluvia de Neón</h1>
+      <p id="songMeta" class="text-xs text-neutral-400 mono">PC#03 · Key Am · 4/4</p>
+    </div>
+
+    <!-- Tempo / BPM editable con tap -->
+    <div class="text-right">
+      <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">Tempo</p>
+      <div class="flex items-baseline gap-1 justify-end">
+        <span id="bpmValue" class="mono text-3xl font-black" style="color: var(--accent-yellow);">112</span>
+        <span class="mono text-xs text-neutral-500">BPM</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       BARRA DE PROGRESO DEL COMPÁS (feedback visual sutil)
+       ============================================================ -->
+  <div class="px-5">
+    <div class="h-[3px] w-full bg-neutral-900 rounded-full overflow-hidden">
+      <div id="barProgress" class="h-full rounded-full transition-[width] duration-75 ease-linear"
+           style="width:0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-yellow));">
+      </div>
+    </div>
+    <div class="flex items-center justify-between mt-2">
+      <!-- 4 puntos de beat -->
+      <div id="beatDots" class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-neutral-700" data-beat="1"></span>
+        <span class="w-2 h-2 rounded-full bg-neutral-700" data-beat="2"></span>
+        <span class="w-2 h-2 rounded-full bg-neutral-700" data-beat="3"></span>
+        <span class="w-2 h-2 rounded-full bg-neutral-700" data-beat="4"></span>
+      </div>
+      <div class="flex items-center gap-3 mono text-[11px] text-neutral-400">
+        <span>BAR <span id="barCount" class="text-white font-bold">001</span></span>
+        <span>·</span>
+        <span>BEAT <span id="beatCount" class="text-white font-bold">1</span>/4</span>
+        <span>·</span>
+        <span id="timeCode" class="text-white font-bold">00:00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       ÁREA DE LETRAS · 70% de la pantalla · Auto-scroll
+       ============================================================ -->
+  <main class="flex-1 relative mt-4 mx-3 rounded-2xl overflow-hidden"
+        style="background: radial-gradient(120% 80% at 50% 0%, #0d0d10 0%, #000 70%);
+               border: 1px solid var(--border-soft);">
+
+    <!-- Tag de sección actual (verse / chorus / bridge) -->
+    <div class="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-md mono text-[10px] uppercase tracking-[0.2em]"
+         id="sectionTag"
+         style="background: rgba(34,211,238,0.08); color: var(--accent-cyan); border: 1px solid rgba(34,211,238,0.25);">
+      Intro
+    </div>
+
+    <!-- Próxima sección (preview) -->
+    <div class="absolute top-3 right-3 z-10 mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+      NEXT · <span id="nextSection" class="text-neutral-300">Verse 1</span>
+    </div>
+
+    <!-- Viewport de letras -->
+    <div id="lyricsViewport"
+         class="absolute inset-0 overflow-hidden lyrics-mask flex items-center justify-center">
+      <div id="lyricsTrack"
+           class="text-center px-6 transition-transform duration-700 ease-out will-change-transform">
+        <!-- Las líneas se inyectan por JS -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ============================================================
+       CONTROLES INFERIORES · Transporte + Metrónomo
+       ============================================================ -->
+  <footer class="px-4 pt-4 pb-6 grid grid-cols-12 gap-3 items-center"
+          style="background: linear-gradient(180deg, transparent 0%, #050505 50%);">
+
+    <!-- Metrónomo (visual + click) -->
+    <button id="metroBtn"
+            class="btn-stage col-span-3 h-20 rounded-2xl border border-neutral-800 bg-[var(--bg-card)]
+                   flex flex-col items-center justify-center gap-1 active:bg-neutral-900"
+            aria-label="Activar metrónomo">
+      <div class="flex items-center gap-2">
+        <span id="metroDot" class="w-3 h-3 rounded-full bg-neutral-600"></span>
+        <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-400">Click</span>
+      </div>
+      <span id="metroLabel" class="text-sm font-extrabold text-neutral-300">OFF</span>
+    </button>
+
+    <!-- STOP -->
+    <button id="stopBtn"
+            class="btn-stage col-span-4 h-20 rounded-2xl flex items-center justify-center gap-3
+                   font-black text-lg tracking-wider uppercase
+                   border border-[rgba(239,68,68,0.35)]
+                   bg-[rgba(239,68,68,0.08)] active:bg-[rgba(239,68,68,0.18)]"
+            style="color: var(--accent-red);"
+            aria-label="Detener transporte">
+      <!-- icon stop -->
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="2"/>
+      </svg>
+      STOP
+    </button>
+
+    <!-- PLAY -->
+    <button id="playBtn"
+            class="btn-stage col-span-5 h-20 rounded-2xl flex items-center justify-center gap-3
+                   font-black text-lg tracking-wider uppercase
+                   border border-[rgba(34,197,94,0.45)]
+                   shadow-[0_0_30px_-10px_rgba(34,197,94,0.6)]
+                   bg-[rgba(34,197,94,0.12)] active:bg-[rgba(34,197,94,0.22)]"
+            style="color: var(--accent-green);"
+            aria-label="Iniciar transporte">
+      <svg id="playIcon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+      <span id="playLabel">PLAY</span>
+    </button>
+  </footer>
+
+  <!-- ============================================================
+       SCRIPT · Estado, transporte, metrónomo y auto-scroll
+       ============================================================ -->
+  <script>
+    /* =====================================================================
+     * 1) ESTADO GLOBAL
+     * =================================================================== */
+    const state = {
+      bpm: 112,
+      isPlaying: false,
+      metroOn: false,
+      beat: 0,          // 0..3
+      bar: 0,           // contador de compases
+      startedAt: 0,     // timestamp ms en que arrancó PLAY
+      pausedElapsed: 0, // tiempo acumulado al pausar
+      tickHandle: null,
+      currentLineIdx: 0,
+    };
+
+    /* =====================================================================
+     * 2) LETRAS DEMO
+     *    Estructura: tiempo (segundos desde Play) + texto + sección.
+     *    En producción esto vendría desde el setlist sincronizado.
+     * =================================================================== */
+    const lyrics = [
+      { t: 0,  section: 'Intro',   text: '— — —' },
+      { t: 6,  section: 'Verse 1', text: 'Caminamos bajo la lluvia de neón' },
+      { t: 10, section: 'Verse 1', text: 'la ciudad respira en cámara lenta' },
+      { t: 14, section: 'Verse 1', text: 'y tu voz es la única señal' },
+      { t: 18, section: 'Verse 1', text: 'que llega clara entre la tormenta' },
+      { t: 23, section: 'Pre',     text: 'Si el cielo se rompe, igual vamos a bailar' },
+      { t: 28, section: 'Pre',     text: 'aunque el mundo se apague, nos vamos a encontrar' },
+      { t: 33, section: 'Chorus',  text: 'LLUVIA DE NEÓN' },
+      { t: 36, section: 'Chorus',  text: 'cae sobre nosotros' },
+      { t: 40, section: 'Chorus',  text: 'cada gota, una canción' },
+      { t: 44, section: 'Chorus',  text: 'cada paso, un latido' },
+      { t: 48, section: 'Chorus',  text: 'LLUVIA DE NEÓN' },
+      { t: 52, section: 'Bridge',  text: '(solo de bajo · 8 compases)' },
+      { t: 68, section: 'Outro',   text: 'y mañana volvemos a empezar' },
+    ];
+
+    /* =====================================================================
+     * 3) RENDER INICIAL DE LETRAS
+     * =================================================================== */
+    const lyricsTrack = document.getElementById('lyricsTrack');
+    function renderLyrics(){
+      lyricsTrack.innerHTML = lyrics.map((l, i) =>
+        `<p class="lyrics-line future font-extrabold text-2xl sm:text-3xl md:text-4xl my-6"
+            data-idx="${i}">${l.text}</p>`
+      ).join('');
+    }
+    renderLyrics();
+
+    /* =====================================================================
+     * 4) AUTO-SCROLL: centra la línea activa en el visor
+     * =================================================================== */
+    const viewport = document.getElementById('lyricsViewport');
+    function scrollToLine(idx){
+      const lines = lyricsTrack.querySelectorAll('.lyrics-line');
+      lines.forEach((el, i) => {
+        el.classList.remove('active', 'past', 'future');
+        if (i < idx)      el.classList.add('past');
+        else if (i === idx) el.classList.add('active');
+        else                el.classList.add('future');
+      });
+
+      // Calcula desplazamiento para centrar la línea activa
+      const active = lines[idx];
+      if (!active) return;
+      const vpRect = viewport.getBoundingClientRect();
+      const lineRect = active.getBoundingClientRect();
+      const trackRect = lyricsTrack.getBoundingClientRect();
+
+      // offset actual del track + delta para centrar la línea en el viewport
+      const currentTranslate = getTranslateY(lyricsTrack);
+      const delta = (vpRect.top + vpRect.height/2) - (lineRect.top + lineRect.height/2);
+      lyricsTrack.style.transform = `translateY(${currentTranslate + delta}px)`;
+    }
+    function getTranslateY(el){
+      const m = window.getComputedStyle(el).transform;
+      if (m === 'none') return 0;
+      const match = m.match(/matrix.*\((.+)\)/);
+      if (!match) return 0;
+      const values = match[1].split(', ');
+      return parseFloat(values[5] || values[13] || 0);
+    }
+
+    // Línea inicial centrada
+    requestAnimationFrame(() => scrollToLine(0));
+
+    /* =====================================================================
+     * 5) MOTOR DE TIEMPO
+     *    En producción este "tick" se reemplaza por MIDI Clock recibido
+     *    del DAW vía BLE MIDI (24 ppqn). Acá lo simulamos con setInterval.
+     * =================================================================== */
+    function elapsedSec(){
+      if (!state.isPlaying) return state.pausedElapsed / 1000;
+      return (performance.now() - state.startedAt + state.pausedElapsed) / 1000;
+    }
+
+    const beatDots = document.querySelectorAll('#beatDots [data-beat]');
+    const beatCountEl = document.getElementById('beatCount');
+    const barCountEl  = document.getElementById('barCount');
+    const barProgress = document.getElementById('barProgress');
+    const timeCodeEl  = document.getElementById('timeCode');
+    const sectionTag  = document.getElementById('sectionTag');
+    const nextSection = document.getElementById('nextSection');
+
+    let lastBeatIndex = -1;
+
+    function tick(){
+      const sec = elapsedSec();
+      const beatsPerSec = state.bpm / 60;
+      const totalBeats  = sec * beatsPerSec;          // beats absolutos
+      const beatIdx     = Math.floor(totalBeats);
+      const beatPhase   = totalBeats - beatIdx;       // 0..1 dentro del beat
+      const barIdx      = Math.floor(beatIdx / 4);
+      const beatInBar   = beatIdx % 4;
+
+      // ----- Progreso visual del compás -----
+      const barPhase = ((beatIdx % 4) + beatPhase) / 4;
+      barProgress.style.width = `${(barPhase * 100).toFixed(1)}%`;
+
+      // ----- Time code mm:ss -----
+      const m = Math.floor(sec / 60).toString().padStart(2,'0');
+      const s = Math.floor(sec % 60).toString().padStart(2,'0');
+      timeCodeEl.textContent = `${m}:${s}`;
+      barCountEl.textContent = String(barIdx + 1).padStart(3, '0');
+      beatCountEl.textContent = beatInBar + 1;
+
+      // ----- Pulso de beat (con flanco de subida) -----
+      if (beatIdx !== lastBeatIndex){
+        lastBeatIndex = beatIdx;
+        flashBeat(beatInBar);
+        if (state.metroOn) playClick(beatInBar === 0); // acento en 1
+      }
+
+      // ----- Auto-scroll de letras -----
+      let idx = 0;
+      for (let i = 0; i < lyrics.length; i++){
+        if (lyrics[i].t <= sec) idx = i;
+        else break;
+      }
+      if (idx !== state.currentLineIdx){
+        state.currentLineIdx = idx;
+        scrollToLine(idx);
+        // Actualizar tag de sección actual y próxima
+        sectionTag.textContent = lyrics[idx].section;
+        const nxt = lyrics.slice(idx+1).find(l => l.section !== lyrics[idx].section);
+        nextSection.textContent = nxt ? nxt.section : '— fin —';
+      }
+    }
+
+    function flashBeat(beatInBar){
+      // Reset visual
+      beatDots.forEach(d => {
+        d.classList.remove('beat-pulse');
+        d.style.background = '';
+      });
+      const dot = beatDots[beatInBar];
+      if (!dot) return;
+      const accent = beatInBar === 0 ? 'var(--accent-yellow)' : 'var(--accent-cyan)';
+      dot.style.background = accent;
+      dot.style.boxShadow = `0 0 12px ${accent}`;
+      // forzar reflow para reiniciar la animación
+      void dot.offsetWidth;
+      dot.classList.add('beat-pulse');
+    }
+
+    function startClock(){
+      if (state.tickHandle) cancelAnimationFrame(state.tickHandle);
+      const loop = () => {
+        tick();
+        state.tickHandle = requestAnimationFrame(loop);
+      };
+      state.tickHandle = requestAnimationFrame(loop);
+    }
+    function stopClock(){
+      if (state.tickHandle) cancelAnimationFrame(state.tickHandle);
+      state.tickHandle = null;
+    }
+
+    /* =====================================================================
+     * 6) CONTROLES DE TRANSPORTE
+     *
+     * [BLE-MIDI] En producción:
+     *   - playBtn  -> enviar MIDI System Realtime "Start" (0xFA) o
+     *                 MMC Play (F0 7F 7F 06 02 F7) al DAW.
+     *   - stopBtn  -> enviar MIDI System Realtime "Stop" (0xFC).
+     *   - Además, al cambiar de canción, enviar MIDI Program Change
+     *     (0xCn + program) para que Ableton/Logic cargue la sesión correcta.
+     *   - El "tick()" local debe sincronizarse al MIDI Clock entrante
+     *     (24 mensajes 0xF8 por negra) en vez de usar performance.now().
+     * =================================================================== */
+    const playBtn   = document.getElementById('playBtn');
+    const stopBtn   = document.getElementById('stopBtn');
+    const playLabel = document.getElementById('playLabel');
+    const playIcon  = document.getElementById('playIcon');
+
+    function setPlay(){
+      if (state.isPlaying) {
+        // PAUSE
+        state.pausedElapsed += performance.now() - state.startedAt;
+        state.isPlaying = false;
+        playLabel.textContent = 'PLAY';
+        playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        playBtn.classList.remove('blink');
+        stopClock();
+        // [BLE-MIDI] sendMidi([0xFC]); // Stop
+      } else {
+        // PLAY
+        state.startedAt = performance.now();
+        state.isPlaying = true;
+        playLabel.textContent = 'PAUSE';
+        playIcon.innerHTML = '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>';
+        playBtn.classList.add('blink');
+        startClock();
+        // [BLE-MIDI] sendMidi([0xFA]); // Start
+      }
+    }
+
+    function setStop(){
+      state.isPlaying     = false;
+      state.pausedElapsed = 0;
+      state.beat = 0; state.bar = 0;
+      state.currentLineIdx = -1;
+      lastBeatIndex = -1;
+      stopClock();
+      // Reset visual
+      barProgress.style.width = '0%';
+      timeCodeEl.textContent = '00:00';
+      barCountEl.textContent = '001';
+      beatCountEl.textContent = '1';
+      beatDots.forEach(d => { d.style.background = ''; d.style.boxShadow=''; d.classList.remove('beat-pulse'); });
+      playLabel.textContent = 'PLAY';
+      playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      playBtn.classList.remove('blink');
+      scrollToLine(0);
+      sectionTag.textContent = lyrics[0].section;
+      nextSection.textContent = (lyrics.find(l => l.section !== lyrics[0].section) || {section:'—'}).section;
+      // [BLE-MIDI] sendMidi([0xFC]); // Stop
+    }
+
+    playBtn.addEventListener('click', setPlay);
+    stopBtn.addEventListener('click', setStop);
+
+    /* =====================================================================
+     * 7) METRÓNOMO (Web Audio API)
+     * =================================================================== */
+    let audioCtx = null;
+    const metroBtn   = document.getElementById('metroBtn');
+    const metroDot   = document.getElementById('metroDot');
+    const metroLabel = document.getElementById('metroLabel');
+
+    function ensureAudio(){
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playClick(accent){
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = accent ? 1600 : 1000;
+      osc.type = 'square';
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(accent ? 0.35 : 0.2, audioCtx.currentTime + 0.001);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.05);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.06);
+    }
+
+    metroBtn.addEventListener('click', () => {
+      state.metroOn = !state.metroOn;
+      if (state.metroOn) {
+        ensureAudio();
+        metroDot.style.background = 'var(--accent-yellow)';
+        metroDot.style.boxShadow = '0 0 10px var(--accent-yellow)';
+        metroLabel.textContent = 'ON';
+        metroLabel.style.color = 'var(--accent-yellow)';
+      } else {
+        metroDot.style.background = '';
+        metroDot.style.boxShadow = '';
+        metroLabel.textContent = 'OFF';
+        metroLabel.style.color = '';
+      }
+    });
+
+    /* =====================================================================
+     * 8) TAP TEMPO (toque sobre el BPM)
+     * =================================================================== */
+    const bpmEl = document.getElementById('bpmValue');
+    let tapTimes = [];
+    bpmEl.parentElement.addEventListener('click', () => {
+      const now = performance.now();
+      tapTimes = tapTimes.filter(t => now - t < 2000);
+      tapTimes.push(now);
+      if (tapTimes.length >= 2){
+        const intervals = [];
+        for (let i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i-1]);
+        const avg = intervals.reduce((a,b)=>a+b,0) / intervals.length;
+        const bpm = Math.round(60000 / avg);
+        if (bpm >= 40 && bpm <= 240){
+          state.bpm = bpm;
+          bpmEl.textContent = bpm;
+        }
+      }
+    });
+
+    /* =====================================================================
+     * 9) [BLE-MIDI] PUNTO DE INTEGRACIÓN — WEB BLUETOOTH + WEBMIDI
+     * ---------------------------------------------------------------------
+     * Pseudocódigo a implementar en producción (requiere HTTPS + permiso):
+     *
+     *   async function connectBleMidi(){
+     *     const device = await navigator.bluetooth.requestDevice({
+     *       filters: [{ services: ['03b80e5a-ede8-4b33-a751-6ce34ec4c700'] }] // MIDI BLE Service
+     *     });
+     *     const server  = await device.gatt.connect();
+     *     const service = await server.getPrimaryService('03b80e5a-ede8-4b33-a751-6ce34ec4c700');
+     *     const char    = await service.getCharacteristic('7772e5db-3868-4112-a1a9-f2669d106bf3');
+     *     await char.startNotifications();
+     *     char.addEventListener('characteristicvaluechanged', onMidiMessage);
+     *   }
+     *
+     *   function onMidiMessage(e){
+     *     // Parsear payload BLE-MIDI: header + timestamp + status + data
+     *     // Si llega 0xF8 -> incrementar contador de ticks (24 por negra)
+     *     // Si llega 0xFA -> Start ; 0xFC -> Stop
+     *     // Si llega 0xCn -> Program Change (cargar canción del setlist)
+     *   }
+     *
+     *   function sendMidi(bytes){
+     *     // Envuelve los bytes con header BLE-MIDI y char.writeValue(...)
+     *   }
+     *
+     * Alternativa: usar navigator.requestMIDIAccess() (Web MIDI API) si el
+     * dispositivo ya está pareado a nivel SO y aparece como puerto MIDI virtual.
+     * =================================================================== */
+
+    /* =====================================================================
+     * 10) ATAJOS DE TECLADO (útil para probar en desktop)
+     * =================================================================== */
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') { e.preventDefault(); setPlay(); }
+      if (e.code === 'KeyS')  { setStop(); }
+      if (e.code === 'KeyM')  { metroBtn.click(); }
+    });
+
+    /* =====================================================================
+     * 11) MANEJO DE RESIZE (re-centrar línea activa)
+     * =================================================================== */
+    window.addEventListener('resize', () => {
+      // pequeño debounce
+      clearTimeout(window.__rsz);
+      window.__rsz = setTimeout(() => scrollToLine(state.currentLineIdx), 120);
+    });
+  </script>
+</body>
+</html>

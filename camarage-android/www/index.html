@@ -1,0 +1,2354 @@
+<!--
+  =========================================================================
+  CAMARAGE — Shell completo de la app (SPA)
+  -------------------------------------------------------------------------
+  Contiene:
+    1) Splash + Selector de Rol (Cantante / Bajista / Baterista)
+    2) Pantalla de Conexión BLE MIDI (scan / pairing / estado)
+    3) Shell con bottom nav y 4 vistas:
+         - Cantante (Master) — letras + transporte + metrónomo
+         - Bajista           — cifrado + tuner + root note
+         - Baterista         — claqueta visual + conteo + subdivisiones
+         - Setlist Editor    — armado del show, metadata por canción
+    4) Reloj central (clock) compartido por TODAS las vistas
+    5) Puntos [BLE-MIDI] marcados donde se conecta Web Bluetooth + WebMIDI
+
+  Stack: HTML + TailwindCSS (CDN) + Vanilla JS. Single-file SPA.
+  Pensado para mobile (iPhone/iPad/Android) y desktop.
+  =========================================================================
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <title>CAMARAGE · Live Sync</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-deep:        #000000;
+      --bg-card:        #0a0a0a;
+      --bg-card-2:      #111111;
+      --border-soft:    #1f1f1f;
+      --text-primary:   #ffffff;
+      --text-secondary: #a3a3a3;
+      --accent-cyan:    #22d3ee;
+      --accent-yellow:  #facc15;
+      --accent-green:   #22c55e;
+      --accent-red:     #ef4444;
+      --accent-purple:  #a78bfa;
+      --accent-orange:  #fb923c;
+    }
+    html, body { background: var(--bg-deep); }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .btn-stage { transition: transform .05s ease, background .2s ease; }
+    .btn-stage:active { transform: scale(.96); }
+
+    /* Lyric/chord scrollers */
+    .scroll-mask {
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+              mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+    }
+    .line-item { transition: color .35s ease, opacity .35s ease, transform .35s ease; line-height: 1.25; }
+    .line-item.active { color: #fff; opacity: 1; transform: scale(1.02); }
+    .line-item.past   { color: #4b5563; opacity: .45; }
+    .line-item.future { color: #6b7280; opacity: .65; }
+
+    @keyframes beatPulse { 0%{transform:scale(1);opacity:1} 40%{transform:scale(1.6);opacity:.25} 100%{transform:scale(1);opacity:1} }
+    .beat-pulse { animation: beatPulse .25s ease-out; }
+
+    @keyframes softBlink { 0%,100%{opacity:1} 50%{opacity:.25} }
+    .blink { animation: softBlink 1s ease-in-out infinite; }
+
+    @keyframes drumPulse {
+      0%   { transform: scale(.92); opacity: .6; }
+      40%  { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(.92); opacity: .6; }
+    }
+    .drum-pulse { animation: drumPulse .18s ease-out; }
+
+    @keyframes sweep { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+    .sweep { animation: sweep 1.2s linear infinite; }
+
+    .led { width: 8px; height: 8px; border-radius: 9999px; box-shadow: 0 0 8px currentColor; }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Fade entre pantallas/vistas */
+    .screen { transition: opacity .25s ease; }
+    /* Aplicar a CUALQUIER elemento con hidden-screen (screens y views).
+       Antes era ".screen.hidden-screen" y por eso las views se superponían. */
+    .hidden-screen { display: none !important; }
+
+    /* Tuner needle */
+    .needle { transform-origin: 50% 100%; transition: transform .15s ease-out; }
+
+    /* Range custom para editor */
+    input[type=range].range-stage{
+      -webkit-appearance:none; appearance:none; height:4px; background:#262626; border-radius:9999px;
+    }
+    input[type=range].range-stage::-webkit-slider-thumb{
+      -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:9999px;
+      background: var(--accent-cyan); border: 2px solid #000;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+  <!-- ============================================================
+       SCREEN 1 · SPLASH / SELECTOR DE ROL
+       ============================================================ -->
+  <section id="screenSplash" class="screen min-h-screen flex flex-col items-center justify-between px-6 py-10">
+    <div class="w-full flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg grid place-items-center"
+             style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));">
+          <span class="mono font-black text-black">C</span>
+        </div>
+        <span class="font-black tracking-wider">CAMARAGE</span>
+      </div>
+      <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">v0.1 · stage</span>
+    </div>
+
+    <div class="text-center max-w-md">
+      <p class="text-[11px] uppercase tracking-[0.25em] text-neutral-500 mb-3">Live Sync para bandas</p>
+      <h1 class="text-4xl sm:text-5xl font-black leading-tight">
+        Sincroniza tu banda.<br/>
+        <span style="color: var(--accent-cyan);">Sin perder un beat.</span>
+      </h1>
+      <p class="text-neutral-400 mt-4">Elegí tu rol para esta función. Todos van a tocar al mismo reloj MIDI.</p>
+    </div>
+
+    <div class="w-full grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl">
+      <button data-role="singer"
+              class="btn-stage role-btn rounded-2xl p-5 border border-neutral-800 bg-[var(--bg-card)] text-left active:bg-neutral-900">
+        <div class="flex items-center justify-between">
+          <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Rol</span>
+          <span class="led" style="color: var(--accent-cyan); background: var(--accent-cyan);"></span>
+        </div>
+        <p class="text-xl font-black mt-2">Cantante</p>
+        <p class="text-xs text-neutral-400 mt-1">Master · letras · transporte</p>
+      </button>
+
+      <button data-role="bassist"
+              class="btn-stage role-btn rounded-2xl p-5 border border-neutral-800 bg-[var(--bg-card)] text-left active:bg-neutral-900">
+        <div class="flex items-center justify-between">
+          <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Rol</span>
+          <span class="led" style="color: var(--accent-purple); background: var(--accent-purple);"></span>
+        </div>
+        <p class="text-xl font-black mt-2">Bajista</p>
+        <p class="text-xs text-neutral-400 mt-1">Cifrado · tuner · root</p>
+      </button>
+
+      <button data-role="drummer"
+              class="btn-stage role-btn rounded-2xl p-5 border border-neutral-800 bg-[var(--bg-card)] text-left active:bg-neutral-900">
+        <div class="flex items-center justify-between">
+          <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Rol</span>
+          <span class="led" style="color: var(--accent-orange); background: var(--accent-orange);"></span>
+        </div>
+        <p class="text-xl font-black mt-2">Baterista</p>
+        <p class="text-xs text-neutral-400 mt-1">Claqueta · conteo · subdivisiones</p>
+      </button>
+    </div>
+
+    <p class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-600">Tocá un rol para continuar →</p>
+  </section>
+
+  <!-- ============================================================
+       SCREEN 2 · PAIRING BLE MIDI
+       ============================================================ -->
+  <section id="screenPairing" class="screen hidden-screen min-h-screen flex flex-col px-6 py-8">
+    <div class="flex items-center justify-between">
+      <button id="backFromPairing" class="text-neutral-400 text-sm">← Atrás</button>
+      <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Paso 2 de 2</span>
+    </div>
+
+    <div class="flex-1 flex flex-col items-center justify-center text-center">
+      <!-- Anillo animado de scan -->
+      <div class="relative w-40 h-40 mb-8">
+        <div id="bleRing" class="absolute inset-0 rounded-full border-2 border-dashed border-cyan-400/40 sweep"></div>
+        <div class="absolute inset-4 rounded-full border border-neutral-800"></div>
+        <div class="absolute inset-0 grid place-items-center">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               style="color: var(--accent-cyan);">
+            <path d="M7 7l10 10-5 5V2l5 5L7 17"/>
+          </svg>
+        </div>
+      </div>
+
+      <p class="mono text-[10px] uppercase tracking-[0.25em] text-neutral-500">Buscando dispositivos</p>
+      <h2 class="text-2xl font-black mt-1">Conectar al DAW vía BLE MIDI</h2>
+      <p class="text-neutral-400 max-w-sm mt-2 text-sm">
+        Asegurate de que <b>Ableton Live</b> o <b>Logic Pro</b> esté abierto y con BLE MIDI activo.
+      </p>
+
+      <!-- Lista de dispositivos mock -->
+      <div class="w-full max-w-md mt-6 space-y-2" id="bleDeviceList">
+        <button class="ble-device w-full text-left rounded-xl border border-neutral-800 bg-[var(--bg-card)] p-3 flex items-center justify-between active:bg-neutral-900"
+                data-device="Ableton Live · MacBook Pro">
+          <div>
+            <p class="font-bold">Ableton Live · MacBook Pro</p>
+            <p class="mono text-[10px] text-neutral-500">aa:bb:cc:11:22:33 · MIDI BLE</p>
+          </div>
+          <span class="text-xs px-2 py-1 rounded-md" style="background: rgba(34,211,238,0.1); color: var(--accent-cyan);">Conectar</span>
+        </button>
+        <button class="ble-device w-full text-left rounded-xl border border-neutral-800 bg-[var(--bg-card)] p-3 flex items-center justify-between active:bg-neutral-900"
+                data-device="Logic Pro · iMac Studio">
+          <div>
+            <p class="font-bold">Logic Pro · iMac Studio</p>
+            <p class="mono text-[10px] text-neutral-500">aa:bb:cc:44:55:66 · MIDI BLE</p>
+          </div>
+          <span class="text-xs px-2 py-1 rounded-md" style="background: rgba(34,211,238,0.1); color: var(--accent-cyan);">Conectar</span>
+        </button>
+      </div>
+
+      <button id="skipPairing" class="mt-6 text-xs text-neutral-500 underline underline-offset-4">
+        Continuar en modo offline (sin DAW)
+      </button>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SCREEN 3 · APP SHELL (header + view container + bottom nav)
+       ============================================================ -->
+  <section id="screenApp" class="screen hidden-screen min-h-screen flex flex-col pb-20">
+
+    <!-- HEADER GLOBAL -->
+    <header class="px-4 pt-4 pb-2 flex items-center justify-between border-b border-[var(--border-soft)]">
+      <button id="openSetlist" class="flex items-center gap-2 text-left">
+        <span id="bleLed" class="led" style="color: var(--accent-green); background: var(--accent-green);"></span>
+        <div>
+          <p class="mono text-[10px] uppercase tracking-[0.18em] text-neutral-500" id="bleStatusText">BLE · Ableton</p>
+          <p class="text-xs font-bold" id="setlistName">Setlist · Vivo Niceto</p>
+        </div>
+      </button>
+
+      <div class="text-center">
+        <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">Canción</p>
+        <p class="text-sm font-black truncate max-w-[140px]" id="globalSongTitle">Lluvia de Neón</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <div class="text-right">
+          <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">BPM</p>
+          <p class="mono text-lg font-black" id="globalBpm" style="color: var(--accent-yellow);">112</p>
+        </div>
+        <button id="openMidiSettings"
+                class="btn-stage w-9 h-9 rounded-lg border border-neutral-800 bg-[var(--bg-card)] grid place-items-center active:bg-neutral-900"
+                aria-label="MIDI settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent-cyan);">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Cue Toast (notificación cuando llega un cue MIDI) -->
+    <div id="cueToast"
+         class="hidden-screen fixed top-20 left-1/2 -translate-x-1/2 z-40 px-4 py-3 rounded-2xl border pointer-events-none"
+         style="background: rgba(0,0,0,0.85); border-color: var(--accent-cyan); transition: opacity .25s ease;">
+      <div class="flex items-center gap-3">
+        <span class="mono text-[10px] uppercase tracking-widest text-neutral-400">Cue</span>
+        <span class="text-base font-black" data-cue-label style="color: var(--accent-cyan);">Verse 1</span>
+        <span class="mono text-[10px] text-neutral-500">nota <span data-cue-note class="text-white">D4</span></span>
+        <span class="mono text-[10px] text-neutral-500" data-cue-time>@6.0s</span>
+      </div>
+    </div>
+
+    <!-- Modal de configuración MIDI / Bluetooth -->
+    <div id="midiSettingsModal" class="hidden-screen fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3"
+         style="background: rgba(0,0,0,0.6);">
+      <div class="w-full max-w-md max-h-[92vh] rounded-2xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col overflow-hidden">
+        <!-- Header sticky con botón cerrar siempre accesible -->
+        <div class="flex items-center justify-between p-4 border-b border-neutral-900 flex-shrink-0">
+          <div>
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">MIDI / Bluetooth</p>
+            <h3 class="text-lg font-black">Conexión</h3>
+          </div>
+          <button id="closeMidiSettings"
+                  class="w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-neutral-300 text-2xl leading-none active:bg-neutral-800"
+                  aria-label="Cerrar">×</button>
+        </div>
+        <!-- Cuerpo scrolleable -->
+        <div class="flex-1 overflow-y-auto p-4 pt-3 no-scrollbar">
+
+        <!-- Estado de conexión -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Dispositivo</p>
+            <span id="ms_connStatus" class="mono text-[10px] px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400">desconectado</span>
+          </div>
+          <p id="ms_deviceName" class="text-base font-bold mt-1">—</p>
+          <p id="ms_deviceId" class="mono text-[10px] text-neutral-500 break-all">—</p>
+          <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-neutral-800">
+            <div>
+              <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Msgs</p>
+              <p id="ms_msgCount" class="mono font-bold text-sm" style="color: var(--accent-cyan);">0</p>
+            </div>
+            <div>
+              <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Última</p>
+              <p id="ms_lastActivity" class="mono font-bold text-sm">—</p>
+            </div>
+            <div>
+              <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Tipo</p>
+              <p id="ms_devType" class="mono font-bold text-sm">—</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtro de canal MIDI -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Canal MIDI</p>
+              <p class="text-xs text-neutral-400 mt-0.5">Filtrá para no procesar tráfico de otros canales</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-9 gap-1" id="ms_channelGrid">
+            <!-- Generado por JS: ALL + 1..16 -->
+          </div>
+        </div>
+
+        <!-- Cues activos (read-only) -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Cues de la canción actual</p>
+            <p id="ms_cueCount" class="mono text-[10px] text-neutral-500">0</p>
+          </div>
+          <div id="ms_cueList" class="space-y-1 max-h-28 overflow-y-auto no-scrollbar"></div>
+          <p class="mono text-[9px] text-neutral-600 mt-2">Editá los cues desde Setlist → Editar canción</p>
+        </div>
+
+        <!-- Calibración de latencia del click -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-1">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Latency offset · click</p>
+            <span class="mono text-xs font-bold" id="ms_latencyVal" style="color: var(--accent-yellow);">88ms</span>
+          </div>
+          <p class="text-[10px] text-neutral-500 mb-2">Cuánto adelantar el click para compensar el delay BLE+audio</p>
+          <input type="range" min="0" max="200" value="88" id="ms_latencyRange" class="range-stage w-full"/>
+          <div class="flex justify-between mono text-[9px] text-neutral-600 mt-1">
+            <span>0ms</span><span>100ms</span><span>200ms</span>
+          </div>
+        </div>
+
+        <!-- Log de mensajes MIDI en vivo (debug) -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">MIDI in · vivo</p>
+              <span id="ms_clockBadge" class="mono text-[9px] px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-600">clock ×0/s</span>
+            </div>
+            <button id="ms_clearLog" class="mono text-[9px] uppercase tracking-wider text-neutral-500 hover:text-white">limpiar</button>
+          </div>
+          <div id="ms_logList" class="space-y-0.5 max-h-44 overflow-y-auto no-scrollbar mono text-[10px]">
+            <p class="text-neutral-700 italic">esperando mensajes…</p>
+          </div>
+        </div>
+
+        </div>
+        <!-- Footer sticky con acciones siempre visibles -->
+        <div class="grid grid-cols-2 gap-2 p-3 border-t border-neutral-900 flex-shrink-0 bg-[var(--bg-card)]">
+          <button id="ms_disconnectBtn"
+                  class="rounded-xl border border-[rgba(239,68,68,0.35)] py-2.5 text-sm font-bold active:bg-[rgba(239,68,68,0.18)]"
+                  style="color: var(--accent-red);">Desconectar</button>
+          <button id="ms_reconnectBtn"
+                  class="rounded-xl py-2.5 text-sm font-black uppercase tracking-wider"
+                  style="background: var(--accent-cyan); color: #000;">Conectar BLE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BARRA DE COMPÁS GLOBAL -->
+    <div class="px-4 pt-2">
+      <div class="h-[3px] w-full bg-neutral-900 rounded-full overflow-hidden">
+        <div id="globalBarProgress" class="h-full rounded-full"
+             style="width:0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-yellow));"></div>
+      </div>
+      <div class="flex items-center justify-between mt-2">
+        <div id="globalBeatDots" class="flex gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="1"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="2"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="3"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="4"></span>
+        </div>
+        <div class="mono text-[10px] text-neutral-500">
+          BAR <span id="globalBar" class="text-white">001</span> · BEAT <span id="globalBeat" class="text-white">1</span>/4 ·
+          <span id="globalTime" class="text-white">00:00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         CONTAINER DE VISTAS
+         ============================================================ -->
+    <main class="flex-1 relative">
+
+      <!-- ============ VISTA · CANTANTE ============ -->
+      <div id="viewSinger" class="view absolute inset-0 flex flex-col">
+        <div class="px-4 pt-3 flex items-center justify-between">
+          <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">
+            Key <span class="text-white font-bold">Am</span> · 4/4 · PC#03
+          </p>
+          <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500" id="singerSectionLabel">
+            Section · <span class="text-white" id="singerSectionTag">Intro</span>
+          </p>
+        </div>
+
+        <div class="flex-1 mx-3 my-3 rounded-2xl overflow-hidden relative"
+             style="background: radial-gradient(120% 80% at 50% 0%, #0d0d10 0%, #000 70%);
+                    border: 1px solid var(--border-soft);">
+          <div class="absolute top-3 right-3 mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+            NEXT · <span class="text-neutral-300" id="singerNextSection">Verse 1</span>
+          </div>
+          <div class="absolute inset-0 overflow-hidden scroll-mask flex items-center justify-center">
+            <div id="singerLyricsTrack" class="text-center px-6 transition-transform duration-700 ease-out will-change-transform"></div>
+          </div>
+        </div>
+
+        <!-- Transporte cantante -->
+        <div class="px-4 pb-4 grid grid-cols-12 gap-2">
+          <button id="metroBtn"
+                  class="btn-stage col-span-3 h-16 rounded-2xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col items-center justify-center active:bg-neutral-900">
+            <div class="flex items-center gap-2">
+              <span id="metroDot" class="w-3 h-3 rounded-full bg-neutral-600"></span>
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-400">Click</span>
+            </div>
+            <span id="metroLabel" class="text-sm font-extrabold text-neutral-300">OFF</span>
+          </button>
+          <button id="stopBtn"
+                  class="btn-stage col-span-4 h-16 rounded-2xl flex items-center justify-center gap-2 font-black uppercase
+                         border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.08)] active:bg-[rgba(239,68,68,0.18)]"
+                  style="color: var(--accent-red);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            STOP
+          </button>
+          <button id="playBtn"
+                  class="btn-stage col-span-5 h-16 rounded-2xl flex items-center justify-center gap-2 font-black uppercase
+                         border border-[rgba(34,197,94,0.45)] shadow-[0_0_30px_-10px_rgba(34,197,94,0.6)]
+                         bg-[rgba(34,197,94,0.12)] active:bg-[rgba(34,197,94,0.22)]"
+                  style="color: var(--accent-green);">
+            <svg id="playIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <span id="playLabel">PLAY</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ============ VISTA · BAJISTA ============ -->
+      <div id="viewBassist" class="view absolute inset-0 hidden-screen flex flex-col">
+        <!-- Top: Root note actual GIGANTE + próximo -->
+        <div class="px-4 pt-3 grid grid-cols-3 gap-3">
+          <div class="col-span-2 rounded-2xl border border-neutral-800 bg-[var(--bg-card)] p-4">
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Root actual</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <span id="bassRoot" class="text-7xl font-black" style="color: var(--accent-purple);">A</span>
+              <span id="bassChordQuality" class="text-2xl font-bold text-neutral-400">m</span>
+            </div>
+            <p id="bassChordFull" class="mono text-xs text-neutral-500 mt-1">Am · 2 bars</p>
+          <p id="bassCurrentLyric" class="text-sm text-neutral-300 mt-2 italic truncate">♪ —</p>
+          </div>
+          <div class="rounded-2xl border border-neutral-800 bg-[var(--bg-card)] p-4">
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Próximo</p>
+            <div class="flex items-baseline gap-1 mt-1">
+              <span id="bassNextRoot" class="text-4xl font-black text-neutral-200">F</span>
+              <span id="bassNextQuality" class="text-lg font-bold text-neutral-500"></span>
+            </div>
+            <p id="bassNextIn" class="mono text-[10px] text-neutral-500 mt-2">en 4 beats</p>
+          </div>
+        </div>
+
+        <!-- Tuner mockeado -->
+        <div class="mx-4 mt-3 rounded-2xl border border-neutral-800 bg-[var(--bg-card)] p-3">
+          <div class="flex items-center justify-between">
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Tuner</p>
+            <p class="mono text-[10px] text-neutral-500">Standard E A D G</p>
+          </div>
+          <div class="relative h-14 mt-2 overflow-hidden">
+            <!-- Línea central -->
+            <div class="absolute left-1/2 top-0 bottom-0 w-px bg-neutral-700"></div>
+            <!-- Marcas -->
+            <div class="absolute inset-0 flex items-end justify-between px-2">
+              <span class="mono text-[10px] text-neutral-600">-50¢</span>
+              <span class="mono text-[10px] text-neutral-600">0</span>
+              <span class="mono text-[10px] text-neutral-600">+50¢</span>
+            </div>
+            <!-- Aguja -->
+            <div class="absolute left-1/2 bottom-0 -translate-x-1/2 w-px h-10 origin-bottom needle" id="tunerNeedle"
+                 style="background: var(--accent-green);"></div>
+            <!-- Nota detectada -->
+            <div class="absolute top-1 right-2 text-right">
+              <p class="text-2xl font-black" id="tunerNote" style="color: var(--accent-green);">A</p>
+              <p class="mono text-[10px] text-neutral-500" id="tunerCents">+0¢</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progresión / cifrado scroll -->
+        <div class="flex-1 mx-3 my-3 rounded-2xl overflow-hidden relative"
+             style="background: radial-gradient(120% 80% at 50% 0%, #0d0d10 0%, #000 70%);
+                    border: 1px solid var(--border-soft);">
+          <div class="absolute top-3 left-3 px-2.5 py-1 rounded-md mono text-[10px] uppercase tracking-[0.2em]"
+               style="background: rgba(167,139,250,0.08); color: var(--accent-purple); border: 1px solid rgba(167,139,250,0.25);"
+               id="bassSectionTag">Intro</div>
+          <div class="absolute inset-0 overflow-hidden scroll-mask flex items-center justify-center">
+            <div id="bassChordTrack" class="text-center px-6 transition-transform duration-700 ease-out will-change-transform"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ VISTA · BATERISTA ============ -->
+      <div id="viewDrummer" class="view absolute inset-0 hidden-screen flex flex-col">
+        <!-- Top: BPM gigante + sección -->
+        <div class="px-4 pt-3 flex items-center justify-between">
+          <div>
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Tempo</p>
+            <div class="flex items-baseline gap-1">
+              <span id="drumBpm" class="mono text-5xl font-black" style="color: var(--accent-orange);">112</span>
+              <span class="mono text-xs text-neutral-500">BPM</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Sección</p>
+            <p id="drumSectionTag" class="text-lg font-black">Intro</p>
+            <p class="mono text-[10px] text-neutral-500">next · <span id="drumNextSection" class="text-neutral-300">Verse 1</span> en <span id="drumNextIn" class="text-white">8</span> bars</p>
+          </div>
+        </div>
+
+        <!-- Claqueta visual gigante -->
+        <div class="flex-1 relative mx-3 my-3 rounded-2xl overflow-hidden border border-[var(--border-soft)]"
+             style="background: radial-gradient(120% 80% at 50% 50%, #0d0d10 0%, #000 70%);">
+
+          <!-- Conteo regresivo overlay -->
+          <div id="drumCountdown" class="absolute inset-0 hidden items-center justify-center bg-black/70 z-20">
+            <div class="text-center">
+              <p class="mono text-xs uppercase tracking-[0.3em] text-neutral-400 mb-2">Count-in</p>
+              <p id="drumCountdownNum" class="text-[160px] leading-none font-black" style="color: var(--accent-orange);">4</p>
+            </div>
+          </div>
+
+          <!-- Disco principal -->
+          <div class="absolute inset-0 grid place-items-center">
+            <div class="relative w-72 h-72 max-w-[80vw] max-h-[80vw]">
+              <!-- Aro fijo -->
+              <div class="absolute inset-0 rounded-full border-2 border-neutral-800"></div>
+              <!-- 4 sectores de beat -->
+              <svg viewBox="0 0 100 100" class="absolute inset-0">
+                <circle cx="50" cy="50" r="48" fill="none" stroke="#1a1a1a" stroke-width="0.5"/>
+                <line x1="50" y1="2" x2="50" y2="98" stroke="#171717" stroke-width="0.4"/>
+                <line x1="2" y1="50" x2="98" y2="50" stroke="#171717" stroke-width="0.4"/>
+              </svg>
+              <!-- Manija giratoria (cada bar 360°) -->
+              <div class="absolute inset-0" id="drumHandWrap">
+                <div class="absolute left-1/2 top-1/2 w-1 h-1/2 -translate-x-1/2 -translate-y-full origin-bottom"
+                     id="drumHand"
+                     style="background: linear-gradient(180deg, transparent, var(--accent-orange));"></div>
+              </div>
+              <!-- Centro: beat actual gigante -->
+              <div class="absolute inset-6 rounded-full grid place-items-center"
+                   id="drumCenter"
+                   style="background: radial-gradient(circle, #0b0b0b 0%, #000 80%); border: 1px solid #1f1f1f;">
+                <div class="text-center">
+                  <p class="mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">Beat</p>
+                  <p id="drumBeatBig" class="text-8xl font-black leading-none" style="color: var(--accent-orange);">1</p>
+                  <p class="mono text-[10px] text-neutral-500 mt-1">de 4 · <span id="drumSubdiv">♩</span></p>
+                </div>
+              </div>
+              <!-- 4 puntos en el perímetro -->
+              <div id="drumPerimeter"></div>
+            </div>
+          </div>
+
+          <!-- Subdivisión selector (negras / corcheas / semis) -->
+          <div class="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 bg-[var(--bg-card)] rounded-full p-1 border border-neutral-800">
+            <button data-sub="1" class="sub-btn px-3 py-1 rounded-full text-xs font-bold" style="background: var(--accent-orange); color: #000;">♩</button>
+            <button data-sub="2" class="sub-btn px-3 py-1 rounded-full text-xs font-bold text-neutral-400">♫</button>
+            <button data-sub="4" class="sub-btn px-3 py-1 rounded-full text-xs font-bold text-neutral-400">♬</button>
+          </div>
+        </div>
+
+        <!-- ===== Panel inferior · Transporte + Mini Mixer ===== -->
+        <div class="px-3 pb-3 space-y-2">
+
+          <!-- Fila de transporte (Click + Stop + Play) -->
+          <div class="grid grid-cols-12 gap-2">
+            <button id="drumMetroBtn"
+                    class="btn-stage col-span-3 h-14 rounded-xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col items-center justify-center active:bg-neutral-900">
+              <div class="flex items-center gap-1.5">
+                <span id="drumMetroDot" class="w-2.5 h-2.5 rounded-full bg-neutral-600"></span>
+                <span class="mono text-[9px] uppercase tracking-widest text-neutral-400">Click</span>
+              </div>
+              <span id="drumMetroLabel" class="text-xs font-extrabold text-neutral-300">OFF</span>
+            </button>
+            <button id="drumStopBtn"
+                    class="btn-stage col-span-4 h-14 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
+                           border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.08)] active:bg-[rgba(239,68,68,0.18)]"
+                    style="color: var(--accent-red);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              STOP
+            </button>
+            <button id="drumPlayBtn"
+                    class="btn-stage col-span-5 h-14 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
+                           border border-[rgba(34,197,94,0.45)] shadow-[0_0_30px_-10px_rgba(34,197,94,0.6)]
+                           bg-[rgba(34,197,94,0.12)] active:bg-[rgba(34,197,94,0.22)]"
+                    style="color: var(--accent-green);">
+              <svg id="drumPlayIcon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <span id="drumPlayLabel">PLAY</span>
+            </button>
+          </div>
+
+          <!-- Mini mixer (CLICK / SEQS / BANDA) -->
+          <div class="rounded-xl border border-neutral-800 bg-[var(--bg-card)] p-3">
+            <div class="flex items-center justify-between mb-2">
+              <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">In-ear mix</p>
+              <p class="mono text-[9px] text-neutral-600">→ MIDI CC al DAW</p>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+
+              <div class="mixer-channel" data-channel="click">
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent-yellow);"></span>
+                    <span class="mono uppercase tracking-wider text-neutral-300 font-bold text-[10px]">Click</span>
+                  </div>
+                  <span class="mono text-neutral-400 text-[10px]"><span class="mix-val">75</span></span>
+                </div>
+                <input type="range" min="0" max="100" value="75" class="range-stage w-full" aria-label="Volumen click"/>
+                <!-- Mini level meter -->
+                <div class="mt-1.5 h-1 bg-neutral-900 rounded-full overflow-hidden">
+                  <div class="mix-meter h-full rounded-full" style="width:75%; background: var(--accent-yellow);"></div>
+                </div>
+              </div>
+
+              <div class="mixer-channel" data-channel="seqs">
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent-cyan);"></span>
+                    <span class="mono uppercase tracking-wider text-neutral-300 font-bold text-[10px]">Seqs</span>
+                  </div>
+                  <span class="mono text-neutral-400 text-[10px]"><span class="mix-val">85</span></span>
+                </div>
+                <input type="range" min="0" max="100" value="85" class="range-stage w-full" aria-label="Volumen secuencias"/>
+                <div class="mt-1.5 h-1 bg-neutral-900 rounded-full overflow-hidden">
+                  <div class="mix-meter h-full rounded-full" style="width:85%; background: var(--accent-cyan);"></div>
+                </div>
+              </div>
+
+              <div class="mixer-channel" data-channel="band">
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent-purple);"></span>
+                    <span class="mono uppercase tracking-wider text-neutral-300 font-bold text-[10px]">Banda</span>
+                  </div>
+                  <span class="mono text-neutral-400 text-[10px]"><span class="mix-val">60</span></span>
+                </div>
+                <input type="range" min="0" max="100" value="60" class="range-stage w-full" aria-label="Volumen banda"/>
+                <div class="mt-1.5 h-1 bg-neutral-900 rounded-full overflow-hidden">
+                  <div class="mix-meter h-full rounded-full" style="width:60%; background: var(--accent-purple);"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ VISTA · SETLIST EDITOR ============ -->
+      <div id="viewSetlist" class="view absolute inset-0 hidden-screen flex flex-col overflow-y-auto no-scrollbar">
+        <div class="px-4 pt-3 flex items-center justify-between">
+          <div>
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Editor</p>
+            <h2 class="text-xl font-black" id="editorSetlistName">Setlist · Vivo Niceto</h2>
+          </div>
+          <button id="addSongBtn"
+                  class="btn-stage rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wider"
+                  style="background: var(--accent-cyan); color: #000;">+ Canción</button>
+        </div>
+
+        <!-- Lista de canciones -->
+        <div id="setlistList" class="mt-3 mx-3 space-y-2"></div>
+
+        <!-- Editor de canción seleccionada -->
+        <div class="mt-4 mx-3 rounded-2xl border border-neutral-800 bg-[var(--bg-card)] p-4">
+          <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Editar canción</p>
+          <h3 id="editSongTitle" class="text-lg font-black mt-1">Lluvia de Neón</h3>
+
+          <div class="grid grid-cols-2 gap-3 mt-3">
+            <label class="block">
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Título</span>
+              <input id="editTitle" type="text" class="w-full mt-1 bg-black border border-neutral-800 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label class="block">
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Tonalidad</span>
+              <input id="editKey" type="text" class="w-full mt-1 bg-black border border-neutral-800 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label class="block">
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">BPM</span>
+              <input id="editBpm" type="number" min="40" max="240" class="w-full mt-1 bg-black border border-neutral-800 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label class="block">
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Time Signature</span>
+              <input id="editTimeSig" type="text" class="w-full mt-1 bg-black border border-neutral-800 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label class="block col-span-2">
+              <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">Program Change (PC#)</span>
+              <input id="editPC" type="number" min="0" max="127" class="w-full mt-1 bg-black border border-neutral-800 rounded-lg px-3 py-2 text-sm" />
+              <p class="mono text-[10px] text-neutral-600 mt-1">Se envía al DAW al cargar la canción</p>
+            </label>
+          </div>
+
+          <!-- Editor de cues MIDI (Note → salto a parte) -->
+          <div class="mt-4">
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500 mb-2">
+              Cues MIDI · qué nota dispara qué parte
+            </p>
+            <p class="text-[10px] text-neutral-500 mb-2 leading-snug">
+              En Logic poné estas notas en una pista MIDI exactamente donde arranca cada sección.
+              Al recibirlas por BLE la app salta automáticamente.
+            </p>
+            <div id="editCueList" class="space-y-1.5"></div>
+          </div>
+
+          <!-- Editor de letras / cifrado por línea -->
+          <div class="mt-4">
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500 mb-2">Letras + timestamps</p>
+            <div id="editLyricsList" class="space-y-1.5"></div>
+          </div>
+
+          <div class="mt-4 grid grid-cols-2 gap-2">
+            <button id="cancelEdit" class="rounded-xl border border-neutral-800 py-2.5 text-sm font-bold text-neutral-400 active:bg-neutral-900">Cancelar</button>
+            <button id="saveEdit" class="rounded-xl py-2.5 text-sm font-black uppercase tracking-wider"
+                    style="background: var(--accent-green); color: #000;">Guardar</button>
+          </div>
+        </div>
+
+        <div class="h-6"></div>
+      </div>
+
+    </main>
+
+    <!-- ============================================================
+         BOTTOM NAV
+         ============================================================ -->
+    <nav class="fixed bottom-0 left-0 right-0 grid grid-cols-4 border-t border-[var(--border-soft)] bg-[#050505]/95 backdrop-blur">
+      <button data-view="viewSinger" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M5 8a7 7 0 0114 0v8a7 7 0 01-14 0V8z"/></svg>
+        <span class="text-[10px] mono uppercase tracking-wider">Cantante</span>
+      </button>
+      <button data-view="viewBassist" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19l8-14 8 14M6 14h12"/></svg>
+        <span class="text-[10px] mono uppercase tracking-wider">Bajo</span>
+      </button>
+      <button data-view="viewDrummer" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+        <span class="text-[10px] mono uppercase tracking-wider">Batería</span>
+      </button>
+      <button data-view="viewSetlist" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span class="text-[10px] mono uppercase tracking-wider">Setlist</span>
+      </button>
+    </nav>
+  </section>
+
+  <!-- ============================================================
+       SCRIPT · ESTADO + CLOCK CENTRAL + VISTAS
+       ============================================================ -->
+  <script>
+  /* =====================================================================
+   * MODELO DE DATOS (mock — en producción viene de Supabase)
+   * =================================================================== */
+  const setlist = {
+    name: 'Setlist · Vivo Niceto',
+    songs: [
+      {
+        id: 's1', title: 'Lluvia de Neón', key: 'Am', bpm: 112, timeSig: '4/4', programChange: 3,
+        sections: ['Intro','Verse 1','Pre','Chorus','Bridge','Outro'],
+        lyrics: [
+          { t: 0,  section:'Intro',  text:'— — —' },
+          { t: 6,  section:'Verse 1',text:'Caminamos bajo la lluvia de neón' },
+          { t: 10, section:'Verse 1',text:'la ciudad respira en cámara lenta' },
+          { t: 14, section:'Verse 1',text:'y tu voz es la única señal' },
+          { t: 18, section:'Verse 1',text:'que llega clara entre la tormenta' },
+          { t: 23, section:'Pre',    text:'Si el cielo se rompe, igual vamos a bailar' },
+          { t: 28, section:'Pre',    text:'aunque el mundo se apague, nos vamos a encontrar' },
+          { t: 33, section:'Chorus', text:'LLUVIA DE NEÓN' },
+          { t: 36, section:'Chorus', text:'cae sobre nosotros' },
+          { t: 40, section:'Chorus', text:'cada gota, una canción' },
+          { t: 44, section:'Chorus', text:'cada paso, un latido' },
+          { t: 48, section:'Chorus', text:'LLUVIA DE NEÓN' },
+          { t: 52, section:'Bridge', text:'(solo de bajo · 8 compases)' },
+          { t: 68, section:'Outro',  text:'y mañana volvemos a empezar' },
+        ],
+        // Cues MIDI · cada nota dispara un salto a un timestamp de la canción
+        // En Logic ponés esta nota en una pista MIDI en el momento exacto del cambio
+        // de sección y al disparar la nota la app salta a esa parte.
+        cues: [
+          { note: 60, label: 'Intro',   timestamp: 0  },   // C4
+          { note: 62, label: 'Verse 1', timestamp: 6  },   // D4
+          { note: 64, label: 'Pre',     timestamp: 23 },   // E4
+          { note: 65, label: 'Chorus',  timestamp: 33 },   // F4
+          { note: 67, label: 'Bridge',  timestamp: 52 },   // G4
+          { note: 69, label: 'Outro',   timestamp: 68 },   // A4
+        ],
+        chords: [
+          // Cada chord ocupa N "bars" desde el inicio
+          { bar: 0,  section:'Intro',  symbol:'Am',  root:'A', quality:'m' },
+          { bar: 2,  section:'Intro',  symbol:'F',   root:'F', quality:'' },
+          { bar: 4,  section:'Verse 1',symbol:'Am',  root:'A', quality:'m' },
+          { bar: 6,  section:'Verse 1',symbol:'G',   root:'G', quality:'' },
+          { bar: 8,  section:'Verse 1',symbol:'F',   root:'F', quality:'' },
+          { bar: 10, section:'Verse 1',symbol:'E7',  root:'E', quality:'7' },
+          { bar: 12, section:'Pre',    symbol:'Dm',  root:'D', quality:'m' },
+          { bar: 14, section:'Pre',    symbol:'G',   root:'G', quality:'' },
+          { bar: 16, section:'Chorus', symbol:'C',   root:'C', quality:'' },
+          { bar: 18, section:'Chorus', symbol:'G',   root:'G', quality:'' },
+          { bar: 20, section:'Chorus', symbol:'Am',  root:'A', quality:'m' },
+          { bar: 22, section:'Chorus', symbol:'F',   root:'F', quality:'' },
+          { bar: 24, section:'Bridge', symbol:'Dm',  root:'D', quality:'m' },
+          { bar: 28, section:'Outro',  symbol:'Am',  root:'A', quality:'m' },
+        ],
+      },
+      { id:'s2', title:'Cicatriz Eléctrica', key:'Em', bpm:128, timeSig:'4/4', programChange:4, sections:['Intro','Verse','Chorus'], lyrics:[{t:0,section:'Intro',text:'— intro —'}], chords:[{bar:0,section:'Intro',symbol:'Em',root:'E',quality:'m'}], cues:[{note:60,label:'Intro',timestamp:0},{note:62,label:'Verse',timestamp:8},{note:64,label:'Chorus',timestamp:24}] },
+      { id:'s3', title:'Noche Cero',         key:'Dm', bpm:96,  timeSig:'6/8', programChange:5, sections:['Intro','Verse','Chorus'], lyrics:[{t:0,section:'Intro',text:'— intro —'}], chords:[{bar:0,section:'Intro',symbol:'Dm',root:'D',quality:'m'}], cues:[{note:60,label:'Intro',timestamp:0}] },
+    ],
+    currentSongIdx: 0,
+  };
+
+  /* =====================================================================
+   * ESTADO GLOBAL Y CLOCK CENTRAL
+   * =================================================================== */
+  const state = {
+    role: 'singer',
+    bpm: 112,
+    isPlaying: false,
+    metroOn: false,
+    startedAt: 0,
+    pausedElapsed: 0,
+    tickHandle: null,
+    subdiv: 1,            // baterista: 1=negras, 2=corcheas, 4=semis
+    countdownActive: false,
+    // Mini mixer del baterista — valores 0..1
+    // [BLE-MIDI] En producción cada slider envía MIDI CC 7 (Volume) por canal distinto al DAW.
+    mixer: { click: 0.75, seqs: 0.85, band: 0.60 },
+  };
+
+  function currentSong(){ return setlist.songs[setlist.currentSongIdx]; }
+
+  function elapsedSec(){
+    if (!state.isPlaying) return state.pausedElapsed / 1000;
+    // Modo MIDI Clock: la posición está anclada al conteo real de ticks (24/beat).
+    // Esto elimina drift completamente — visuales avanzan EXACTAMENTE al ritmo del DAW.
+    // Entre tick y tick, interpolamos linealmente usando state.bpm como velocidad.
+    if (state.midiClockDriven && midi.tickSinceStart !== undefined){
+      const secAtLastTick = (midi.tickSinceStart / 24) * (60 / state.bpm);
+      const sinceLastTick = (performance.now() - (midi._lastTickArrivalAt||performance.now())) / 1000;
+      // Cap la interpolación a un beat para que no se desboque si paramos de recibir ticks
+      const interp = Math.min(sinceLastTick, 60 / state.bpm);
+      return (state.pausedElapsed/1000) + secAtLastTick + interp;
+    }
+    // Fallback: reloj local cuando no hay MIDI clock entrante
+    return (performance.now() - state.startedAt + state.pausedElapsed) / 1000;
+  }
+
+  /* Saltar a un timestamp absoluto de la canción (en segundos).
+     Se usa cuando llega un cue MIDI (Note On mapeado a una sección). */
+  function jumpToTime(seconds){
+    state.pausedElapsed = seconds * 1000;
+    state.startedAt = performance.now();
+    // Re-anclar el conteo de ticks MIDI a esta nueva posición:
+    // tickSinceStart vuelve a 0 y la base de tiempo (pausedElapsed) se ajusta.
+    midi.tickSinceStart = 0;
+    midi._lastTickArrivalAt = performance.now();
+    // Reset de "última posición conocida" para forzar re-render
+    singerLineIdx = -1; bassChordIdx = -1; lastGlobalBeat = -1;
+    lastDrumBeat = -1; lastDrumSubBeat = -1;
+    if (!state.isPlaying){
+      state.isPlaying = true;
+      startClock();
+      updateTransportUI();
+    }
+    flashCueIndicator();
+  }
+
+  /* Helpers de nombre de notas MIDI (C-1=0 ... G9=127; C4=60) */
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  function noteNumToName(n){ return NOTE_NAMES[n%12] + (Math.floor(n/12) - 1); }
+  function noteNameToNum(s){
+    const m = (s||'').trim().match(/^([A-G])([#b]?)(-?\d+)$/i);
+    if (!m) return null;
+    const base = {C:0,D:2,E:4,F:5,G:7,A:9,B:11}[m[1].toUpperCase()];
+    let n = base + (m[2]==='#'?1: m[2]==='b'?-1 : 0);
+    return n + (parseInt(m[3],10)+1)*12;
+  }
+  // Flash visual en el LED + breve highlight de la sección actual
+  function flashCueIndicator(){
+    const led = document.getElementById('bleLed');
+    if (led){
+      led.style.background = 'var(--accent-cyan)';
+      led.style.boxShadow = '0 0 16px var(--accent-cyan)';
+      setTimeout(() => {
+        led.style.background = 'var(--accent-green)';
+        led.style.boxShadow = '0 0 8px var(--accent-green)';
+      }, 250);
+    }
+  }
+
+  /* ---------- SUBSCRIPTORES DE CLOCK ----------
+   * Cada vista se suscribe. Esto permite mantener todas sincronizadas
+   * y, en el futuro, reemplazar el motor por MIDI Clock real sin tocar
+   * las vistas.                                                       */
+  const tickSubscribers = [];
+  function onTick(fn){ tickSubscribers.push(fn); }
+
+  function startClock(){
+    if (state.tickHandle) cancelAnimationFrame(state.tickHandle);
+    const loop = () => {
+      const t = elapsedSec();
+      tickSubscribers.forEach(fn => fn(t));
+      state.tickHandle = requestAnimationFrame(loop);
+    };
+    state.tickHandle = requestAnimationFrame(loop);
+  }
+  function stopClock(){
+    if (state.tickHandle) cancelAnimationFrame(state.tickHandle);
+    state.tickHandle = null;
+  }
+
+  /* =====================================================================
+   * NAVEGACIÓN ENTRE PANTALLAS
+   * =================================================================== */
+  const screenSplash = document.getElementById('screenSplash');
+  const screenPairing = document.getElementById('screenPairing');
+  const screenApp = document.getElementById('screenApp');
+
+  function showScreen(el){
+    [screenSplash, screenPairing, screenApp].forEach(s => s.classList.add('hidden-screen'));
+    el.classList.remove('hidden-screen');
+    window.scrollTo({top:0});
+  }
+
+  document.querySelectorAll('.role-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.role = btn.dataset.role;
+      showScreen(screenPairing);
+    });
+  });
+  document.getElementById('backFromPairing').addEventListener('click', () => showScreen(screenSplash));
+
+  document.querySelectorAll('.ble-device').forEach(b => {
+    b.addEventListener('click', async () => {
+      // Intento de pairing BLE MIDI real (requiere Web Bluetooth en Chrome Android / desktop)
+      if (navigator.bluetooth) {
+        try { await connectBleMidi(); }
+        catch(e) { /* usuario canceló — seguimos en modo demo */ }
+      } else {
+        document.getElementById('bleStatusText').textContent = 'BLE · ' + b.dataset.device.split(' · ')[0];
+      }
+      enterApp();
+    });
+  });
+  document.getElementById('skipPairing').addEventListener('click', () => {
+    document.getElementById('bleStatusText').textContent = 'OFFLINE · sin DAW';
+    document.getElementById('bleLed').style.color = 'var(--accent-yellow)';
+    document.getElementById('bleLed').style.background = 'var(--accent-yellow)';
+    enterApp();
+  });
+
+  function enterApp(){
+    // Mostrar la vista del rol elegido
+    showScreen(screenApp);
+    const targetView = state.role === 'bassist' ? 'viewBassist'
+                     : state.role === 'drummer' ? 'viewDrummer'
+                     : 'viewSinger';
+    switchView(targetView);
+    renderSetlistEditor();
+    loadSong(0);
+  }
+
+  /* =====================================================================
+   * SWITCH DE VISTAS + BOTTOM NAV
+   * =================================================================== */
+  function switchView(id){
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden-screen'));
+    document.getElementById(id).classList.remove('hidden-screen');
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      const active = b.dataset.view === id;
+      b.classList.toggle('text-white', active);
+      b.classList.toggle('text-neutral-500', !active);
+      b.style.borderTop = active ? '2px solid var(--accent-cyan)' : '2px solid transparent';
+    });
+  }
+  document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+  document.getElementById('openSetlist').addEventListener('click', () => switchView('viewSetlist'));
+
+  /* =====================================================================
+   * CARGA DE CANCIÓN (envía Program Change al DAW)
+   * =================================================================== */
+  function loadSong(idx){
+    setlist.currentSongIdx = idx;
+    const song = currentSong();
+    state.bpm = song.bpm;
+
+    // Header global
+    document.getElementById('globalSongTitle').textContent = song.title;
+    document.getElementById('globalBpm').textContent = song.bpm;
+    document.getElementById('setlistName').textContent = setlist.name;
+
+    // Singer
+    renderSingerLyrics(song);
+    // Bassist
+    renderBassChords(song);
+    document.getElementById('drumBpm').textContent = song.bpm;
+
+    // Reset transporte
+    setStop();
+    // [BLE-MIDI] sendMidi([0xC0, song.programChange]); // Program Change al canal 1
+  }
+
+  /* =====================================================================
+   * VISTA · CANTANTE
+   * =================================================================== */
+  const singerLyricsTrack = document.getElementById('singerLyricsTrack');
+  function renderSingerLyrics(song){
+    singerLyricsTrack.innerHTML = song.lyrics.map((l,i) =>
+      `<p class="line-item future font-extrabold text-2xl sm:text-3xl md:text-4xl my-6" data-idx="${i}">${l.text}</p>`
+    ).join('');
+    singerLyricsTrack.style.transform = 'translateY(0)';
+  }
+
+  let singerLineIdx = -1;
+  function scrollSingerToLine(idx){
+    const lines = singerLyricsTrack.querySelectorAll('.line-item');
+    lines.forEach((el,i) => {
+      el.classList.remove('active','past','future');
+      el.classList.add(i<idx?'past':i===idx?'active':'future');
+    });
+    const active = lines[idx]; if (!active) return;
+    const vp = singerLyricsTrack.parentElement;
+    const vpRect = vp.getBoundingClientRect();
+    const lineRect = active.getBoundingClientRect();
+    const current = getTranslateY(singerLyricsTrack);
+    const delta = (vpRect.top + vpRect.height/2) - (lineRect.top + lineRect.height/2);
+    singerLyricsTrack.style.transform = `translateY(${current + delta}px)`;
+  }
+  function getTranslateY(el){
+    const m = window.getComputedStyle(el).transform;
+    if (m === 'none') return 0;
+    const v = m.match(/matrix.*\((.+)\)/)[1].split(', ');
+    return parseFloat(v[5] || v[13] || 0);
+  }
+
+  onTick((sec) => {
+    const song = currentSong();
+    // letras
+    let idx = 0;
+    for (let i=0;i<song.lyrics.length;i++) if (song.lyrics[i].t<=sec) idx=i; else break;
+    if (idx !== singerLineIdx){
+      singerLineIdx = idx;
+      scrollSingerToLine(idx);
+      const sec_ = song.lyrics[idx].section;
+      document.getElementById('singerSectionTag').textContent = sec_;
+      const nxt = song.lyrics.slice(idx+1).find(l => l.section !== sec_);
+      document.getElementById('singerNextSection').textContent = nxt ? nxt.section : '— fin —';
+    }
+  });
+
+  /* =====================================================================
+   * VISTA · BAJISTA
+   * =================================================================== */
+  const bassChordTrack = document.getElementById('bassChordTrack');
+  function renderBassChords(song){
+    // Calcular el tiempo en segundos de cada acorde para matchearlo con la letra
+    const beatsPerBar = parseInt((song.timeSig||'4/4').split('/')[0],10) || 4;
+    const secPerBeat  = 60 / song.bpm;
+    const chordTimes  = song.chords.map(c => c.bar * beatsPerBar * secPerBeat);
+
+    bassChordTrack.innerHTML = song.chords.map((c,i) => {
+      const startT = chordTimes[i];
+      const endT   = chordTimes[i+1] ?? (startT + 999);
+      // Letra(s) que arrancan durante este acorde
+      const matching = song.lyrics.filter(l => l.t >= startT && l.t < endT && l.text && l.text !== '— — —');
+      let hint = '';
+      if (matching.length){
+        const raw = matching[0].text;
+        const snippet = raw.length > 48 ? raw.slice(0,46)+'…' : raw;
+        hint = `<span class="lyric-hint block text-sm sm:text-base text-neutral-500 mt-2 italic font-normal">♪ ${snippet}</span>`;
+      } else {
+        // sin letra (intro instrumental, solo, etc.) — placeholder sutil
+        hint = `<span class="lyric-hint block text-xs text-neutral-700 mt-2 italic font-normal">— instrumental —</span>`;
+      }
+      return `<div class="line-item future my-5" data-idx="${i}">
+         <p class="font-black text-5xl sm:text-6xl">
+           <span style="color: var(--accent-purple);">${c.root}</span><span class="text-neutral-400">${c.quality}</span>
+           <span class="mono text-xs text-neutral-600 align-top ml-2">${c.section}</span>
+         </p>
+         ${hint}
+       </div>`;
+    }).join('');
+    bassChordTrack.style.transform = 'translateY(0)';
+  }
+
+  let bassChordIdx = -1;
+  let tunerDir = 1;
+  onTick((sec) => {
+    const song = currentSong();
+    const beatsPerSec = state.bpm / 60;
+    const totalBeats = sec * beatsPerSec;
+    const currentBar = Math.floor(totalBeats / 4);
+
+    // Encontrar chord actual
+    let idx = 0;
+    for (let i=0;i<song.chords.length;i++) if (song.chords[i].bar<=currentBar) idx=i; else break;
+    const ch = song.chords[idx];
+    document.getElementById('bassRoot').textContent = ch.root;
+    document.getElementById('bassChordQuality').textContent = ch.quality;
+    document.getElementById('bassChordFull').textContent = ch.symbol + ' · ' + ch.section;
+    document.getElementById('bassSectionTag').textContent = ch.section;
+
+    // Próximo chord
+    const next = song.chords[idx+1];
+    if (next){
+      document.getElementById('bassNextRoot').textContent = next.root;
+      document.getElementById('bassNextQuality').textContent = next.quality;
+      const beatsTo = (next.bar - currentBar) * 4 - (totalBeats % 4);
+      document.getElementById('bassNextIn').textContent = 'en ' + Math.max(1, Math.ceil(beatsTo)) + ' beats';
+    }
+
+    // Scroll cifrado
+    if (idx !== bassChordIdx){
+      bassChordIdx = idx;
+      const lines = bassChordTrack.querySelectorAll('.line-item');
+      lines.forEach((el,i) => { el.classList.remove('active','past','future');
+        el.classList.add(i<idx?'past':i===idx?'active':'future'); });
+      const active = lines[idx]; if (active){
+        const vp = bassChordTrack.parentElement;
+        const vpRect = vp.getBoundingClientRect();
+        const lineRect = active.getBoundingClientRect();
+        const current = getTranslateY(bassChordTrack);
+        const delta = (vpRect.top + vpRect.height/2) - (lineRect.top + lineRect.height/2);
+        bassChordTrack.style.transform = `translateY(${current + delta}px)`;
+      }
+    }
+
+    // Letra actual sincronizada (snippet) — abajo del root grande
+    let lyricIdx = 0;
+    for (let i=0;i<song.lyrics.length;i++) if (song.lyrics[i].t<=sec) lyricIdx=i; else break;
+    const curLy = song.lyrics[lyricIdx];
+    const lyricEl = document.getElementById('bassCurrentLyric');
+    if (lyricEl){
+      const txt = (curLy && curLy.text && curLy.text !== '— — —') ? curLy.text : '— instrumental —';
+      const snippet = txt.length > 42 ? txt.slice(0,40)+'…' : txt;
+      lyricEl.textContent = '♪ ' + snippet;
+    }
+
+    // Tuner mock — oscila la aguja
+    const cents = Math.sin(sec * 1.5) * 12;
+    const needle = document.getElementById('tunerNeedle');
+    needle.style.transform = `translateX(-50%) rotate(${cents * 0.9}deg)`;
+    document.getElementById('tunerCents').textContent = `${cents>=0?'+':''}${Math.round(cents)}¢`;
+    document.getElementById('tunerNote').textContent = ch.root;
+    const tuned = Math.abs(cents) < 5;
+    document.getElementById('tunerNote').style.color = tuned ? 'var(--accent-green)' : 'var(--accent-yellow)';
+    needle.style.background = tuned ? 'var(--accent-green)' : 'var(--accent-yellow)';
+  });
+
+  /* =====================================================================
+   * VISTA · BATERISTA
+   * =================================================================== */
+  const drumHand = document.getElementById('drumHand');
+  const drumBeatBig = document.getElementById('drumBeatBig');
+  const drumCenter = document.getElementById('drumCenter');
+  const drumSubdivEl = document.getElementById('drumSubdiv');
+  const drumPerim = document.getElementById('drumPerimeter');
+
+  // Pinta 4 puntos en el perímetro
+  function paintPerimeter(){
+    drumPerim.innerHTML = '';
+    for (let i=0;i<4;i++){
+      const angle = (i/4) * 360 - 90; // empieza arriba
+      const dot = document.createElement('div');
+      dot.className = 'absolute w-3 h-3 rounded-full bg-neutral-700';
+      dot.style.left = `calc(50% + ${Math.cos(angle*Math.PI/180)*46}% - 6px)`;
+      dot.style.top  = `calc(50% + ${Math.sin(angle*Math.PI/180)*46}% - 6px)`;
+      dot.dataset.beat = i;
+      drumPerim.appendChild(dot);
+    }
+  }
+  paintPerimeter();
+
+  document.querySelectorAll('.sub-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      state.subdiv = parseInt(b.dataset.sub,10);
+      document.querySelectorAll('.sub-btn').forEach(x => {
+        x.style.background = ''; x.style.color = '';
+        x.classList.add('text-neutral-400');
+      });
+      b.style.background = 'var(--accent-orange)';
+      b.style.color = '#000';
+      b.classList.remove('text-neutral-400');
+      drumSubdivEl.textContent = state.subdiv===1?'♩':state.subdiv===2?'♫':'♬';
+    });
+  });
+
+  let lastDrumBeat = -1, lastDrumSubBeat = -1;
+  onTick((sec) => {
+    const beatsPerSec = state.bpm / 60;
+    const totalBeats = sec * beatsPerSec;
+    const beatIdx = Math.floor(totalBeats);
+    const beatInBar = beatIdx % 4;
+    const beatPhase = totalBeats - beatIdx;
+
+    // Aguja giratoria — 360° por bar
+    const angle = ((beatInBar + beatPhase) / 4) * 360;
+    drumHand.parentElement.style.transform = `rotate(${angle}deg)`;
+
+    // Centro + flash en cada beat
+    if (beatIdx !== lastDrumBeat){
+      lastDrumBeat = beatIdx;
+      drumBeatBig.textContent = beatInBar + 1;
+      const accent = beatInBar===0;
+      drumBeatBig.style.color = accent ? 'var(--accent-yellow)' : 'var(--accent-orange)';
+      drumCenter.classList.remove('drum-pulse');
+      void drumCenter.offsetWidth;
+      drumCenter.classList.add('drum-pulse');
+      // marcar perímetro
+      drumPerim.querySelectorAll('[data-beat]').forEach((d,i) => {
+        const on = i===beatInBar;
+        d.style.background = on ? (accent?'var(--accent-yellow)':'var(--accent-orange)') : '#262626';
+        d.style.boxShadow = on ? `0 0 10px ${accent?'var(--accent-yellow)':'var(--accent-orange)'}` : 'none';
+      });
+    }
+
+    // Subdivisión — pulso fino en el centro
+    const subBeats = totalBeats * state.subdiv;
+    const subIdx = Math.floor(subBeats);
+    if (subIdx !== lastDrumSubBeat && state.subdiv > 1){
+      lastDrumSubBeat = subIdx;
+      // animación más sutil (cambio de borde)
+      drumCenter.style.borderColor = '#3a3a3a';
+      setTimeout(() => drumCenter.style.borderColor = '#1f1f1f', 60);
+    }
+
+    // Próxima sección preview
+    const song = currentSong();
+    let curSec = song.chords[0].section, secStartBar = 0;
+    for (const c of song.chords){ if (c.bar <= Math.floor(totalBeats/4)){ curSec = c.section; secStartBar = c.bar; } }
+    document.getElementById('drumSectionTag').textContent = curSec;
+    const nxt = song.chords.find(c => c.section !== curSec && c.bar > Math.floor(totalBeats/4));
+    if (nxt){
+      document.getElementById('drumNextSection').textContent = nxt.section;
+      document.getElementById('drumNextIn').textContent = (nxt.bar - Math.floor(totalBeats/4));
+    } else {
+      document.getElementById('drumNextSection').textContent = '— fin —';
+      document.getElementById('drumNextIn').textContent = '–';
+    }
+  });
+
+  /* =====================================================================
+   * METRÓNOMO + HEADER GLOBAL (todos los beats)
+   * =================================================================== */
+  let audioCtx = null;
+  let metroGain = null;   // gain node maestro del click — controlado por el slider Click del mixer
+  // Latency offset en ms: cuánto ADELANTAR el click respecto del beat MIDI
+  // para compensar la suma de delay BLE + Android audio output.
+  // Persistido en localStorage, ajustable desde el modal ⚙.
+  // Default calibrado empíricamente en Samsung A56 con MacBook Pro vía BLE MIDI:
+  // mediana 87.5ms (std 4.7ms) medida por audio analysis del WAV de Pato.
+  state.audioLatencyMs = parseInt(localStorage.getItem('camarage_audioLatencyMs')||'88', 10);
+
+  function ensureAudio(){
+    if (!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+      metroGain = audioCtx.createGain();
+      metroGain.gain.value = state.mixer.click;
+      metroGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  /* Programar un click EN UN MOMENTO ESPECÍFICO del reloj de audio.
+     Esto es la clave para compensar latencia: en vez de tocarlo NOW,
+     lo agendamos en audioCtx.currentTime + delta. Web Audio garantiza
+     timing sample-accurate (~1ms precisión). */
+  function playClickAt(audioTime, accent){
+    if (!audioCtx) return;
+    const t = Math.max(audioCtx.currentTime + 0.002, audioTime);
+    const osc = audioCtx.createOscillator();
+    const env = audioCtx.createGain();
+    osc.frequency.value = accent ? 1600 : 1000;
+    osc.type = 'square';
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(accent?0.35:0.2, t + 0.001);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    osc.connect(env).connect(metroGain);
+    osc.start(t); osc.stop(t + 0.06);
+  }
+  function playClick(accent){ playClickAt(audioCtx?.currentTime || 0, accent); }
+
+  /* Scheduler predictivo: en cada tick MIDI, agenda los próximos 2 beats
+     con anticipación, restando el latency offset. El resultado: el sonido
+     SALE del parlante exactamente cuando el beat ocurre en Logic. */
+  let _lastScheduledBeat = -1;
+  function scheduleAheadFromMidi(){
+    if (!state.metroOn || !state.midiClockDriven || !audioCtx) return;
+    if (midi.tickSinceStart === undefined) return;
+    const beatDurSec = 60 / state.bpm;
+    const offsetSec = state.audioLatencyMs / 1000;
+    const currentBeats = midi.tickSinceStart / 24;
+    const sinceTickSec = (performance.now() - (midi._lastTickArrivalAt||performance.now())) / 1000;
+    const currentBeatPos = currentBeats + sinceTickSec / beatDurSec;
+    const nextBeat = Math.floor(currentBeatPos) + 1;
+
+    for (let i = 0; i < 2; i++){
+      const beatN = nextBeat + i;
+      if (beatN <= _lastScheduledBeat) continue;
+      const secUntil = (beatN - currentBeatPos) * beatDurSec;
+      const audioTime = audioCtx.currentTime + secUntil - offsetSec;
+      if (audioTime > audioCtx.currentTime + 0.001){
+        playClickAt(audioTime, beatN % 4 === 0);
+        _lastScheduledBeat = beatN;
+      }
+    }
+  }
+
+  let lastGlobalBeat = -1;
+  const globalDots = document.querySelectorAll('#globalBeatDots [data-beat]');
+  onTick((sec) => {
+    const beatsPerSec = state.bpm / 60;
+    const totalBeats = sec * beatsPerSec;
+    const beatIdx = Math.floor(totalBeats);
+    const beatInBar = beatIdx % 4;
+    const beatPhase = totalBeats - beatIdx;
+    const barPhase = (beatInBar + beatPhase) / 4;
+
+    document.getElementById('globalBarProgress').style.width = `${(barPhase*100).toFixed(1)}%`;
+    document.getElementById('globalBar').textContent = String(Math.floor(beatIdx/4)+1).padStart(3,'0');
+    document.getElementById('globalBeat').textContent = beatInBar+1;
+    const m = Math.floor(sec/60).toString().padStart(2,'0');
+    const s = Math.floor(sec%60).toString().padStart(2,'0');
+    document.getElementById('globalTime').textContent = `${m}:${s}`;
+
+    if (beatIdx !== lastGlobalBeat){
+      lastGlobalBeat = beatIdx;
+      globalDots.forEach(d => { d.style.background = ''; d.classList.remove('beat-pulse'); });
+      const dot = globalDots[beatInBar];
+      const accent = beatInBar===0;
+      dot.style.background = accent ? 'var(--accent-yellow)' : 'var(--accent-cyan)';
+      dot.style.boxShadow = `0 0 8px ${accent?'var(--accent-yellow)':'var(--accent-cyan)'}`;
+      void dot.offsetWidth; dot.classList.add('beat-pulse');
+      // Click reactivo SOLO si no estamos sincronizados al MIDI clock.
+      // Si sí, scheduleAheadFromMidi() los agenda con anticipación (latency compensated).
+      if (state.metroOn && !state.midiClockDriven) playClick(accent);
+    }
+  });
+
+  /* =====================================================================
+   * TRANSPORTE (Play / Stop / Metrónomo)
+   * =================================================================== */
+  const playBtn = document.getElementById('playBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const playLabel = document.getElementById('playLabel');
+  const playIcon = document.getElementById('playIcon');
+  const metroBtn = document.getElementById('metroBtn');
+  const metroDot = document.getElementById('metroDot');
+  const metroLabel = document.getElementById('metroLabel');
+
+  /* ----- Helpers de UI sincronizada (Cantante + Baterista comparten estado) ----- */
+  function updateTransportUI(){
+    const playing = state.isPlaying;
+    const lbl = playing ? 'PAUSE' : 'PLAY';
+    const ic  = playing
+      ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'
+      : '<path d="M8 5v14l11-7z"/>';
+    ['playLabel','drumPlayLabel'].forEach(id => { const e=document.getElementById(id); if (e) e.textContent = lbl; });
+    ['playIcon','drumPlayIcon'].forEach(id  => { const e=document.getElementById(id); if (e) e.innerHTML = ic;  });
+    ['playBtn','drumPlayBtn'].forEach(id    => { const e=document.getElementById(id); if (e) e.classList.toggle('blink', playing); });
+  }
+  function updateMetroUI(){
+    const on = state.metroOn;
+    ['metroDot','drumMetroDot'].forEach(id => {
+      const e=document.getElementById(id); if (!e) return;
+      e.style.background = on ? 'var(--accent-yellow)' : '';
+      e.style.boxShadow  = on ? '0 0 10px var(--accent-yellow)' : '';
+    });
+    ['metroLabel','drumMetroLabel'].forEach(id => {
+      const e=document.getElementById(id); if (!e) return;
+      e.textContent = on ? 'ON' : 'OFF';
+      e.style.color = on ? 'var(--accent-yellow)' : '';
+    });
+  }
+
+  function setPlay(){
+    if (state.isPlaying){
+      state.pausedElapsed += performance.now() - state.startedAt;
+      state.isPlaying = false;
+      stopClock();
+      sendMidi(0xFC); // Stop al DAW
+    } else {
+      state.startedAt = performance.now();
+      state.isPlaying = true;
+      startClock();
+      sendMidi(0xFA); // Start al DAW
+    }
+    updateTransportUI();
+  }
+  function setStop(){
+    state.isPlaying = false;
+    state.pausedElapsed = 0;
+    stopClock();
+    singerLineIdx = -1; bassChordIdx = -1; lastGlobalBeat = -1; lastDrumBeat = -1; lastDrumSubBeat = -1;
+    // Reset visuals
+    document.getElementById('globalBarProgress').style.width = '0%';
+    document.getElementById('globalBar').textContent = '001';
+    document.getElementById('globalBeat').textContent = '1';
+    document.getElementById('globalTime').textContent = '00:00';
+    globalDots.forEach(d => { d.style.background=''; d.style.boxShadow=''; d.classList.remove('beat-pulse'); });
+    drumPerim.querySelectorAll('[data-beat]').forEach(d => { d.style.background='#262626'; d.style.boxShadow=''; });
+    drumBeatBig.textContent = '1';
+    drumHand.parentElement.style.transform = 'rotate(0deg)';
+    // Re-render scroll posiciones
+    const s = currentSong();
+    scrollSingerToLine(0);
+    document.getElementById('singerSectionTag').textContent = s.lyrics[0].section;
+    document.getElementById('singerNextSection').textContent = (s.lyrics.find(l=>l.section!==s.lyrics[0].section)||{section:'—'}).section;
+    updateTransportUI();
+    // [BLE-MIDI] sendMidi([0xFC]);
+  }
+
+  function toggleMetronome(){
+    state.metroOn = !state.metroOn;
+    if (state.metroOn) ensureAudio();
+    updateMetroUI();
+  }
+
+  // Wiring de los botones del CANTANTE
+  playBtn.addEventListener('click', setPlay);
+  stopBtn.addEventListener('click', setStop);
+  metroBtn.addEventListener('click', toggleMetronome);
+
+  // Wiring de los botones del BATERISTA (apuntan a las mismas funciones — clock compartido)
+  document.getElementById('drumPlayBtn').addEventListener('click', setPlay);
+  document.getElementById('drumStopBtn').addEventListener('click', setStop);
+  document.getElementById('drumMetroBtn').addEventListener('click', toggleMetronome);
+
+  /* ----- Mini mixer del baterista -----
+     Cada slider 0..100 mapea a 0..1 en state.mixer.
+     · click → controla el master gain del metrónomo en vivo (Web Audio)
+     · seqs / band → mockeados; en producción envían MIDI CC 7 (Volume) por canal
+       distinto del DAW (ej: canal 2 para sequencer, canal 3 para band mix bus).      */
+  /* Mapeo MIDI saliente de los sliders del mixer.
+     Cada slider manda CC 7 (Volume) en un canal MIDI específico.
+     Configurá en Logic: cada track que querés controlar, asignala al canal
+     correspondiente, y usá Smart Controls → MIDI Learn sobre el fader. */
+  const MIXER_MIDI_MAP = {
+    click: { channel: 0, cc: 7, label: 'Ch1 CC7'  },  // Metrónomo/click track
+    seqs:  { channel: 1, cc: 7, label: 'Ch2 CC7'  },  // Backing tracks / sequences bus
+    band:  { channel: 2, cc: 7, label: 'Ch3 CC7'  },  // Band mix bus / monitor
+  };
+
+  document.querySelectorAll('#viewDrummer .mixer-channel').forEach(ch => {
+    const channel = ch.dataset.channel;
+    const range   = ch.querySelector('input[type=range]');
+    const valEl   = ch.querySelector('.mix-val');
+    const meterEl = ch.querySelector('.mix-meter');
+
+    // Agregar label visible "→ Ch1 CC7" al lado del nombre del canal
+    const map = MIXER_MIDI_MAP[channel];
+    if (map){
+      const hdr = ch.querySelector('.mono.uppercase');
+      if (hdr && !ch.dataset.mapShown){
+        const tag = document.createElement('span');
+        tag.className = 'mono text-[9px] ml-1';
+        tag.style.color = 'var(--accent-purple)';
+        tag.textContent = '→' + map.label;
+        hdr.parentElement.appendChild(tag);
+        ch.dataset.mapShown = '1';
+      }
+    }
+
+    range.addEventListener('input', () => {
+      const v = parseInt(range.value,10);
+      valEl.textContent = v;
+      meterEl.style.width = v + '%';
+      const norm = v / 100;
+      state.mixer[channel] = norm;
+      if (channel === 'click' && metroGain) metroGain.gain.value = norm;
+      // Envío MIDI CC al DAW (solo si hay conexión)
+      if (map && midi.device){
+        sendMidi(0xB0 | (map.channel & 0x0F), map.cc, Math.round(norm * 127));
+      }
+    });
+  });
+
+  /* =====================================================================
+   * EDITOR DE SETLIST
+   * =================================================================== */
+  const setlistListEl = document.getElementById('setlistList');
+  let editingIdx = 0;
+
+  function renderSetlistEditor(){
+    document.getElementById('editorSetlistName').textContent = setlist.name;
+    setlistListEl.innerHTML = setlist.songs.map((s,i) => `
+      <div class="rounded-xl border ${i===editingIdx?'border-cyan-400/60':'border-neutral-800'} bg-[var(--bg-card)] p-3 flex items-center gap-3" data-idx="${i}">
+        <span class="mono text-xs text-neutral-500 w-6">${String(i+1).padStart(2,'0')}</span>
+        <div class="flex-1 min-w-0">
+          <p class="font-bold truncate">${s.title}</p>
+          <p class="mono text-[10px] text-neutral-500">${s.key} · ${s.bpm} BPM · ${s.timeSig} · PC#${String(s.programChange).padStart(2,'0')}</p>
+        </div>
+        <div class="flex items-center gap-1">
+          <button class="rs-up p-2 rounded-md hover:bg-neutral-900" aria-label="Subir">↑</button>
+          <button class="rs-down p-2 rounded-md hover:bg-neutral-900" aria-label="Bajar">↓</button>
+          <button class="rs-edit px-3 py-2 rounded-md text-xs font-bold" style="background:rgba(34,211,238,0.1); color:var(--accent-cyan);">Editar</button>
+          <button class="rs-load px-3 py-2 rounded-md text-xs font-bold" style="background:rgba(34,197,94,0.1); color:var(--accent-green);">Cargar</button>
+          <button class="rs-del p-2 rounded-md hover:bg-neutral-900 text-neutral-500" aria-label="Eliminar">×</button>
+        </div>
+      </div>
+    `).join('');
+
+    // Wire buttons
+    setlistListEl.querySelectorAll('[data-idx]').forEach(row => {
+      const idx = parseInt(row.dataset.idx,10);
+      row.querySelector('.rs-up').addEventListener('click', () => {
+        if (idx===0) return;
+        [setlist.songs[idx-1], setlist.songs[idx]] = [setlist.songs[idx], setlist.songs[idx-1]];
+        renderSetlistEditor();
+      });
+      row.querySelector('.rs-down').addEventListener('click', () => {
+        if (idx===setlist.songs.length-1) return;
+        [setlist.songs[idx+1], setlist.songs[idx]] = [setlist.songs[idx], setlist.songs[idx+1]];
+        renderSetlistEditor();
+      });
+      row.querySelector('.rs-edit').addEventListener('click', () => {
+        editingIdx = idx; renderSongEditor(); renderSetlistEditor();
+      });
+      row.querySelector('.rs-load').addEventListener('click', () => {
+        loadSong(idx); switchView(state.role==='bassist'?'viewBassist':state.role==='drummer'?'viewDrummer':'viewSinger');
+      });
+      row.querySelector('.rs-del').addEventListener('click', () => {
+        if (setlist.songs.length===1) return;
+        setlist.songs.splice(idx,1);
+        if (editingIdx>=setlist.songs.length) editingIdx = setlist.songs.length-1;
+        renderSetlistEditor(); renderSongEditor();
+      });
+    });
+    renderSongEditor();
+  }
+
+  function renderSongEditor(){
+    const s = setlist.songs[editingIdx];
+    document.getElementById('editSongTitle').textContent = s.title;
+    document.getElementById('editTitle').value = s.title;
+    document.getElementById('editKey').value = s.key;
+    document.getElementById('editBpm').value = s.bpm;
+    document.getElementById('editTimeSig').value = s.timeSig;
+    document.getElementById('editPC').value = s.programChange;
+
+    // Editor de cues
+    if (!s.cues) s.cues = [];
+    const cuesList = document.getElementById('editCueList');
+    cuesList.innerHTML = s.cues.map((c,i) => `
+      <div class="flex gap-2 items-center" data-cu="${i}">
+        <input type="text" value="${noteNumToName(c.note)}"
+               class="cue-note w-16 bg-black border border-neutral-800 rounded-lg px-2 py-1 text-xs mono uppercase text-center"
+               placeholder="C4"/>
+        <input type="text" value="${(c.label||'').replace(/"/g,'&quot;')}"
+               class="cue-label flex-1 bg-black border border-neutral-800 rounded-lg px-2 py-1 text-xs"
+               placeholder="Verse 1"/>
+        <input type="number" min="0" step="0.5" value="${c.timestamp}"
+               class="cue-t w-16 bg-black border border-neutral-800 rounded-lg px-2 py-1 text-xs mono"
+               placeholder="seg"/>
+        <button class="cue-del text-neutral-500 px-2">×</button>
+      </div>
+    `).join('') + `
+      <button id="addCueBtn" class="w-full mt-1 rounded-lg border border-dashed border-neutral-800 py-2 text-xs text-neutral-500 active:bg-neutral-900">+ cue</button>
+    `;
+    document.getElementById('addCueBtn').addEventListener('click', () => {
+      const last = s.cues.at(-1);
+      const nextNote = last ? Math.min(127, last.note + 2) : 60;
+      s.cues.push({ note: nextNote, label: 'Nueva parte', timestamp: (last?.timestamp || 0) + 8 });
+      renderSongEditor();
+    });
+    cuesList.querySelectorAll('.cue-del').forEach((btn,i) => btn.addEventListener('click', () => {
+      s.cues.splice(i,1); renderSongEditor();
+    }));
+
+    const list = document.getElementById('editLyricsList');
+    list.innerHTML = s.lyrics.map((l,i) => `
+      <div class="flex gap-2 items-center" data-li="${i}">
+        <input type="number" min="0" step="0.5" value="${l.t}"
+               class="lyr-t w-16 bg-black border border-neutral-800 rounded-lg px-2 py-1 text-xs mono"/>
+        <input type="text" value="${l.section}"
+               class="lyr-s w-20 bg-black border border-neutral-800 rounded-lg px-2 py-1 text-[10px] uppercase tracking-wider"/>
+        <input type="text" value="${l.text.replace(/"/g,'&quot;')}"
+               class="lyr-x flex-1 bg-black border border-neutral-800 rounded-lg px-2 py-1 text-xs"/>
+        <button class="lyr-del text-neutral-500 px-2">×</button>
+      </div>
+    `).join('') + `
+      <button id="addLineBtn" class="w-full mt-2 rounded-lg border border-dashed border-neutral-800 py-2 text-xs text-neutral-500 active:bg-neutral-900">+ línea</button>
+    `;
+    document.getElementById('addLineBtn').addEventListener('click', () => {
+      s.lyrics.push({ t: (s.lyrics.at(-1)?.t || 0) + 4, section: s.lyrics.at(-1)?.section || 'Verse', text: 'Nueva línea' });
+      renderSongEditor();
+    });
+    list.querySelectorAll('.lyr-del').forEach((btn,i) => btn.addEventListener('click', () => {
+      s.lyrics.splice(i,1); renderSongEditor();
+    }));
+  }
+
+  document.getElementById('cancelEdit').addEventListener('click', renderSongEditor);
+  document.getElementById('saveEdit').addEventListener('click', () => {
+    const s = setlist.songs[editingIdx];
+    s.title = document.getElementById('editTitle').value.trim() || s.title;
+    s.key = document.getElementById('editKey').value.trim() || s.key;
+    s.bpm = parseInt(document.getElementById('editBpm').value,10) || s.bpm;
+    s.timeSig = document.getElementById('editTimeSig').value.trim() || s.timeSig;
+    s.programChange = parseInt(document.getElementById('editPC').value,10) || s.programChange;
+    // Cues MIDI
+    document.querySelectorAll('#editCueList [data-cu]').forEach((row,i) => {
+      const noteStr = row.querySelector('.cue-note').value;
+      const num = noteNameToNum(noteStr);
+      if (num !== null && num >= 0 && num <= 127) s.cues[i].note = num;
+      s.cues[i].label = row.querySelector('.cue-label').value || s.cues[i].label;
+      s.cues[i].timestamp = parseFloat(row.querySelector('.cue-t').value) || 0;
+    });
+    s.cues.sort((a,b)=>a.timestamp-b.timestamp);
+
+    // Letras
+    document.querySelectorAll('#editLyricsList [data-li]').forEach((row,i) => {
+      s.lyrics[i].t = parseFloat(row.querySelector('.lyr-t').value) || 0;
+      s.lyrics[i].section = row.querySelector('.lyr-s').value || s.lyrics[i].section;
+      s.lyrics[i].text = row.querySelector('.lyr-x').value;
+    });
+    s.lyrics.sort((a,b)=>a.t-b.t);
+    renderSetlistEditor();
+    // Si es la canción cargada, refrescar
+    if (editingIdx === setlist.currentSongIdx) loadSong(editingIdx);
+    // Flash de confirmación
+    const btn = document.getElementById('saveEdit');
+    const txt = btn.textContent; btn.textContent = '✓ Guardado';
+    setTimeout(()=>btn.textContent=txt, 1200);
+  });
+
+  document.getElementById('addSongBtn').addEventListener('click', () => {
+    setlist.songs.push({
+      id: 's'+(setlist.songs.length+1),
+      title: 'Nueva canción',
+      key: 'C', bpm: 120, timeSig: '4/4',
+      programChange: setlist.songs.length+1,
+      sections: ['Intro'],
+      lyrics: [{ t:0, section:'Intro', text:'— intro —' }],
+      chords: [{ bar:0, section:'Intro', symbol:'C', root:'C', quality:'' }],
+    });
+    editingIdx = setlist.songs.length-1;
+    renderSetlistEditor();
+  });
+
+  /* =====================================================================
+   * ATAJOS DE TECLADO
+   * =================================================================== */
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); setPlay(); }
+    if (e.code === 'KeyS') setStop();
+    if (e.code === 'KeyM') metroBtn.click();
+    if (e.code === 'Digit1') switchView('viewSinger');
+    if (e.code === 'Digit2') switchView('viewBassist');
+    if (e.code === 'Digit3') switchView('viewDrummer');
+    if (e.code === 'Digit4') switchView('viewSetlist');
+  });
+
+  /* =====================================================================
+   * MIDI INPUT REAL — Web MIDI API + Web Bluetooth BLE MIDI
+   * ---------------------------------------------------------------------
+   * Soporta DOS caminos:
+   *   A) navigator.requestMIDIAccess()  → USB MIDI o BLE MIDI ya pareado al SO
+   *   B) navigator.bluetooth (BLE MIDI) → pairing directo desde la app
+   *
+   * Maneja:
+   *   · 0xFA  Start         → setPlay() desde t=0
+   *   · 0xFB  Continue      → setPlay() desde donde estaba
+   *   · 0xFC  Stop          → setStop()
+   *   · 0xF8  Clock (tick)  → 24 por negra; calcula BPM por mediana de intervalos
+   *   · 0xCn  Program Change → carga la canción del setlist con ese PC#
+   * =================================================================== */
+
+  const midi = {
+    inputs: [],
+    lastTickAt: 0,
+    tickIntervals: [],
+    indicator: null,
+    device: null,           // { id, name, type: 'ble'|'usb' }
+    stats: {                // visibles en el panel de configuración
+      messagesReceived: 0,
+      lastActivity: 0,
+      connectedAt: 0,
+      clockTicks: 0,        // contador agregado de clock (no spam en el log)
+    },
+    log: [],                // ring buffer últimos 30 mensajes parseados
+  };
+
+  /* Helper: agrega un mensaje al log con timestamp + tipo + bytes hex */
+  function logMidi(label, data, color){
+    midi.log.push({
+      t: Date.now(),
+      label,
+      raw: data.map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' '),
+      color: color || ''
+    });
+    if (midi.log.length > 30) midi.log.shift();
+  }
+  // Filtro de canal MIDI: null = todos, 0..15 = solo ese
+  state.midiChannelFilter = null;
+  state.cueToastVisible = false;
+
+  function showCueToast(cue){
+    const toast = document.getElementById('cueToast');
+    if (!toast) return;
+    toast.querySelector('[data-cue-label]').textContent = cue.label;
+    toast.querySelector('[data-cue-note]').textContent  = noteNumToName(cue.note);
+    toast.querySelector('[data-cue-time]').textContent  = '@' + cue.timestamp.toFixed(1) + 's';
+    toast.classList.remove('hidden-screen');
+    toast.style.opacity = '1';
+    clearTimeout(window.__cueToastT);
+    window.__cueToastT = setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.classList.add('hidden-screen'), 250);
+    }, 1400);
+  }
+
+  function blinkMidiIndicator(){
+    if (!midi.indicator) return;
+    midi.indicator.style.background = 'var(--accent-cyan)';
+    midi.indicator.style.boxShadow  = '0 0 8px var(--accent-cyan)';
+    clearTimeout(midi._t);
+    midi._t = setTimeout(() => {
+      midi.indicator.style.background = '';
+      midi.indicator.style.boxShadow  = '';
+    }, 80);
+  }
+
+  // ---------- A) Web MIDI API ----------
+  async function initWebMIDI(){
+    if (!navigator.requestMIDIAccess) {
+      console.warn('Web MIDI API no soportada en este browser');
+      return false;
+    }
+    try {
+      const access = await navigator.requestMIDIAccess({ sysex: false });
+      access.inputs.forEach(input => attachMidiInput(input));
+      access.onstatechange = (e) => {
+        if (e.port.type === 'input' && e.port.state === 'connected') attachMidiInput(e.port);
+        updateMidiBadge();
+      };
+      updateMidiBadge();
+      return true;
+    } catch(err) {
+      console.warn('MIDI access denied:', err);
+      return false;
+    }
+  }
+  function attachMidiInput(input){
+    if (midi.inputs.find(i => i.id === input.id)) return;
+    input.onmidimessage = (msg) => handleMidiBytes(msg.data);
+    midi.inputs.push(input);
+    console.log('[MIDI IN]', input.name, '·', input.manufacturer);
+  }
+
+  // ---------- B) Web Bluetooth (BLE MIDI) ----------
+  // Service y Characteristic UUIDs estándar de la spec BLE MIDI 1.0
+  const BLE_MIDI_SERVICE = '03b80e5a-ede8-4b33-a751-6ce34ec4c700';
+  const BLE_MIDI_CHAR    = '7772e5db-3868-4112-a1a9-f2669d106bf3';
+
+  // Helpers de conversión
+  function b64ToBytes(b64){
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  }
+  function bytesToB64(bytes){
+    let s = '';
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s);
+  }
+  /* El plugin @capacitor-community/bluetooth-le pasa los valores como
+     hex string ("80 6B FA" o "806BFA"), NO base64. Parser robusto. */
+  function hexStrToBytes(hex){
+    if (!hex) return new Uint8Array(0);
+    const clean = hex.replace(/[^0-9a-fA-F]/g, '');
+    const out = new Uint8Array(clean.length >> 1);
+    for (let i=0;i<out.length;i++) out[i] = parseInt(clean.substr(i*2,2),16);
+    return out;
+  }
+  function bytesToHexStr(bytes){
+    return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  /* Envolver mensaje MIDI en un paquete BLE MIDI con header + timestamp.
+     Formato (spec BLE MIDI 1.0):
+       byte0 = 0x80 | (timestampHigh & 0x3F)
+       byte1 = 0x80 | (timestampLow  & 0x7F)
+       byte2+ = MIDI status + data */
+  function makeBleMidiPacket(...midiBytes){
+    const t = Date.now() & 0x1FFF;
+    return new Uint8Array([
+      0x80 | ((t >> 7) & 0x3F),
+      0x80 | (t & 0x7F),
+      ...midiBytes
+    ]);
+  }
+
+  /* Enviar bytes MIDI al DAW. Maneja Capacitor y Web Bluetooth. */
+  async function sendMidi(...midiBytes){
+    const packet = makeBleMidiPacket(...midiBytes);
+    if (!midi.device) return false;
+    try {
+      if (midi.device.type === 'ble-capacitor'){
+        const cap = window.Capacitor;
+        // El plugin acepta value como hex string (numbersToDataView)
+        await cap.Plugins.BluetoothLe.writeWithoutResponse({
+          deviceId: midi.device.id,
+          service: BLE_MIDI_SERVICE,
+          characteristic: BLE_MIDI_CHAR,
+          value: bytesToHexStr(packet)
+        });
+      } else if (midi.device.type === 'ble-web' && midi._webChar){
+        await midi._webChar.writeValueWithoutResponse(packet);
+      }
+      logMidi('→ ' + midiBytes.map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' '),
+              midiBytes, 'var(--accent-purple)');
+      return true;
+    } catch(e){
+      logMidi('✗ Send failed: ' + e.message, midiBytes, 'var(--accent-red)');
+      return false;
+    }
+  }
+
+  /* Conexión BLE MIDI — usa el plugin nativo de Capacitor si está disponible,
+     y si no cae a Web Bluetooth (Chrome desktop/Android). */
+  async function connectBleMidi(){
+    const cap = window.Capacitor;
+    const blePlugin = cap?.Plugins?.BluetoothLe;
+
+    if (blePlugin && cap.isNativePlatform()){
+      // ----------- Capacitor (APK Android nativo) -----------
+      try {
+        logMidi('· init BLE…', [], 'var(--text-secondary)');
+        await blePlugin.initialize({ androidNeverForLocation: true });
+
+        logMidi('· scan dispositivos…', [], 'var(--text-secondary)');
+        const device = await blePlugin.requestDevice({
+          services: [BLE_MIDI_SERVICE],
+          optionalServices: [BLE_MIDI_SERVICE]
+        });
+        logMidi('· dispositivo: ' + (device.name || device.deviceId.slice(0,8)), [], 'var(--accent-cyan)');
+
+        await blePlugin.connect({ deviceId: device.deviceId });
+        logMidi('· GATT conectado', [], 'var(--accent-green)');
+
+        // El plugin emite con event-name = "notification|deviceId|service|characteristic"
+        // (UUIDs lowercase) y value = HEX STRING, no base64.
+        // Mantener el handle para poder remover en disconnect.
+        const svc = BLE_MIDI_SERVICE.toLowerCase();
+        const chr = BLE_MIDI_CHAR.toLowerCase();
+        const eventKey = `notification|${device.deviceId}|${svc}|${chr}`;
+        if (midi._notifHandle){ try { await midi._notifHandle.remove(); } catch(e){} }
+        midi._notifHandle = await blePlugin.addListener(eventKey, (event) => {
+          // event.value = hex string tipo "806BFA" o "80 6B FA"
+          const bytes = hexStrToBytes(event?.value || '');
+          if (bytes.length) parseBleMidiPacket(bytes);
+        });
+        // Fallback adicional: algunos builds emiten solo "notification" — escuchar ambos
+        midi._notifHandle2 = await blePlugin.addListener('notification', (event) => {
+          if ((event.characteristic||'').toLowerCase() !== chr) return;
+          const bytes = hexStrToBytes(event?.value || '');
+          if (bytes.length) parseBleMidiPacket(bytes);
+        });
+
+        await blePlugin.startNotifications({
+          deviceId: device.deviceId,
+          service: BLE_MIDI_SERVICE,
+          characteristic: BLE_MIDI_CHAR
+        });
+        logMidi('✓ notificaciones activas — esperando MIDI…', [], 'var(--accent-green)');
+        logMidi(`· listener: ${eventKey.slice(0,40)}…`, [], 'var(--text-secondary)');
+
+        midi.device = { id: device.deviceId, name: device.name || device.deviceId.slice(0,8), type: 'ble-capacitor' };
+        midi.stats.connectedAt = Date.now();
+        document.getElementById('bleStatusText').textContent = 'BLE · ' + midi.device.name;
+        document.getElementById('bleLed').style.background = 'var(--accent-green)';
+        renderMidiSettings();
+        console.log('[BLE MIDI · Capacitor] Conectado a', device.name);
+        return;
+      } catch(err){
+        logMidi('✗ ' + (err.message || err), [], 'var(--accent-red)');
+        console.warn('Capacitor BLE failed:', err);
+      }
+    }
+
+    // ----------- Web Bluetooth fallback (browser desktop / Chrome Android sobre HTTPS) -----------
+    if (!navigator.bluetooth) {
+      alert('Este dispositivo no soporta BLE MIDI.\nUsá Chrome Android o el APK CAMARAGE.');
+      return;
+    }
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [BLE_MIDI_SERVICE] }],
+        optionalServices: [BLE_MIDI_SERVICE],
+      });
+      logMidi('· dispositivo: ' + device.name, [], 'var(--accent-cyan)');
+      const server  = await device.gatt.connect();
+      const service = await server.getPrimaryService(BLE_MIDI_SERVICE);
+      const char    = await service.getCharacteristic(BLE_MIDI_CHAR);
+      midi._webChar = char;   // necesario para sendMidi() saliente
+      await char.startNotifications();
+      char.addEventListener('characteristicvaluechanged', (e) => {
+        const data = new Uint8Array(e.target.value.buffer);
+        parseBleMidiPacket(data);
+      });
+      logMidi('✓ notificaciones activas — esperando MIDI…', [], 'var(--accent-green)');
+      midi.device = { id: device.id, name: device.name, type: 'ble-web' };
+      midi.stats.connectedAt = Date.now();
+      document.getElementById('bleStatusText').textContent = 'BLE · ' + device.name;
+      document.getElementById('bleLed').style.background = 'var(--accent-green)';
+      renderMidiSettings();
+      device.addEventListener('gattserverdisconnected', () => {
+        midi.device = null;
+        document.getElementById('bleLed').style.background = '';
+        document.getElementById('bleStatusText').textContent = 'OFFLINE · sin DAW';
+        renderMidiSettings();
+      });
+      console.log('[BLE MIDI · Web] Conectado a', device.name);
+    } catch(err){
+      console.warn('BLE MIDI connect failed:', err);
+    }
+  }
+
+  /* Parser BLE MIDI:
+     Cada paquete = [header] [timestampLow] [statusByte] [data...] [timestampLow status data...]
+     Header:        bit7=1, bit6=0, bits5..0 = timestamp high (ms)
+     TimestampLow:  bit7=1, bits6..0 = timestamp low (ms)
+     Cualquier byte con bit7=0 es DATA. Status running se permite. */
+  /* Parser BLE MIDI v2 — state machine compliant con la spec 1.0.
+     Extrae el timestamp embebido (13-bit ms, wrap cada 8.192s) de cada evento
+     y lo pasa como segundo arg a handleMidiBytes. Eso permite calcular BPM con
+     precisión 1ms aunque BLE bundlee/atrase los notifies. */
+  function parseBleMidiPacket(bytes){
+    if (bytes.length < 3) return;
+    const headerTsHigh = bytes[0] & 0x3F;
+    let tsHigh = headerTsHigh;
+    let lastTsLow = -1;          // para detectar wrap dentro del paquete
+    let pendingTs = -1;          // timestamp del próximo evento
+    let i = 1;
+    let runningStatus = 0;
+    let expectingStatus = false; // estado: post-TsLow esperamos un Status
+
+    while (i < bytes.length){
+      const b = bytes[i];
+
+      // TimestampLow (bit 7 set, no estamos esperando un status)
+      if (!expectingStatus && (b & 0x80)){
+        const tsLow = b & 0x7F;
+        if (lastTsLow >= 0 && tsLow < lastTsLow) tsHigh++;  // wrap
+        lastTsLow = tsLow;
+        pendingTs = (tsHigh << 7) | tsLow;
+        expectingStatus = true;
+        i++; continue;
+      }
+
+      // Después de un TsLow, esperamos un Status (cualquier valor con bit 7, incluso 0xF8+)
+      if (expectingStatus){
+        expectingStatus = false;
+        // Real-time messages (sin data bytes)
+        if (b >= 0xF8){
+          handleMidiBytes([b], pendingTs);
+          i++; continue;
+        }
+        // Status normal con data bytes
+        if (b & 0x80){
+          runningStatus = b;
+          const type = b & 0xF0;
+          const dataLen = (type === 0xC0 || type === 0xD0) ? 1 : 2;
+          if (i + dataLen >= bytes.length) break;
+          const data = [b];
+          for (let k=1;k<=dataLen;k++) data.push(bytes[i+k]);
+          handleMidiBytes(data, pendingTs);
+          i += dataLen + 1;
+          continue;
+        }
+        // Inválido: status esperado pero data byte (descartar)
+        i++; continue;
+      }
+
+      // Bit 7 clear, no esperamos status → data de running status
+      if (!runningStatus){ i++; continue; }
+      const type = runningStatus & 0xF0;
+      const dataLen = (type === 0xC0 || type === 0xD0) ? 1 : 2;
+      if (i + dataLen - 1 >= bytes.length) break;
+      const data = [runningStatus];
+      for (let k=0;k<dataLen;k++) data.push(bytes[i+k]);
+      handleMidiBytes(data, pendingTs);
+      i += dataLen;
+    }
+  }
+
+  /* Dispatcher de mensajes MIDI parseados — punto único de entrada.
+     bleTs (opcional) = timestamp embebido del paquete BLE en ms (13-bit, wraps 8192) */
+  function handleMidiBytes(data, bleTs){
+    blinkMidiIndicator();
+    const status = data[0];
+
+    // System Real-Time
+    if (status === 0xFA) { // Start
+      logMidi('▶ Start', data, 'var(--accent-green)');
+      console.log('[MIDI] Start');
+      // Reset tick counter — la posición se driveará desde acá
+      midi.tickSinceStart = 0;
+      midi._lastTickArrivalAt = performance.now();
+      _lastScheduledBeat = -1;
+      ensureAudio();
+      state.startedAt = performance.now();
+      state.pausedElapsed = 0;
+      state.midiClockDriven = true;
+      if (!state.isPlaying){ state.isPlaying = true; startClock(); updateTransportUI(); }
+      return;
+    }
+    if (status === 0xFB) { // Continue
+      logMidi('▶▶ Continue', data, 'var(--accent-green)');
+      console.log('[MIDI] Continue');
+      midi._lastTickArrivalAt = performance.now();
+      state.midiClockDriven = true;
+      if (!state.isPlaying){ state.startedAt = performance.now(); state.isPlaying = true; startClock(); updateTransportUI(); }
+      return;
+    }
+    if (status === 0xFC) { // Stop
+      logMidi('■ Stop', data, 'var(--accent-red)');
+      console.log('[MIDI] Stop');
+      midi.tickSinceStart = 0;
+      _lastScheduledBeat = -1;
+      state.midiClockDriven = false;
+      setStop();
+      return;
+    }
+    if (status === 0xF8) { // Clock tick (24 ppqn)
+      midi.stats.clockTicks = (midi.stats.clockTicks||0) + 1;
+      // Contar ticks desde Start — esto driveará la posición de la canción
+      if (state.midiClockDriven){
+        midi.tickSinceStart = (midi.tickSinceStart||0) + 1;
+        midi._lastTickArrivalAt = performance.now();
+        // Agendar próximos clicks con compensación de latencia
+        scheduleAheadFromMidi();
+      }
+      const now = performance.now();
+
+      // BPM PRECISO usando los timestamps BLE embebidos (no performance.now)
+      // Cada paquete trae su ts en ms con resolución 1ms — inmune al delay BLE.
+      if (bleTs !== undefined && bleTs >= 0){
+        if (midi._lastBleTs !== undefined){
+          let dt = bleTs - midi._lastBleTs;
+          if (dt < 0) dt += 8192;  // wrap 13-bit
+          if (dt > 3 && dt < 100){
+            midi._bleTickIntervals = midi._bleTickIntervals || [];
+            midi._bleTickIntervals.push(dt);
+            if (midi._bleTickIntervals.length > 144) midi._bleTickIntervals.shift();
+          }
+        }
+        midi._lastBleTs = bleTs;
+      }
+      // Calcular BPM a partir de los intervalos BLE-timestamp (precisión 1ms real)
+      if (midi._bleTickIntervals && midi._bleTickIntervals.length >= 48 &&
+          now - (midi._lastBpmUpdate||0) > 500){
+        const sorted = [...midi._bleTickIntervals].sort((a,b)=>a-b);
+        const trim = Math.floor(sorted.length * 0.2);
+        const trimmed = sorted.slice(trim, sorted.length - trim);
+        const mean = trimmed.reduce((a,b)=>a+b,0) / trimmed.length;
+        const bpmRaw = 60000 / (mean * 24);
+        midi._smoothedBpm = midi._smoothedBpm
+          ? midi._smoothedBpm * 0.3 + bpmRaw * 0.7
+          : bpmRaw;
+        const bpm = Math.round(midi._smoothedBpm);
+        if (bpm >= 40 && bpm <= 240 && Math.abs(bpm - state.bpm) >= 1){
+          state.bpm = bpm;
+          currentSong().bpm = bpm;
+          document.getElementById('globalBpm').textContent = bpm;
+          document.getElementById('drumBpm').textContent  = bpm;
+        }
+        midi._lastBpmUpdate = now;
+      }
+      return;
+    }
+
+    // Channel Voice — filtrar por canal MIDI si el usuario configuró uno
+    const channel = status & 0x0F;        // 0..15 (en UI lo mostramos 1..16)
+    if (state.midiChannelFilter !== null && state.midiChannelFilter !== channel){
+      return;  // El usuario eligió escuchar solo un canal MIDI específico
+    }
+    midi.stats.messagesReceived = (midi.stats.messagesReceived||0) + 1;
+    midi.stats.lastActivity = Date.now();
+
+    const type = status & 0xF0;
+
+    // -------- Note On = CUE de salto a sección --------
+    if (type === 0x90 && data[2] > 0){    // Note On con velocity > 0
+      const note = data[1];
+      const now = Date.now();
+      // Debounce: ignorar la MISMA nota dentro de 300ms (evita re-disparos por jitter BLE)
+      if (midi._lastCueNote === note && (now - (midi._lastCueAt||0)) < 300){
+        // Mostrar en log que la filtramos para que el usuario vea que llegó pero se ignoró
+        logMidi(`♪ ${noteNumToName(note)} (debounce, ignorada)`, data, 'var(--text-secondary)');
+        return;
+      }
+      midi._lastCueNote = note;
+      midi._lastCueAt = now;
+      const song = currentSong();
+      const cue = song.cues?.find(c => c.note === note);
+      if (cue){
+        logMidi(`♪ Note ${noteNumToName(note)} → ${cue.label}`, data, 'var(--accent-cyan)');
+        console.log('[MIDI] Cue · nota', noteNumToName(note), '→', cue.label, '@', cue.timestamp+'s');
+        jumpToTime(cue.timestamp);
+        showCueToast(cue);
+      } else {
+        logMidi(`♪ Note ${noteNumToName(note)} (sin cue)`, data, 'var(--accent-yellow)');
+      }
+      return;
+    }
+    if (type === 0x80 || (type === 0x90 && data[2] === 0)) { // Note Off (o Note On vel 0)
+      // No loguear estos para no saturar — son automáticos después de cada cue
+      return;
+    }
+
+    if (type === 0xC0) { // Program Change
+      const pc = data[1];
+      const idx = setlist.songs.findIndex(s => s.programChange === pc);
+      const matchTxt = idx>=0 ? '→ '+setlist.songs[idx].title : '(no match)';
+      logMidi(`PC#${String(pc).padStart(2,'0')} ${matchTxt}`, data, idx>=0?'var(--accent-cyan)':'var(--accent-yellow)');
+      console.log('[MIDI] Program Change', pc, matchTxt);
+      if (idx >= 0) {
+        loadSong(idx);
+        const target = state.role === 'bassist' ? 'viewBassist'
+                     : state.role === 'drummer' ? 'viewDrummer' : 'viewSinger';
+        switchView(target);
+      }
+      return;
+    }
+    if (type === 0xB0) { // CC — para el mixer remoto desde el DAW
+      const cc = data[1], val = data[2];
+      // Log "All Sound Off" (CC120) y otros CCs especiales
+      if (cc === 120) logMidi('CC120 All Sound Off', data, 'var(--text-secondary)');
+      else if (cc === 123) logMidi('CC123 All Notes Off', data, 'var(--text-secondary)');
+      else logMidi(`CC${cc} = ${val}`, data, 'var(--accent-purple)');
+      if (cc === 7){ // Volume
+        const ch = status & 0x0F;
+        const chanName = ch === 0 ? 'click' : ch === 1 ? 'seqs' : ch === 2 ? 'band' : null;
+        if (chanName && state.mixer[chanName] !== undefined){
+          state.mixer[chanName] = val / 127;
+          const slider = document.querySelector(`#viewDrummer .mixer-channel[data-channel="${chanName}"] input[type=range]`);
+          if (slider){ slider.value = Math.round(val/127*100); slider.dispatchEvent(new Event('input')); }
+        }
+      }
+    }
+  }
+
+  /* ----- Panel de configuración MIDI / Bluetooth ----- */
+  function renderMidiSettings(){
+    const modal = document.getElementById('midiSettingsModal');
+    if (!modal) return;
+    const connected = !!midi.device;
+    const statusEl = document.getElementById('ms_connStatus');
+    statusEl.textContent = connected ? 'conectado' : 'desconectado';
+    statusEl.style.background = connected ? 'rgba(34,197,94,0.15)' : '';
+    statusEl.style.color      = connected ? 'var(--accent-green)'  : '';
+    document.getElementById('ms_deviceName').textContent = midi.device?.name || '—';
+    document.getElementById('ms_deviceId').textContent   = midi.device?.id   || '—';
+    document.getElementById('ms_devType').textContent    = midi.device?.type || '—';
+    document.getElementById('ms_msgCount').textContent   = midi.stats.messagesReceived || 0;
+    const last = midi.stats.lastActivity;
+    document.getElementById('ms_lastActivity').textContent = last
+      ? Math.max(0, Math.floor((Date.now()-last)/1000)) + 's'
+      : '—';
+
+    // Channel grid: ALL + 1..16
+    const grid = document.getElementById('ms_channelGrid');
+    if (grid && !grid.dataset.built){
+      grid.dataset.built = '1';
+      const opts = [{ label:'ALL', value:null }];
+      for (let i=1;i<=16;i++) opts.push({ label:String(i), value:i-1 });
+      grid.innerHTML = opts.map(o => `
+        <button data-ch="${o.value===null?'all':o.value}"
+                class="ch-btn mono text-xs font-bold py-1.5 rounded-md border border-neutral-800 text-neutral-400 active:bg-neutral-900">
+          ${o.label}
+        </button>
+      `).join('');
+      grid.querySelectorAll('.ch-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          const v = b.dataset.ch === 'all' ? null : parseInt(b.dataset.ch,10);
+          state.midiChannelFilter = v;
+          updateChannelButtons();
+        });
+      });
+    }
+    updateChannelButtons();
+
+    // Cues de la canción actual
+    const song = currentSong();
+    const cues = song?.cues || [];
+    document.getElementById('ms_cueCount').textContent = cues.length + ' cue' + (cues.length===1?'':'s');
+    document.getElementById('ms_cueList').innerHTML = cues.length
+      ? cues.map(c => `
+          <div class="flex items-center justify-between text-xs">
+            <span class="mono text-neutral-400">${noteNumToName(c.note)}</span>
+            <span class="text-white font-bold flex-1 mx-2 truncate">${c.label}</span>
+            <span class="mono text-neutral-500">${c.timestamp.toFixed(1)}s</span>
+          </div>
+        `).join('')
+      : '<p class="text-xs text-neutral-600 italic">sin cues — Logic no podrá saltar partes</p>';
+
+    // Clock rate badge — calculamos ticks/seg desde la última render
+    if (typeof renderMidiSettings._lastTicks === 'undefined') renderMidiSettings._lastTicks = 0;
+    if (typeof renderMidiSettings._lastRender === 'undefined') renderMidiSettings._lastRender = Date.now();
+    const nowR = Date.now();
+    const dt = (nowR - renderMidiSettings._lastRender) / 1000;
+    const dTicks = midi.stats.clockTicks - renderMidiSettings._lastTicks;
+    const tps = dt > 0 ? Math.round(dTicks / dt) : 0;
+    renderMidiSettings._lastTicks = midi.stats.clockTicks;
+    renderMidiSettings._lastRender = nowR;
+    const badge = document.getElementById('ms_clockBadge');
+    if (badge){
+      const bpmFromClock = tps > 0 ? Math.round((tps / 24) * 60) : 0;
+      badge.textContent = tps > 0 ? `clock ×${tps}/s ≈ ${bpmFromClock} BPM` : 'sin clock';
+      badge.style.color  = tps > 0 ? 'var(--accent-yellow)' : '';
+      badge.style.background = tps > 0 ? 'rgba(250,204,21,0.1)' : '';
+    }
+
+    // Log de mensajes
+    const logEl = document.getElementById('ms_logList');
+    if (logEl){
+      if (!midi.log.length){
+        logEl.innerHTML = '<p class="text-neutral-700 italic">esperando mensajes…</p>';
+      } else {
+        // más reciente arriba
+        logEl.innerHTML = [...midi.log].reverse().map(m => {
+          const ago = Math.max(0, Math.floor((Date.now()-m.t)/1000));
+          const t = new Date(m.t).toLocaleTimeString('es-AR',{hour12:false}) + '.' +
+                    String(m.t%1000).padStart(3,'0');
+          return `<div class="flex items-center gap-2 leading-tight">
+            <span class="text-neutral-600">${t.slice(-9,-4)}</span>
+            <span class="flex-1 truncate" style="color:${m.color||'#fff'};">${m.label}</span>
+            <span class="text-neutral-600">${m.raw}</span>
+          </div>`;
+        }).join('');
+      }
+    }
+  }
+  function updateChannelButtons(){
+    document.querySelectorAll('.ch-btn').forEach(b => {
+      const v = b.dataset.ch === 'all' ? null : parseInt(b.dataset.ch,10);
+      const active = state.midiChannelFilter === v;
+      b.classList.toggle('text-white', active);
+      b.classList.toggle('text-neutral-400', !active);
+      b.style.background = active ? 'var(--accent-cyan)' : '';
+      b.style.color      = active ? '#000' : '';
+      b.style.borderColor= active ? 'var(--accent-cyan)' : '';
+    });
+  }
+  // Wire modal abre/cierra
+  document.addEventListener('DOMContentLoaded', () => {
+    const openBtn = document.getElementById('openMidiSettings');
+    const closeBtn = document.getElementById('closeMidiSettings');
+    const modal = document.getElementById('midiSettingsModal');
+    if (openBtn) openBtn.addEventListener('click', () => {
+      renderMidiSettings();
+      modal.classList.remove('hidden-screen');
+    });
+    if (closeBtn) closeBtn.addEventListener('click', () => modal.classList.add('hidden-screen'));
+    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden-screen'); });
+    const disc = document.getElementById('ms_disconnectBtn');
+    if (disc) disc.addEventListener('click', async () => {
+      // Web Bluetooth: disconnect via device.gatt; Capacitor: BluetoothLe.disconnect
+      const cap = window.Capacitor;
+      const blePlugin = cap?.Plugins?.BluetoothLe;
+      try {
+        if (blePlugin && midi.device?.type === 'ble-capacitor') {
+          await blePlugin.disconnect({ deviceId: midi.device.id });
+        }
+      } catch(e) {}
+      midi.device = null;
+      document.getElementById('bleLed').style.background = '';
+      document.getElementById('bleStatusText').textContent = 'OFFLINE · sin DAW';
+      renderMidiSettings();
+    });
+    const recon = document.getElementById('ms_reconnectBtn');
+    if (recon) recon.addEventListener('click', () => connectBleMidi());
+    const clearLog = document.getElementById('ms_clearLog');
+    if (clearLog) clearLog.addEventListener('click', () => {
+      midi.log = [];
+      midi.stats.messagesReceived = 0;
+      renderMidiSettings();
+    });
+
+    // Slider de latency offset
+    const latencyRange = document.getElementById('ms_latencyRange');
+    const latencyVal = document.getElementById('ms_latencyVal');
+    if (latencyRange){
+      latencyRange.value = state.audioLatencyMs;
+      latencyVal.textContent = state.audioLatencyMs + 'ms';
+      latencyRange.addEventListener('input', () => {
+        const v = parseInt(latencyRange.value, 10);
+        state.audioLatencyMs = v;
+        latencyVal.textContent = v + 'ms';
+        localStorage.setItem('camarage_audioLatencyMs', String(v));
+      });
+    }
+
+    // Auto-refresh agresivo para que el log se sienta en vivo
+    setInterval(() => {
+      if (!modal.classList.contains('hidden-screen')) renderMidiSettings();
+    }, 300);
+  });
+
+  function updateMidiBadge(){
+    const count = midi.inputs.length;
+    const txt = count > 0
+      ? `BLE/USB MIDI · ${count} in`
+      : 'OFFLINE · sin DAW';
+    const el = document.getElementById('bleStatusText');
+    if (el) el.textContent = txt;
+    const led = document.getElementById('bleLed');
+    if (led){
+      led.style.background = count > 0 ? 'var(--accent-green)' : 'var(--accent-yellow)';
+      led.style.color      = count > 0 ? 'var(--accent-green)' : 'var(--accent-yellow)';
+    }
+  }
+
+  /* ---------- ENVÍO de MIDI (para futuros botones que controlen al DAW) ----------
+     Para enviar, usaríamos la primera output de Web MIDI (access.outputs)
+     o char.writeValueWithoutResponse() en BLE MIDI envuelto con header. */
+
+  // Auto-init Web MIDI al cargar la app (silencioso si no hay permisos)
+  document.addEventListener('DOMContentLoaded', () => {
+    midi.indicator = document.getElementById('bleLed');
+    initWebMIDI();
+  });
+
+  // Exponer para que el botón de pairing BLE pueda llamarlo
+  window.connectBleMidi = connectBleMidi;
+  </script>
+</body>
+</html>

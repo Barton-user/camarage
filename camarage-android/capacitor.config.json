@@ -1,0 +1,13 @@
+{
+  "appId": "com.camarage.live",
+  "appName": "CAMARAGE",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  }
+}

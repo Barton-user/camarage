@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / Capacitor
+node_modules/
+package-lock.json.tmp
+
+# Android build artifacts
+camarage-android/android/.gradle/
+camarage-android/android/build/
+camarage-android/android/app/build/
+camarage-android/android/local.properties
+camarage-android/android/.idea/
+camarage-android/android/captures/
+camarage-android/android/*.iml
+camarage-android/android/.kotlin/
+
+# Build outputs (los regenera Android Studio o gradle assembleDebug)
+*.apk.lock
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Logs
+*.log
+npm-debug.log*
+
+# Keep the zip and APK in source for now since they're the deliverable artifacts
+# (si querés excluirlos, descomentá las dos líneas siguientes)
+# *.apk
+# camarage-android.zip
