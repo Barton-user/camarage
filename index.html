@@ -26,6 +26,8 @@
   <title>CAMARAGE · Live Sync</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS SDK para sync con la base de datos -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -335,6 +337,26 @@
           </div>
           <div id="ms_cueList" class="space-y-1 max-h-28 overflow-y-auto no-scrollbar"></div>
           <p class="mono text-[9px] text-neutral-600 mt-2">Editá los cues desde Setlist → Editar canción</p>
+        </div>
+
+        <!-- Sincronización con Supabase -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Sync · Supabase</p>
+            <span id="ms_syncStatus" class="mono text-[10px] text-neutral-500">—</span>
+          </div>
+          <input id="ms_supabaseUrl" type="text" placeholder="https://xxxx.supabase.co"
+                 class="input w-full text-xs mono mb-1" />
+          <input id="ms_supabaseKey" type="text" placeholder="anon key (eyJhbGc...)"
+                 class="input w-full text-xs mono mb-2" />
+          <div class="grid grid-cols-2 gap-2">
+            <button id="ms_saveSync" class="rounded-lg border border-neutral-800 py-2 text-xs font-bold active:bg-neutral-900">
+              Guardar
+            </button>
+            <button id="ms_syncNow" class="rounded-lg py-2 text-xs font-black uppercase tracking-wider"
+                    style="background: var(--accent-cyan); color: #000;">↻ Sincronizar</button>
+          </div>
+          <p class="mono text-[9px] text-neutral-600 mt-2">Pull setlist + canciones + letras + cues desde la web</p>
         </div>
 
         <!-- Calibración de latencia del click -->
@@ -2303,6 +2325,37 @@
       renderMidiSettings();
     });
 
+    // Sync con Supabase
+    const urlInput = document.getElementById('ms_supabaseUrl');
+    const keyInput = document.getElementById('ms_supabaseKey');
+    if (urlInput && keyInput && window.getSupabaseCreds){
+      const creds = window.getSupabaseCreds();
+      urlInput.value = creds.url;
+      keyInput.value = creds.key ? creds.key.slice(0,12) + '…' + creds.key.slice(-6) : '';
+      // Cuando el user empieza a escribir, mostrar el valor real
+      keyInput.addEventListener('focus', () => {
+        keyInput.value = window.getSupabaseCreds().key;
+      });
+    }
+    const saveBtn = document.getElementById('ms_saveSync');
+    if (saveBtn) saveBtn.addEventListener('click', () => {
+      const url = urlInput.value.trim();
+      const key = keyInput.value.trim();
+      if (!url || !key){ alert('Completá URL y anon key'); return; }
+      window.saveSupabaseCreds(url, key);
+      saveBtn.textContent = '✓ Guardado';
+      setTimeout(() => saveBtn.textContent = 'Guardar', 1200);
+    });
+    const syncBtn = document.getElementById('ms_syncNow');
+    if (syncBtn) syncBtn.addEventListener('click', async () => {
+      syncBtn.disabled = true;
+      const orig = syncBtn.textContent;
+      syncBtn.textContent = 'Pulling…';
+      await window.pullFromSupabase();
+      syncBtn.disabled = false;
+      syncBtn.textContent = orig;
+    });
+
     // Slider de latency offset
     const latencyRange = document.getElementById('ms_latencyRange');
     const latencyVal = document.getElementById('ms_latencyVal');
@@ -2349,6 +2402,178 @@
 
   // Exponer para que el botón de pairing BLE pueda llamarlo
   window.connectBleMidi = connectBleMidi;
+
+  /* =====================================================================
+   * SYNC con SUPABASE — pull al abrir + botón manual
+   * ---------------------------------------------------------------------
+   * Configurá URL y anon key en el modal ⚙ (se guardan en localStorage).
+   * Al abrir la app, si hay conexión y credenciales, pull del setlist
+   * completo y lo guarda en localStorage para uso offline.
+   * =================================================================== */
+  const SUPABASE_URL_KEY = 'camarage_supabase_url';
+  const SUPABASE_KEY_KEY = 'camarage_supabase_anon_key';
+  const SUPABASE_CACHE_KEY = 'camarage_setlist_cache';
+  const SUPABASE_BAND_KEY = 'camarage_active_band_id';
+
+  let supabaseClient = null;
+  function initSupabaseClient(){
+    const url = localStorage.getItem(SUPABASE_URL_KEY);
+    const key = localStorage.getItem(SUPABASE_KEY_KEY);
+    if (!url || !key || !window.supabase) return null;
+    if (!supabaseClient){
+      supabaseClient = window.supabase.createClient(url, key, {
+        auth: { persistSession: true, storage: window.localStorage }
+      });
+    }
+    return supabaseClient;
+  }
+
+  async function pullFromSupabase(){
+    const client = initSupabaseClient();
+    if (!client){
+      updateSyncStatus('sin credenciales', 'var(--accent-yellow)');
+      return false;
+    }
+    updateSyncStatus('sincronizando…', 'var(--accent-cyan)');
+    try {
+      // Obtener bandas del usuario (RLS filtra automáticamente)
+      const { data: bands, error: bErr } = await client.from('bands').select('*');
+      if (bErr) throw bErr;
+      if (!bands || bands.length === 0){
+        updateSyncStatus('sin bandas — creá una en la web', 'var(--accent-yellow)');
+        return false;
+      }
+      // Banda activa: la guardada o la primera
+      let bandId = localStorage.getItem(SUPABASE_BAND_KEY);
+      if (!bandId || !bands.find(b => b.id === bandId)){
+        bandId = bands[0].id;
+        localStorage.setItem(SUPABASE_BAND_KEY, bandId);
+      }
+      // Setlist más reciente de esa banda
+      const { data: setlists } = await client.from('setlists')
+        .select('*').eq('band_id', bandId).eq('is_archived', false)
+        .order('created_at', { ascending: false }).limit(1);
+      if (!setlists || setlists.length === 0){
+        updateSyncStatus('sin setlists activos', 'var(--accent-yellow)');
+        return false;
+      }
+      const activeSetlist = setlists[0];
+      // Canciones del setlist con orden
+      const { data: setlistSongs } = await client.from('setlist_songs')
+        .select('position, song_id, songs(*)')
+        .eq('setlist_id', activeSetlist.id)
+        .order('position');
+      // Pull lyrics, cues y chords de todas las canciones en paralelo
+      const songsWithDetails = await Promise.all((setlistSongs||[]).map(async ss => {
+        const s = ss.songs;
+        const [lyR, cuR, chR] = await Promise.all([
+          client.from('lyric_lines').select('*').eq('song_id', s.id).order('order_index'),
+          client.from('midi_cues').select('*').eq('song_id', s.id).order('order_index'),
+          client.from('chord_charts').select('*').eq('song_id', s.id).order('order_index'),
+        ]);
+        return {
+          id: s.id,
+          title: s.title,
+          key: s.key || 'C',
+          bpm: parseFloat(s.bpm) || 120,
+          timeSig: s.time_signature || '4/4',
+          programChange: s.program_change ?? null,
+          lyrics: (lyR.data||[]).map(l => ({
+            t: parseFloat(l.start_time_seconds),
+            section: l.section_id ? 'Section' : 'Verse',
+            text: l.text,
+          })),
+          cues: (cuR.data||[]).map(c => ({
+            note: c.midi_note,
+            label: c.label,
+            timestamp: parseFloat(c.jump_to_seconds),
+          })),
+          chords: (chR.data||[]).map(c => ({
+            bar: c.start_bar,
+            section: 'Section',
+            symbol: c.chord_symbol,
+            root: c.root_note,
+            quality: c.quality || '',
+          })),
+        };
+      }));
+      // Reemplazar el setlist en memoria
+      setlist.name = activeSetlist.name;
+      setlist.songs = songsWithDetails.length ? songsWithDetails : setlist.songs;
+      setlist.currentSongIdx = 0;
+      // Cachear para offline
+      const cache = {
+        name: setlist.name,
+        songs: setlist.songs,
+        savedAt: Date.now(),
+        bandId, setlistId: activeSetlist.id,
+      };
+      localStorage.setItem(SUPABASE_CACHE_KEY, JSON.stringify(cache));
+      // Refrescar UI
+      renderSetlistEditor();
+      loadSong(0);
+      document.getElementById('setlistName').textContent = setlist.name;
+      const cnt = setlist.songs.length;
+      updateSyncStatus(`✓ ${cnt} canciones · ${new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`, 'var(--accent-green)');
+      return true;
+    } catch(err){
+      console.warn('Sync failed:', err);
+      updateSyncStatus('error: ' + (err.message || err), 'var(--accent-red)');
+      return false;
+    }
+  }
+
+  function loadFromCache(){
+    const raw = localStorage.getItem(SUPABASE_CACHE_KEY);
+    if (!raw) return false;
+    try {
+      const cache = JSON.parse(raw);
+      if (cache.songs && cache.songs.length > 0){
+        setlist.name = cache.name;
+        setlist.songs = cache.songs;
+        setlist.currentSongIdx = 0;
+        const ageMin = Math.floor((Date.now() - cache.savedAt) / 60000);
+        updateSyncStatus(`cache · hace ${ageMin}min`, 'var(--text-secondary)');
+        return true;
+      }
+    } catch(e){}
+    return false;
+  }
+
+  function updateSyncStatus(text, color){
+    const el = document.getElementById('ms_syncStatus');
+    if (el){ el.textContent = text; el.style.color = color || ''; }
+  }
+
+  // Exponer al modal
+  window.pullFromSupabase = pullFromSupabase;
+  window.saveSupabaseCreds = function(url, key){
+    localStorage.setItem(SUPABASE_URL_KEY, url);
+    localStorage.setItem(SUPABASE_KEY_KEY, key);
+    supabaseClient = null; // forzar re-init con nuevas creds
+    initSupabaseClient();
+  };
+  window.getSupabaseCreds = function(){
+    return {
+      url: localStorage.getItem(SUPABASE_URL_KEY) || '',
+      key: localStorage.getItem(SUPABASE_KEY_KEY) || '',
+    };
+  };
+
+  // Auto-sync al abrir si hay credenciales
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      const url = localStorage.getItem(SUPABASE_URL_KEY);
+      const key = localStorage.getItem(SUPABASE_KEY_KEY);
+      if (url && key){
+        // Primero cargo del cache (instantáneo) y después intento pull
+        loadFromCache();
+        renderSetlistEditor();
+        loadSong(0);
+        pullFromSupabase();
+      }
+    }, 500);
+  });
   </script>
 </body>
 </html>
