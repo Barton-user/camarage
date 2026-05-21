@@ -5,18 +5,39 @@ import { createClient } from "@/lib/supabase-client";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<"password" | "code">("password");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function loginWithPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) {
+      // Si "Invalid login credentials" probablemente no tiene contraseña → ofrecer OTP
+      if (error.message.toLowerCase().includes("invalid")) {
+        setError("Email o contraseña incorrectos. Si nunca configuraste contraseña, usá 'Entrar con código' abajo.");
+      } else {
+        setError(error.message);
+      }
+    } else {
+      router.push("/dashboard");
+      router.refresh();
+    }
+  }
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    // SIN emailRedirectTo → Supabase manda código numérico en vez de link
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: true },
@@ -32,36 +53,28 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    // Probar primero como 'email' (OTP login), si falla probar 'magiclink' (signup/magic link)
     let { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code.trim(),
-      type: "email",
+      email, token: code.trim(), type: "email",
     });
     if (error) {
       const retry = await supabase.auth.verifyOtp({
-        email,
-        token: code.trim(),
-        type: "magiclink",
+        email, token: code.trim(), type: "magiclink",
       });
       error = retry.error;
     }
     setLoading(false);
-    if (error) {
-      setError(error.message);
-    } else {
+    if (error) setError(error.message);
+    else {
       router.push("/dashboard");
       router.refresh();
     }
   }
 
   async function resend() {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true },
+      email, options: { shouldCreateUser: true },
     });
     setLoading(false);
     if (error) setError(error.message);
@@ -81,62 +94,82 @@ export default function LoginPage() {
 
         <h1 className="text-3xl font-black mb-2">Entrá</h1>
 
-        {step === "email" ? (
+        {/* MODO PASSWORD */}
+        {mode === "password" && (
           <>
-            <p className="text-neutral-400 mb-6 text-sm">Te mandamos un código de 6 dígitos al mail.</p>
+            <p className="text-neutral-400 mb-6 text-sm">Con tu email y contraseña.</p>
+            <form onSubmit={loginWithPassword} className="space-y-3">
+              <div>
+                <label className="label">Email</label>
+                <input type="email" required placeholder="vos@ejemplo.com"
+                       value={email} onChange={(e) => setEmail(e.target.value)}
+                       className="input" autoFocus />
+              </div>
+              <div>
+                <label className="label">Contraseña</label>
+                <input type="password" required placeholder="••••••••"
+                       value={password} onChange={(e) => setPassword(e.target.value)}
+                       className="input" />
+              </div>
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              <button type="submit" disabled={loading} className="btn btn-primary w-full disabled:opacity-50">
+                {loading ? "Entrando..." : "Entrar"}
+              </button>
+              <button type="button" onClick={() => { setMode("code"); setError(null); }}
+                      className="w-full text-center text-xs text-neutral-500 hover:text-white py-2">
+                ¿Sin contraseña? Entrar con código →
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* MODO CODE (OTP) */}
+        {mode === "code" && step === "email" && (
+          <>
+            <p className="text-neutral-400 mb-6 text-sm">Te mandamos un código al mail.</p>
             <form onSubmit={sendCode} className="space-y-3">
               <div>
                 <label className="label">Email</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="vos@ejemplo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input"
-                  autoFocus
-                />
+                <input type="email" required placeholder="vos@ejemplo.com"
+                       value={email} onChange={(e) => setEmail(e.target.value)}
+                       className="input" autoFocus />
               </div>
               {error && <p className="text-xs text-red-400">{error}</p>}
               <button type="submit" disabled={loading} className="btn btn-primary w-full disabled:opacity-50">
                 {loading ? "Enviando..." : "Enviar código"}
               </button>
+              <button type="button" onClick={() => { setMode("password"); setError(null); }}
+                      className="w-full text-center text-xs text-neutral-500 hover:text-white py-2">
+                ← Volver a contraseña
+              </button>
             </form>
           </>
-        ) : (
+        )}
+
+        {mode === "code" && step === "code" && (
           <>
             <p className="text-neutral-400 mb-6 text-sm">
-              Mandamos un código a <b className="text-white">{email}</b>. Revisá tu mail y pegalo acá.
+              Mandamos un código a <b className="text-white">{email}</b>. Pegalo acá.
             </p>
             <form onSubmit={verifyCode} className="space-y-3">
               <div>
-                <label className="label">Código de 6 dígitos</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]+"
-                  maxLength={12}
-                  required
-                  placeholder="código"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  className="input mono text-2xl tracking-[0.3em] text-center font-bold"
-                  autoFocus
-                />
+                <label className="label">Código</label>
+                <input type="text" inputMode="numeric" pattern="[0-9]+" maxLength={12} required
+                       placeholder="código" value={code}
+                       onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                       className="input mono text-2xl tracking-[0.3em] text-center font-bold"
+                       autoFocus />
               </div>
               {error && <p className="text-xs text-red-400">{error}</p>}
-              <button type="submit" disabled={loading || code.length < 6}
+              <button type="submit" disabled={loading || code.length < 4}
                       className="btn btn-primary w-full disabled:opacity-50">
                 {loading ? "Verificando..." : "Entrar"}
               </button>
               <div className="flex items-center justify-between text-xs text-neutral-500 pt-2">
                 <button type="button" onClick={() => { setStep("email"); setCode(""); setError(null); }}
-                        className="hover:text-white">
-                  ← Usar otro mail
-                </button>
-                <button type="button" onClick={resend} disabled={loading} className="hover:text-white disabled:opacity-50">
-                  Reenviar código
-                </button>
+                        className="hover:text-white">← Usar otro mail</button>
+                <button type="button" onClick={resend} disabled={loading}
+                        className="hover:text-white disabled:opacity-50">Reenviar código</button>
               </div>
             </form>
           </>

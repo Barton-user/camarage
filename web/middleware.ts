@@ -24,7 +24,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Rutas que requieren auth
-  const protectedPaths = ["/dashboard", "/songs", "/setlists", "/bands", "/members"];
+  const protectedPaths = ["/dashboard", "/songs", "/setlists", "/bands", "/members", "/settings"];
   const isProtected = protectedPaths.some(p => request.nextUrl.pathname.startsWith(p));
   if (isProtected && !user) {
     return NextResponse.redirect(new URL("/login", request.url));

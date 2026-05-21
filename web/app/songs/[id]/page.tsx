@@ -81,12 +81,31 @@ export default function SongEditor() {
 
   // ===== LYRICS =====
   async function addLyric() {
-    const next = lyrics.length;
     const lastT = lyrics.at(-1)?.start_time_seconds ?? 0;
+    const maxOrder = lyrics.length ? Math.max(...lyrics.map(l => l.order_index)) : -1;
     const { data } = await supabase.from("lyric_lines").insert({
-      song_id: id, order_index: next, text: "Nueva línea", start_time_seconds: lastT + 4,
+      song_id: id, order_index: maxOrder + 1, text: "Nueva línea", start_time_seconds: lastT + 4,
     }).select().single();
     if (data) setLyrics([...lyrics, data]);
+  }
+  async function insertLyricAfter(afterId: string) {
+    const idx = lyrics.findIndex(l => l.id === afterId);
+    if (idx < 0) return;
+    const current = lyrics[idx];
+    const next = lyrics[idx + 1];
+    const newTime = next
+      ? (current.start_time_seconds + next.start_time_seconds) / 2
+      : current.start_time_seconds + 4;
+    const maxOrder = lyrics.length ? Math.max(...lyrics.map(l => l.order_index)) : -1;
+    const { data } = await supabase.from("lyric_lines").insert({
+      song_id: id, order_index: maxOrder + 1,
+      text: "Nueva línea", start_time_seconds: Math.round(newTime * 10) / 10,
+    }).select().single();
+    if (data) {
+      const newList = [...lyrics];
+      newList.splice(idx + 1, 0, data);
+      setLyrics(newList);
+    }
   }
   async function updateLyric(lyricId: string, patch: any) {
     setLyrics(lyrics.map(l => l.id === lyricId ? { ...l, ...patch } : l));
@@ -105,15 +124,36 @@ export default function SongEditor() {
 
   // ===== CUES MIDI =====
   async function addCue() {
-    const next = cues.length;
     const lastCue = cues.at(-1);
     const newNote = lastCue ? Math.min(127, lastCue.midi_note + 2) : 60;
+    const maxOrder = cues.length ? Math.max(...cues.map(c => c.order_index)) : -1;
     const { data } = await supabase.from("midi_cues").insert({
-      song_id: id, order_index: next,
+      song_id: id, order_index: maxOrder + 1,
       midi_note: newNote, label: "Nueva parte",
       jump_to_seconds: (lastCue?.jump_to_seconds || 0) + 8,
     }).select().single();
     if (data) setCues([...cues, data]);
+  }
+  async function insertCueAfter(afterId: string) {
+    const idx = cues.findIndex(c => c.id === afterId);
+    if (idx < 0) return;
+    const current = cues[idx];
+    const next = cues[idx + 1];
+    const newTime = next
+      ? (current.jump_to_seconds + next.jump_to_seconds) / 2
+      : current.jump_to_seconds + 8;
+    const newNote = Math.min(127, current.midi_note + 1);
+    const maxOrder = cues.length ? Math.max(...cues.map(c => c.order_index)) : -1;
+    const { data } = await supabase.from("midi_cues").insert({
+      song_id: id, order_index: maxOrder + 1,
+      midi_note: newNote, label: "Nueva parte",
+      jump_to_seconds: Math.round(newTime * 10) / 10,
+    }).select().single();
+    if (data) {
+      const newList = [...cues];
+      newList.splice(idx + 1, 0, data);
+      setCues(newList);
+    }
   }
   function updateCue(cueId: string, patch: any) {
     setCues(cues.map(c => c.id === cueId ? { ...c, ...patch } : c));
@@ -229,7 +269,12 @@ export default function SongEditor() {
                      onChange={e => updateLyric(l.id, { text: e.target.value })}
                      onBlur={() => saveLyric(l.id)}
                      className="input flex-1" />
-              <button onClick={() => removeLyric(l.id)} className="text-neutral-600 hover:text-red-400 px-2">×</button>
+              <button onClick={() => insertLyricAfter(l.id)}
+                      title="Insertar línea abajo"
+                      className="text-neutral-600 hover:text-cyan-400 px-2 text-lg leading-none">+</button>
+              <button onClick={() => removeLyric(l.id)}
+                      title="Borrar línea"
+                      className="text-neutral-600 hover:text-red-400 px-2">×</button>
             </div>
           ))}
           <div className="flex gap-2">
@@ -272,7 +317,12 @@ export default function SongEditor() {
                      }}
                      className="input w-20 text-center mono text-xs"
                      placeholder="1:30" />
-              <button onClick={() => removeCue(c.id)} className="text-neutral-600 hover:text-red-400 px-2">×</button>
+              <button onClick={() => insertCueAfter(c.id)}
+                      title="Insertar cue abajo"
+                      className="text-neutral-600 hover:text-cyan-400 px-2 text-lg leading-none">+</button>
+              <button onClick={() => removeCue(c.id)}
+                      title="Borrar cue"
+                      className="text-neutral-600 hover:text-red-400 px-2">×</button>
             </div>
           ))}
           <div className="flex gap-2">

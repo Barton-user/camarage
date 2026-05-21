@@ -8,6 +8,7 @@ const items = [
   { href: "/bands", label: "Bandas", icon: "🎸" },
   { href: "/setlists", label: "Setlists", icon: "📋" },
   { href: "/songs", label: "Canciones", icon: "🎵" },
+  { href: "/settings", label: "Configuración", icon: "⚙️" },
 ];
 
 export default function Nav({ userEmail }: { userEmail?: string }) {
