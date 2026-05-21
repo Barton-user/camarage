@@ -1,0 +1,9 @@
+# Vercel: ignorar todo lo que NO sea la carpeta web/
+# (el index.html de la raíz es la fuente del APK mobile, no es para Vercel)
+*.html
+*.apk
+*.zip
+camarage-android/
+singer_view.html
+CAMARAGE-debug.apk
+camarage-android.zip
