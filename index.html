@@ -967,20 +967,23 @@
   /* Saltar a un timestamp absoluto de la canción (en segundos).
      Se usa cuando llega un cue MIDI (Note On mapeado a una sección). */
   function jumpToTime(seconds){
+    // Log visible para debug — para que el usuario vea exactamente qué pasa
+    try { logMidi(`⏭ Salto a ${seconds.toFixed(1)}s`, [], 'var(--accent-cyan)'); } catch(e){}
+    console.log('[jumpToTime]', seconds);
     state.pausedElapsed = seconds * 1000;
     state.startedAt = performance.now();
-    // Re-anclar el conteo de ticks MIDI a esta nueva posición:
-    // tickSinceStart vuelve a 0 y la base de tiempo (pausedElapsed) se ajusta.
+    // Re-anclar el conteo de ticks MIDI a esta nueva posición
     midi.tickSinceStart = 0;
     midi._lastTickArrivalAt = performance.now();
-    // Reset de "última posición conocida" para forzar re-render
+    // Reset de "última posición conocida" para forzar re-render de las vistas
     singerLineIdx = -1; bassChordIdx = -1; lastGlobalBeat = -1;
     lastDrumBeat = -1; lastDrumSubBeat = -1;
-    if (!state.isPlaying){
-      state.isPlaying = true;
-      startClock();
-      updateTransportUI();
-    }
+    // SIEMPRE activar playback y reiniciar el clock loop (no condicional).
+    // Antes solo lo hacía si !state.isPlaying, pero eso fallaba cuando el loop
+    // se había muerto pero state.isPlaying seguía en true.
+    state.isPlaying = true;
+    startClock();
+    updateTransportUI();
     flashCueIndicator();
   }
 
@@ -2135,13 +2138,20 @@
       if (!state.isPlaying){ state.startedAt = performance.now(); state.isPlaying = true; startClock(); updateTransportUI(); }
       return;
     }
-    if (status === 0xFC) { // Stop
-      logMidi('■ Stop', data, 'var(--accent-red)');
-      console.log('[MIDI] Stop');
-      midi.tickSinceStart = 0;
+    if (status === 0xFC) { // Stop (MIDI) — PAUSA, no reset
+      // Por spec MIDI, Stop = pausa (mantener posición). Solo el botón STOP
+      // de la UI hace reset completo. Esto evita que Stop borre los saltos de cues.
+      logMidi('■ Stop (pausa)', data, 'var(--accent-red)');
+      console.log('[MIDI] Stop — pause');
       _lastScheduledBeat = -1;
-      state.midiClockDriven = false;
-      setStop();
+      if (state.isPlaying){
+        // Capturar el tiempo elapsed actual para preservarlo
+        const elapsedNow = elapsedSec();
+        state.pausedElapsed = elapsedNow * 1000;
+        state.isPlaying = false;
+        stopClock();
+        updateTransportUI();
+      }
       return;
     }
     if (status === 0xF8) { // Clock tick (24 ppqn)

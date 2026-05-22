@@ -1,7 +1,7 @@
 # CAMARAGE · Project Context Snapshot
 
 > Documento para retomar el proyecto en otra conversación de Claude.
-> Última actualización: 21 mayo 2026
+> Última actualización: 22 mayo 2026
 
 ## Resumen del proyecto
 
@@ -11,45 +11,21 @@ Clock y Start/Stop, la app del celu reacciona en tiempo real mostrando letras,
 cifrado del bajo y metrónomo visual, todo sincronizado al ritmo real del DAW.
 
 Existe también una web admin (Next.js en Vercel) para configurar setlists,
-canciones, letras y cues desde una computadora cómoda. Los datos se guardan en
+canciones, letras y cues desde una computadora. Los datos se guardan en
 Supabase. El celu sincroniza al abrir + manual; funciona offline una vez
 cacheado.
 
-**Usuario:** Pato (patricio.keogan@sinis.com.ar)
-**Banda:** "CAMARAGE" (también el nombre del producto/repo)
+**Usuario:** Pato (patricio.keogan@sinis.com.ar / keogan3d@gmail.com)
+**Banda:** "Ensayo" / CAMARAGE
 **Hardware target:** Samsung A56 (Android) + MacBook Pro
-
-## Arquitectura
-
-```
-┌─────────────────┐  BLE MIDI   ┌──────────────────┐
-│  Mac + Logic    │ ◄─────────► │  Samsung A56     │
-│  Pro (DAW)      │   wireless  │  APK CAMARAGE    │
-└─────────────────┘             └──────────────────┘
-                                         │
-                                         │ sync HTTPS (al abrir + manual)
-                                         ▼
-                                ┌────────────────────┐
-                                │  Supabase          │
-                                │  Postgres + Auth   │
-                                │  + RLS             │
-                                └────────────────────┘
-                                         ▲
-                                         │
-                                ┌────────────────────┐
-                                │  Vercel            │
-                                │  Next.js web admin │
-                                │  camarage.vercel.app│
-                                └────────────────────┘
-```
 
 ## Estado actual end-to-end
 
-**FUNCIONANDO:**
-- ✅ APK Android compilado y firmado debug (3.7MB)
+### TODO FUNCIONA:
+- ✅ APK Android compilado con login + auto-sync + hardcoded creds (3.7MB)
 - ✅ Conexión BLE MIDI nativa (plugin @capacitor-community/bluetooth-le)
 - ✅ Parser BLE MIDI con state machine compliant a spec 1.0
-- ✅ Recepción de Clock, Start, Stop, Program Change, Note On (cues), CC
+- ✅ Recepción de Clock, Start, Continue, Stop, Program Change, Note On (cues), CC
 - ✅ Envío MIDI saliente (Play/Stop del celu hacia Logic)
 - ✅ BPM derivado de timestamps embebidos BLE (precisión ~1 BPM)
 - ✅ Posición de canción anclada a tick count desde Start (sin drift)
@@ -57,26 +33,50 @@ cacheado.
 - ✅ Modal de configuración: filtro canal MIDI, log mensajes en vivo, calibración
 - ✅ 3 vistas + Setlist Editor + bottom nav
 - ✅ Schema Supabase 13 tablas con RLS aplicado en proyecto del usuario
-- ✅ Web admin Next.js 14 compila limpio, deployada en Vercel
-- ✅ Repo en GitHub https://github.com/Barton-user/camarage
-- ✅ Push exitoso (commit inicial)
+- ✅ Web admin Next.js 14 deployada en Vercel (https://camarage.vercel.app)
+- ✅ Login email+password en web admin (con OTP fallback)
+- ✅ Login email+password en APK (mismo usuario que web)
+- ✅ Sync automático al abrir APK (sin configuración manual)
+- ✅ Editor de letras con tiempo en mm:ss
+- ✅ Insertar líneas entre existentes
+- ✅ Cues MIDI inline en pantalla de letras (no hay que ir a otro tab)
+- ✅ MIDI Stop = pausa (no reset) — preserva posición de cues
+- ✅ Repo en GitHub https://github.com/Barton-user/camarage (Pato cuenta Barton-user)
 
-**PARCIALMENTE FUNCIONANDO / EN DEBUG:**
-- ⚠️ Vercel deploy: el build sí compila Next.js ahora (después de fixear
-  Framework Preset a Next.js y Root Directory a `web`), pero el LOGIN MAGIC
-  LINK no completa la sesión — el link expira al primer click o el mail client
-  hace preview-scan consumiendo el token. Última URL vista:
-  `https://camarage.vercel.app/login#error=access_denied&error_code=otp_expired`
-- ⚠️ Sync app móvil ↔ Supabase: implementado pero NO testeado end-to-end
-  porque depende de poder loguearse en la web admin para crear data primero.
+### EN DEBUG / SIN VERIFICAR:
+- ⚠️ **Bug actual abierto**: cuando llega un cue MIDI al celu, el toast aparece
+  con la info correcta pero la letra principal NO se mueve. Logic envía Note On,
+  el cue se identifica, jumpToTime se llama, pero el lyric scroll no actualiza.
+  Última hipótesis: state.isPlaying queda true pero el clock loop (tickHandle)
+  está muerto. Fix aplicado: jumpToTime ahora SIEMPRE llama startClock() para
+  asegurar que el loop está corriendo. Pendiente: usuario probar último APK
+  y confirmar.
+- ⚠️ Convención de notas Logic vs estándar:
+  - Logic Pro por default muestra MIDI 60 como **C3** (Yamaha convention).
+  - Mi app y el estándar internacional usan **C4 = MIDI 60**.
+  - Resultado: cuando Logic muestra "E4" en pantalla, manda MIDI 76 que mi app
+    correctamente identifica como E5.
+  - Solución elegida: el usuario subió sus cues una octava en la web admin
+    (C4→C5, D4→D5, etc.) para que matcheen lo que Logic manda.
+  - Alternativa pendiente: en Logic Settings buscar "Display Middle C" y
+    cambiar a C4 (no encontró la opción en su versión).
 
-**TODO POR EMPEZAR:**
+### FEATURES NUEVAS RECIÉN AGREGADAS (web admin):
+- ✅ **Auto-asignar notas MIDI a todas las letras** (botón en tab Letras):
+  borra cues existentes y asigna C3, C#3, D3, D#3... chromatic a cada línea
+  en orden cronológico. Una nota por línea.
+- ✅ **Copiar para Logic** (botón en tab Letras): pone en el portapapeles
+  el texto en formato Logic Event List exacto (con ♯ Unicode, tabs, doble
+  línea por nota con Rel Vel). El usuario pega en Event List de Logic.
+- ✅ **Descargar .mid** (botón en tab Letras): backup como archivo MIDI
+  estándar para drag-and-drop en cualquier DAW.
+
+### TODO POR EMPEZAR:
+- ❌ Resolver definitivamente el bug del lyric scroll en respuesta a cues
 - ❌ Auto-calibración de latencia con micrófono del celu
-- ❌ Continue mode (resumir desde posición actual de Logic, no desde 0)
-- ❌ Soporte Song Position Pointer (0xF2)
+- ❌ Soporte Song Position Pointer (0xF2) para sync mid-song
 - ❌ Vista Tecladista, Guitarrista
 - ❌ Modo paisaje iPad
-- ❌ Export cues a archivo .mid
 - ❌ Gestión de miembros de banda con invite links
 - ❌ Realtime sync entre miembros de banda durante el show
 
@@ -84,33 +84,28 @@ cacheado.
 
 ### Supabase
 - **Project URL**: `https://ccytqubmroxjaiwtzsfh.supabase.co`
-- **Anon key**: (en localStorage del celu y en Vercel env vars) — el usuario
-  la copió desde Supabase Dashboard → Settings → API → Publishable keys
-- **Project ID**: `ccytqubmroxjaiwtzsfh`
-- **Owner**: Pato (patricio.keogan@sinis.com.ar)
+- **Anon (publishable) key** (HARDCODED en APK + Vercel env vars):
+  `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjeXRxdWJtcm94amFpd3R6c2ZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMjc2NjgsImV4cCI6MjA5NDkwMzY2OH0.a8cq6qpHOqV-0DCkuFyPxmHNvbuNzrItgYdaAoc1YBI`
 - **Schema aplicado**: SÍ, las 13 tablas + RLS + triggers + view están creadas
-- **Site URL configurada**: `https://camarage.vercel.app` ✓
+- **Auth**: email+password configurado, OTP también disponible como fallback
+- **Site URL**: `https://camarage.vercel.app` ✓
 - **Redirect URLs**: `https://camarage.vercel.app/auth/callback` ✓
-- **PENDIENTE**: verificar setting "Confirm email" en Auth → Providers → Email,
-  y verificar que el flow PKCE esté usando query param `?code=` (no hash
-  fragment con error_code)
+- **Email OTP length**: 6 dígitos (cambió de 8 a 6)
+- **Confirm email**: DESACTIVADO (single-user, no necesita)
 
 ### Vercel
 - **Project**: camarage
-- **URL primary**: `https://camarage.vercel.app` (custom alias)
-- **URL deploy**: `camarage-2dxs6ja3e-pato-k-s-projects.vercel.app`
-- **Framework**: Next.js (después del fix)
-- **Root Directory**: `web` (después del fix)
+- **URL primary**: `https://camarage.vercel.app`
+- **Framework**: Next.js (configurado correctamente después de varios intentos)
+- **Root Directory**: `web` (configurado correctamente)
 - **Env vars**:
-  - `NEXT_PUBLIC_SUPABASE_URL` = la URL de Supabase
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = la publishable key
+  - `NEXT_PUBLIC_SUPABASE_URL` = URL Supabase
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = la anon key
 
 ### GitHub
 - **Repo**: https://github.com/Barton-user/camarage
-- **Owner**: Barton-user (la cuenta GitHub del usuario)
-- **Branch principal**: `main`
-- **Estado**: Pusheado el commit inicial. Pendiente: hacer un segundo push con
-  los cambios del SETUP.md, .vercelignore eliminado, web/ con todos los archivos.
+- **Branch**: main
+- **Auth**: pusheado desde Mac del usuario
 
 ## Estructura del repo
 
@@ -118,40 +113,36 @@ cacheado.
 CAMARAGE/                                    # workspace folder del usuario
 ├── index.html                               # SPA del mobile (fuente del APK)
 ├── singer_view.html                         # primer prototipo solo Cantante
-├── supabase_schema.sql                      # schema viejo (no usar, usar web/supabase/schema.sql)
-├── README.md                                # readme principal del repo
-├── SETUP.md                                 # guía paso a paso de setup completo
+├── supabase_schema.sql                      # schema viejo (no usar)
+├── README.md                                # readme principal
+├── SETUP.md                                 # guía paso a paso
 ├── CONTEXT.md                               # ESTE archivo
 ├── CAMARAGE-debug.apk                       # último APK compilado (3.7MB)
-├── camarage-android.zip                     # zip del proyecto Capacitor
 ├── camarage-android/                        # proyecto Capacitor para Android
-│   ├── android/                             # proyecto Android Studio
-│   ├── www/index.html                       # copia del SPA empaquetada en APK
+│   ├── android/
+│   ├── www/index.html                       # copia del SPA
 │   ├── capacitor.config.json
-│   ├── package.json
-│   └── README.md
+│   └── package.json
 └── web/                                     # web admin Next.js para Vercel
     ├── app/
     │   ├── layout.tsx
-    │   ├── page.tsx                         # redirect a login o dashboard
-    │   ├── globals.css                      # estilos compartidos
-    │   ├── login/page.tsx                   # magic link auth
-    │   ├── auth/callback/route.ts           # exchange code → session
-    │   ├── dashboard/                       # home con stats
-    │   ├── bands/                           # CRUD bandas
-    │   ├── setlists/                        # CRUD setlists + reorder
-    │   └── songs/[id]/                      # editor con tabs (meta/lyrics/cues/chords)
-    ├── components/Nav.tsx                   # sidebar
+    │   ├── page.tsx
+    │   ├── globals.css
+    │   ├── login/page.tsx                   # email+password + OTP fallback
+    │   ├── auth/callback/route.ts
+    │   ├── dashboard/
+    │   ├── bands/
+    │   ├── setlists/
+    │   ├── songs/[id]/page.tsx              # EDITOR con auto-asignar + copy Logic
+    │   └── settings/page.tsx                # cambiar contraseña
+    ├── components/Nav.tsx
     ├── lib/
-    │   ├── supabase-client.ts               # browser client (PKCE)
-    │   ├── supabase-server.ts               # SSR client
-    │   └── types.ts                         # types matching schema
-    ├── supabase/schema.sql                  # SCHEMA DEFINITIVO con tabla midi_cues
-    ├── middleware.ts                        # protege rutas autenticadas
-    ├── package.json
-    ├── tsconfig.json
-    ├── tailwind.config.ts
-    └── .env.example
+    │   ├── supabase-client.ts
+    │   ├── supabase-server.ts
+    │   └── types.ts
+    ├── supabase/schema.sql                  # SCHEMA DEFINITIVO con midi_cues
+    ├── middleware.ts
+    └── ...
 ```
 
 ## Decisiones técnicas clave
@@ -159,37 +150,72 @@ CAMARAGE/                                    # workspace folder del usuario
 ### Mobile (APK Android)
 
 - **Capacitor v6** wrapper sobre el HTML
-- **Plugin BLE**: `@capacitor-community/bluetooth-le` — usa key compuesta
-  `notification|deviceId|service|characteristic` como event name
-- **Plugin pasa values como HEX STRING**, no base64
+- **Plugin BLE**: `@capacitor-community/bluetooth-le` v6.1.0
+  - Key compuesta: `notification|deviceId|service|characteristic` (lowercase)
+  - Value: HEX STRING, no base64
 - **BLE MIDI Service UUID**: `03b80e5a-ede8-4b33-a751-6ce34ec4c700`
 - **BLE MIDI Char UUID**: `7772e5db-3868-4112-a1a9-f2669d106bf3`
-- **Parser**: state machine compliant con BLE MIDI 1.0 spec
+- **Parser**: state machine compliant con BLE MIDI 1.0
   - Real-time messages (0xF8-0xFF) chequeados con `expectingStatus` flag
   - TimestampLow byte siempre precede a status (excepto running status data)
   - Extrae timestamp embebido para BPM accuracy
 - **BPM calc**: trimmed mean 60% central de 144 muestras con EMA smoothing 0.3/0.7
-- **Position**: anclada a `midi.tickSinceStart / 24`, interpolada entre ticks con BPM actual
+- **Position**: anclada a `midi.tickSinceStart / 24`, interpolada entre ticks
 - **Audio**: Web Audio API con `playClickAt(audioTime, accent)` agendado
   predictivamente (currentTime + secUntilNextBeat - latencyOffset)
-- **Latency offset**: 88ms default calibrado por análisis de WAV grabado por usuario
-  (mediana 87.5ms, std 4.7ms en Samsung A56 ↔ MacBook Pro)
-- **Sync Supabase**: load del cache localStorage al boot, pull en background si online
+- **Latency offset**: 88ms default calibrado por análisis de WAV
+- **MIDI Stop**: pausa (no reset). Solo el botón STOP de la UI hace reset
+- **Sync Supabase**: load del cache localStorage al boot, pull en background
+- **Supabase creds**: HARDCODED como DEFAULT_SUPABASE_URL/KEY, localStorage
+  override opcional
+- **Auto-login**: persistSession, se restaura sesión al abrir
 - **localStorage keys**:
   - `camarage_audioLatencyMs`
-  - `camarage_supabase_url`
-  - `camarage_supabase_anon_key`
+  - `camarage_supabase_url` (opcional override)
+  - `camarage_supabase_anon_key` (opcional override)
   - `camarage_setlist_cache`
   - `camarage_active_band_id`
 
 ### Web (Next.js)
 
 - **Next.js 14.2.15** App Router con TypeScript
-- **Auth**: `@supabase/ssr` v0.5 — PKCE flow por default
-- **Middleware**: protege `/dashboard`, `/songs`, `/setlists`, `/bands`, `/members`
-- **Login**: magic link via `signInWithOtp` con `emailRedirectTo`
-- **Build artefacts en Vercel**: ARM64 SWC binary se baja automáticamente
-- **Estilos**: Tailwind con mismas CSS vars que el mobile (dark mode estricto)
+- **Auth**: `@supabase/ssr` v0.5 — email+password primary, OTP fallback
+- **Middleware**: protege `/dashboard`, `/songs`, `/setlists`, `/bands`, `/members`, `/settings`
+- **Editor de canciones** (`/songs/[id]`):
+  - Tabs: Datos / Letras (N) / Cues MIDI (N) / Cifrado (N)
+  - Tiempo en formato mm:ss (acepta tanto 90 como 1:30)
+  - Botón `+` por línea para insertar entre líneas
+  - Inline cue editor en cada línea de letra
+  - **NUEVO: Botones Auto-asignar / Copiar Logic / .mid**
+- **Build artefacts en Vercel**: ARM64 SWC binary auto-instalado
+- **Estilos**: Tailwind con mismas CSS vars que el mobile
+
+### Generación de archivos MIDI (NUEVA FEATURE)
+
+En `web/app/songs/[id]/page.tsx`:
+
+- `generateMidiFile(cues, bpm, channel, name)`: produce Uint8Array con
+  formato Standard MIDI File (PPQ 480, format 0, header + 1 track con
+  tempo event + Note On/Off para cada cue + End of Track)
+- `generateLogicEventListText(cues, bpm, channel, beatsPerBar)`: produce
+  texto con formato EXACTO de Logic Event List:
+  - Tab-separated, ♯ Unicode (no #)
+  - Cada nota = 2 líneas (principal + "Rel Vel")
+  - Position: Bar Beat Division Tick (4 números)
+  - Status: "Note"
+  - Channel, Pitch, Velocity, Length
+
+Formato de ejemplo que Logic copia:
+```
+ \t  \t 1195 1 1 1 \t Note\t 1\t C4\t 80\t 5 0 1 0\t
+\t\t\t Rel Vel\t\t\t 64\t\t
+```
+
+- `autoAssignNotesToLyrics()`: borra todos los cues existentes y asigna
+  notas chromatic empezando en C3 (MIDI 48) a cada lyric line en orden
+  cronológico. Una nota por línea, máx 80 líneas.
+- `copyForLogic()`: copia el texto Logic Event List al portapapeles
+- `downloadMidi()`: descarga .mid como backup
 
 ### Supabase Schema
 
@@ -198,7 +224,7 @@ CAMARAGE/                                    # workspace folder del usuario
 - `setlists`, `setlist_songs`
 - `songs`, `song_sections` (enum `section_type`)
 - `lyric_lines`, `chord_charts`, `drum_cues` (enum `cue_type`)
-- `midi_cues` (note, label, jump_to_seconds) — TABLA CLAVE para sync de cues
+- `midi_cues` (note, label, jump_to_seconds, UNIQUE(song_id, midi_note))
 - `performances`, `ble_devices`, `user_preferences`
 
 **RLS helper function**: `is_band_member(band_id)` retorna true si auth.uid()
@@ -209,52 +235,76 @@ al crear una banda.
 
 **View**: `vw_setlist_full` con SECURITY INVOKER on para respetar RLS.
 
-## Problemas conocidos en debug ACTIVO
+## Problemas conocidos / Tasks pendientes
 
-### Magic link de Supabase no completa el login
+### 🔴 BUG ACTIVO — lyric scroll no reacciona a cues
+- Logic manda Note On por BLE
+- APK recibe (visible en log MIDI)
+- Cue se identifica (toast aparece con info correcta)
+- jumpToTime se llama (último fix agregó log visible)
+- Pero la letra principal sigue en la primera línea ("nunca pude imaginar")
+- BAR/BEAT/tiempo del header sigue en 00:00
 
-**Síntoma**: usuario recibe el mail, click en el botón, vuelve al `/login`
-con URL fragment:
-```
-https://camarage.vercel.app/login#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired
-```
+**Hipótesis activa**: state.isPlaying=true pero state.tickHandle=null
+(loop muerto). Último fix aplicado: jumpToTime SIEMPRE llama startClock()
+independiente de si estaba playing.
 
-**Diagnóstico**: el token del magic link es de un solo uso, está siendo consumido
-ANTES del click real. Causas probables (en orden):
-1. **Email client pre-scan**: Gmail/Outlook/Apple Mail abre el link en background
-   para verificar seguridad → token gastado
-2. **Click doble**: usuario clickeó dos veces
-3. **Link viejo**: el mail fue generado con Site URL anterior y ahora no matchea
-4. **PKCE vs Implicit flow mismatch**: el callback espera `?code=` (PKCE) pero
-   Supabase está enviando hash fragment con error (implicit). Hay que confirmar
-   en Supabase Auth settings cuál flow está activo.
+**Pendiente**: usuario probar APK reciente y reportar.
 
-**Fix propuesto pero NO probado todavía**:
-- Right-click → copiar link → pegar en browser (evita el preview-scan)
-- O cambiar el login a **OTP de 6 dígitos** en vez de magic link (más confiable)
-- O verificar/cambiar el flow en Supabase a PKCE explícitamente
+### 🟡 Convención de notas Logic
+- Logic muestra C3 como middle C (Yamaha convention)
+- Mi app usa estándar C4=60
+- Workaround: subir cues una octava (C4→C5)
+- Mejor solución: cambiar Logic preference. No encontró la opción en su versión 11.x
 
-### Mobile sync end-to-end no testeado
+### 🟡 Pendiente probar end-to-end completo
+Una vez resuelto el bug del lyric scroll:
+1. Usuario crea canción en web → escribe letras → "Auto-asignar notas" →
+   "Copiar para Logic"
+2. En Logic, crea pista MIDI externa → port=A56, channel=2 → Event List →
+   pega
+3. Las notas aparecen automáticamente en los bars correspondientes
+4. Play en Logic → cada nota dispara cue en el celu → letra se mueve a esa
+   parte
+5. **TODO el setup queda en 3 clicks**
 
-Implementado, compila, pero falta:
-1. Crear banda + canción + cues en la web admin (bloqueado por el magic link)
-2. Configurar URL + anon key en el celu
-3. Tocar "Sincronizar" y verificar que aparezcan las canciones de la web
+## Workflow esperado del usuario (Pato)
 
-## Sandbox / setup técnico del entorno Claude
+### Pre-show (en computadora, web admin)
+1. Login en `camarage.vercel.app` (email + contraseña)
+2. Crear nueva canción en `/songs` con BPM, key, time signature
+3. Escribir letras línea por línea con timestamp (mm:ss o segundos)
+4. Click **"🤖 Auto-asignar notas MIDI"** → cada línea tiene una nota única
+5. Click **"📋 Copiar para Logic"** → al portapapeles formato Event List
+6. Abrir Logic Pro → proyecto de la canción
+7. Crear pista **External MIDI** (no Software Instrument!) con:
+   - Port: A56 de Patricio
+   - Channel: 2
+8. Abrir **Event List** (Cmd+0) → posición bar 1 → Cmd+V para pegar
+9. Las notas aparecen exactamente en los bars correspondientes
 
-Para retomar la sesión, el entorno Claude tendría que:
+### En el escenario (celular)
+1. Abrí CAMARAGE
+2. Auto-login (sesión guardada) + auto-sync del setlist (si hay WiFi)
+3. Elegir rol (Cantante/Bajista/Baterista)
+4. Conectar BLE MIDI al Mac (Logic)
+5. Play en Logic → Start (FA) llega → app arranca
+6. Logic manda Notes MIDI cada vez que pasa por una nota del cue track
+7. App salta a la línea correspondiente → letra principal se actualiza
+8. Stop en Logic → MIDI Stop = pausa → posición se mantiene
+
+## Setup técnico del entorno Claude (sandbox)
+
+Para retomar la compilación de APK en otra sesión:
+
 - ARM64 Linux con JDK 17 (instalado en `/sessions/.../jdk`)
 - Android SDK con cmdline-tools (en `/sessions/.../android-sdk`)
-- qemu-user-static + libc6-amd64-cross para emular binarios x86_64 de Android SDK
-- aapt2 wrapper en `/sessions/.../aapt2-wrapper/` usado via property
-  `android.aapt2FromMavenOverride=/sessions/.../aapt2-wrapper/aapt2` en
-  `camarage-android/android/gradle.properties`
-- Gradle 8.2.1 ya extraído en `/sessions/.../.gradle/wrapper/dists/`
-- Node 22, npm
-- env.sh con todo: `/sessions/laughing-serene-brown/env.sh`
+- qemu-user-static + libc6-amd64-cross para emular binarios x86_64
+- aapt2 wrapper en `/sessions/.../aapt2-wrapper/`
+- Gradle 8.2.1 cacheado en `/sessions/.../.gradle/wrapper/dists/`
+- env.sh: `/sessions/laughing-serene-brown/env.sh`
 
-**Para recompilar APK**:
+**Recompilar APK**:
 ```bash
 source /sessions/laughing-serene-brown/env.sh
 export QEMU_LD_PREFIX=/sessions/laughing-serene-brown/qemu-prefix/usr/x86_64-linux-gnu
@@ -265,47 +315,10 @@ cd android && ./gradlew --no-daemon --console=plain assembleDebug
 cp app/build/outputs/apk/debug/app-debug.apk /sessions/laughing-serene-brown/mnt/CAMARAGE/CAMARAGE-debug.apk
 ```
 
-NOTA: si el entorno se recrea desde cero, todo eso hay que rehacerlo. Pero el
-APK ya compilado vive en el workspace del usuario en `CAMARAGE-debug.apk`.
+NOTA: si el entorno se recrea desde cero, todo eso hay que rehacerlo.
+Pero el APK ya compilado vive en el workspace en `CAMARAGE-debug.apk`.
 
-## Próximos pasos prioritarios (al retomar)
-
-1. **Resolver el magic link de Supabase**
-   - Probar right-click → copiar link → pegar en browser nueva
-   - Si no, cambiar a OTP de 6 dígitos (cambio de 5 min en `app/login/page.tsx`)
-     - Usar `supabase.auth.signInWithOtp({ email })` sin `emailRedirectTo`
-     - Agregar input para los 6 dígitos
-     - `supabase.auth.verifyOtp({ email, token, type: 'email' })`
-   - Verificar setting "Confirm email" en Supabase, apagarlo si está on
-   - Verificar PKCE setting
-
-2. **Testear sync end-to-end**
-   - Una vez logueado, crear banda en `/bands`
-   - Crear canción en `/songs` con título, BPM 120, PC# 3
-   - Agregar cues MIDI (C4 → Intro, D4 → Verse, etc.)
-   - Agregar letras con timestamps
-   - Crear setlist y agregarle la canción
-   - En el celu, modal ⚙ → Sync Supabase → Guardar URL + key → Sincronizar
-   - Verificar que aparezca la canción nueva
-
-3. **Pulir UX del web admin**
-   - Selector de banda activa en sidebar (cuando hay varias)
-   - Drag-and-drop real en lugar de ↑↓ para reorder
-   - Auto-save indicator más visible
-   - Sección de Miembros para invitar otros usuarios
-   - Vista previa del setlist con timing total estimado
-
-4. **Features mobile pendientes**
-   - Auto-calibración de latencia con mic del celu
-   - Continue mode (resumir desde mid-song)
-   - Song Position Pointer (0xF2) para sync precisa
-
-## Conversaciones con Claude relevantes
-
-- Esta es la primera y única conversación. Toda la historia está en esta sesión
-  (40 tareas completadas, ~30 iteraciones).
-
-## Comandos rápidos
+## Comandos rápidos para retomar
 
 ```bash
 # Update repo desde el workspace de Claude
@@ -320,12 +333,9 @@ cd web && npm install && cp .env.example .env.local
 # editar .env.local con credenciales
 npm run dev   # http://localhost:3000
 
-# Compilar APK localmente (requiere Android Studio + JDK 17 + Android SDK)
+# Compilar APK localmente (requiere Android Studio)
 cd camarage-android && npm install && npx cap sync android
 cd android && ./gradlew assembleDebug
-
-# Aplicar schema en Supabase (solo si reset total)
-# Copiar contenido de web/supabase/schema.sql en SQL Editor → Run
 ```
 
 ## Fin del snapshot

@@ -14,6 +14,135 @@ function noteNameToNum(s: string): number | null {
   return n + (parseInt(m[3],10)+1)*12;
 }
 
+// ============================================================================
+// MIDI file generator — convierte cues en .mid descargable
+// ============================================================================
+function encodeVariableLength(value: number): number[] {
+  if (value < 0) value = 0;
+  const bytes = [value & 0x7F];
+  value >>= 7;
+  while (value > 0) {
+    bytes.unshift((value & 0x7F) | 0x80);
+    value >>= 7;
+  }
+  return bytes;
+}
+
+function generateMidiFile(
+  cues: Array<{ midi_note: number; jump_to_seconds: number; label: string }>,
+  bpm: number,
+  channel: number = 2,
+  trackName: string = 'CAMARAGE Cues'
+): Uint8Array {
+  const PPQ = 480; // pulses per quarter note (estándar Logic Pro)
+  const microsPerBeat = Math.round(60000000 / bpm);
+  const ticksPerSecond = (bpm / 60) * PPQ;
+  const noteDuration = PPQ; // cada cue dura 1 negra
+
+  const sorted = [...cues]
+    .filter(c => c.midi_note >= 0 && c.midi_note <= 127)
+    .sort((a, b) => Number(a.jump_to_seconds) - Number(b.jump_to_seconds));
+
+  // Build events with absolute ticks
+  type MidiEvent = { tick: number; bytes: number[]; order: number };
+  const events: MidiEvent[] = [];
+  let order = 0;
+
+  // Track name event (FF 03 len text)
+  const nameBytes = Array.from(new TextEncoder().encode(trackName));
+  events.push({ tick: 0, bytes: [0xFF, 0x03, nameBytes.length, ...nameBytes], order: order++ });
+
+  // Tempo event at time 0 (FF 51 03 + 3 bytes micros per beat)
+  events.push({ tick: 0, bytes: [0xFF, 0x51, 0x03,
+    (microsPerBeat >> 16) & 0xFF,
+    (microsPerBeat >> 8) & 0xFF,
+    microsPerBeat & 0xFF], order: order++ });
+
+  // Note On / Note Off for each cue
+  const channelByte = (channel - 1) & 0x0F;
+  for (const cue of sorted) {
+    const tick = Math.round(Number(cue.jump_to_seconds) * ticksPerSecond);
+    events.push({ tick, bytes: [0x90 | channelByte, cue.midi_note, 80], order: order++ });
+    events.push({ tick: tick + noteDuration, bytes: [0x80 | channelByte, cue.midi_note, 64], order: order++ });
+  }
+
+  // Sort by tick, keep order for ties
+  events.sort((a, b) => a.tick - b.tick || a.order - b.order);
+
+  // End of track
+  const lastTick = events.length ? events[events.length - 1].tick + PPQ : PPQ;
+  events.push({ tick: lastTick, bytes: [0xFF, 0x2F, 0x00], order: order++ });
+
+  // Build track data
+  const trackData: number[] = [];
+  let prevTick = 0;
+  for (const evt of events) {
+    const delta = Math.max(0, evt.tick - prevTick);
+    trackData.push(...encodeVariableLength(delta));
+    trackData.push(...evt.bytes);
+    prevTick = evt.tick;
+  }
+
+  // Header chunk
+  const header = [
+    0x4D, 0x54, 0x68, 0x64,       // "MThd"
+    0x00, 0x00, 0x00, 0x06,       // length 6
+    0x00, 0x00,                    // format 0
+    0x00, 0x01,                    // 1 track
+    (PPQ >> 8) & 0xFF, PPQ & 0xFF, // PPQ
+  ];
+
+  // Track chunk
+  const trackChunk = [
+    0x4D, 0x54, 0x72, 0x6B,       // "MTrk"
+    (trackData.length >> 24) & 0xFF,
+    (trackData.length >> 16) & 0xFF,
+    (trackData.length >> 8) & 0xFF,
+    trackData.length & 0xFF,
+    ...trackData,
+  ];
+
+  return new Uint8Array([...header, ...trackChunk]);
+}
+
+// Genera texto en el formato EXACTO de Logic Event List (cuando copiás notas).
+// Cada nota = 2 líneas: principal + "Rel Vel". Tabs y ♯ Unicode (no #).
+function generateLogicEventListText(
+  cues: Array<{ midi_note: number; jump_to_seconds: number; label: string }>,
+  bpm: number,
+  channel: number = 2,
+  beatsPerBar: number = 4
+): string {
+  const sorted = [...cues]
+    .filter(c => c.midi_note >= 0 && c.midi_note <= 127)
+    .sort((a, b) => Number(a.jump_to_seconds) - Number(b.jump_to_seconds));
+
+  // Logic usa ♯ Unicode, no # ASCII
+  const noteNames = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+  const noteName = (n: number) => noteNames[n % 12] + (Math.floor(n / 12) - 1);
+
+  const lines: string[] = [];
+  for (const cue of sorted) {
+    const sec = Number(cue.jump_to_seconds);
+    const totalBeats = (sec / 60) * bpm;
+    // Bar (1-based), Beat (1-based), Division (1-based, 16ths = 4 por beat), Tick (1-240)
+    const bar = Math.floor(totalBeats / beatsPerBar) + 1;
+    const beatInBar = totalBeats - (bar - 1) * beatsPerBar;
+    const beat = Math.floor(beatInBar) + 1;
+    const subBeat = beatInBar - Math.floor(beatInBar);
+    const division = Math.floor(subBeat * 4) + 1;
+    const subDiv = subBeat * 4 - Math.floor(subBeat * 4);
+    const tick = Math.round(subDiv * 240) + 1;
+
+    // Formato Logic Event List exacto (matchea tu ejemplo):
+    //  \t  \t POSITION \t Note\t CH\t PITCH\t VEL\t LENGTH\t
+    //  \t\t\t Rel Vel\t\t\t 64\t\t
+    lines.push(` \t  \t ${bar} ${beat} ${division} ${tick} \t Note\t ${channel}\t ${noteName(cue.midi_note)}\t 80\t 5 0 1 0\t`);
+    lines.push(`\t\t\t Rel Vel\t\t\t 64\t\t`);
+  }
+  return lines.join('\n');
+}
+
 // Parse "1:30", "1:30.5", "90", "90.5" → segundos. Tolera espacios y formatos mezclados.
 function parseTimeInput(value: string): number {
   if (!value) return 0;
@@ -195,6 +324,70 @@ export default function SongEditor() {
     setCues(cues.map(c => c.id === cue.id ? { ...c, jump_to_seconds: newTime } : c));
   }
 
+  /* Auto-asignar notas MIDI a TODAS las letras (chromatic ascendente desde C3) */
+  async function autoAssignNotesToLyrics() {
+    if (lyrics.length === 0) { alert('No hay líneas de letra'); return; }
+    if (!confirm(`Esto BORRA todos los cues actuales y asigna notas MIDI automáticas (C3, C#3, D3, D#3...) a cada una de las ${lyrics.length} líneas. ¿Continuar?`)) return;
+
+    // Borrar cues existentes
+    for (const c of cues) {
+      await supabase.from('midi_cues').delete().eq('id', c.id);
+    }
+    setCues([]);
+
+    // Asignar notas en orden cronológico
+    const sorted = [...lyrics].sort((a, b) => Number(a.start_time_seconds) - Number(b.start_time_seconds));
+    const startNote = 48; // C3 (en convención C4=60)
+    const newCues: any[] = [];
+    for (let i = 0; i < sorted.length; i++) {
+      const note = startNote + i;
+      if (note > 127) break;
+      const { data, error } = await supabase.from('midi_cues').insert({
+        song_id: id,
+        order_index: i,
+        midi_note: note,
+        label: sorted[i].text.slice(0, 60),
+        jump_to_seconds: sorted[i].start_time_seconds,
+      }).select().single();
+      if (error) { alert('Error: ' + error.message); break; }
+      if (data) newCues.push(data);
+    }
+    setCues(newCues);
+    alert(`✓ ${newCues.length} cues creados. Ahora podés tocar "Copiar para Logic" y pegarlos en el Event List.`);
+  }
+
+  /* Copiar al portapapeles en formato Logic Event List */
+  async function copyForLogic() {
+    if (cues.length === 0) { alert('No hay cues para copiar. Asigná notas primero.'); return; }
+    const text = generateLogicEventListText(cues, song.bpm, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(`✓ ${cues.length} notas copiadas al portapapeles.\n\nEn Logic:\n1. Abrí Event List (Cmd+0 o View → Event List)\n2. Posicionate en bar 1 (o donde arranca tu canción)\n3. Pegá con Cmd+V\n4. Las notas aparecen en su posición correcta`);
+    } catch (e) {
+      // Fallback con textarea
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      alert(`✓ Copiado (fallback). Pegá en Logic Event List.`);
+    }
+  }
+
+  /* Descargar .mid como backup */
+  function downloadMidi() {
+    if (cues.length === 0) { alert('No hay cues para exportar.'); return; }
+    const bytes = generateMidiFile(cues, song.bpm, 2, song.title || 'CAMARAGE Cues');
+    const blob = new Blob([bytes], { type: 'audio/midi' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(song.title || 'cues').replace(/[^a-z0-9]+/gi,'_')}_cues.mid`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   // ===== CUES MIDI =====
   async function addCue() {
     const lastCue = cues.at(-1);
@@ -326,6 +519,30 @@ export default function SongEditor() {
             Cada línea con su tiempo desde el inicio (<code className="text-cyan-400">90</code> o <code className="text-cyan-400">1:30</code> es lo mismo).
             En la columna <span className="text-purple-400">♪ Cue</span> podés asignar una nota MIDI (ej: <code className="text-purple-400">D4</code>) — Logic mandará esa nota para anclar la posición a esta línea.
           </p>
+
+          {/* Barra de herramientas: auto-asignar + exportar */}
+          <div className="card mb-3 flex flex-wrap items-center gap-2">
+            <p className="text-xs text-neutral-400 flex-1 min-w-0">
+              <b className="text-white">Automatizar:</b> asigná notas MIDI a todas las líneas y exportá a Logic en 2 clicks.
+            </p>
+            <button onClick={autoAssignNotesToLyrics}
+                    className="btn btn-secondary text-xs"
+                    title="Borra todos los cues y asigna C3, C#3, D3... en orden a cada línea">
+              🤖 Auto-asignar notas
+            </button>
+            <button onClick={copyForLogic}
+                    className="btn text-xs"
+                    style={{ background: '#a78bfa', color: '#000' }}
+                    title="Copia el texto al portapapeles en formato Logic Event List">
+              📋 Copiar para Logic
+            </button>
+            <button onClick={downloadMidi}
+                    className="btn btn-secondary text-xs"
+                    title="Descarga archivo .mid para arrastrar a Logic">
+              📥 .mid
+            </button>
+          </div>
+
           {lyrics.map(l => {
             const linkedCue = findCueForLyric(l);
             return (
