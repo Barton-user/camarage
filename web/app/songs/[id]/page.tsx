@@ -329,31 +329,34 @@ export default function SongEditor() {
     if (lyrics.length === 0) { alert('No hay líneas de letra'); return; }
     if (!confirm(`Esto BORRA todos los cues actuales y asigna notas MIDI automáticas (C3, C#3, D3, D#3...) a cada una de las ${lyrics.length} líneas. ¿Continuar?`)) return;
 
-    // Borrar cues existentes
-    for (const c of cues) {
-      await supabase.from('midi_cues').delete().eq('id', c.id);
-    }
+    // PASO 1: Borrar TODOS los cues de esta canción (bulk delete, no solo los del state local)
+    // Esto evita race conditions y asegura DB limpia antes de insertar.
+    const { error: delErr } = await supabase.from('midi_cues').delete().eq('song_id', id);
+    if (delErr) { alert('Error borrando cues anteriores: ' + delErr.message); return; }
     setCues([]);
 
-    // Asignar notas en orden cronológico
+    // PASO 2: Esperar un toque para que la DB procese antes de insertar
+    await new Promise(r => setTimeout(r, 150));
+
+    // PASO 3: Construir filas con notas únicas (C3 a B9, máx 80 notas chromatic)
     const sorted = [...lyrics].sort((a, b) => Number(a.start_time_seconds) - Number(b.start_time_seconds));
     const startNote = 48; // C3 (en convención C4=60)
-    const newCues: any[] = [];
-    for (let i = 0; i < sorted.length; i++) {
-      const note = startNote + i;
-      if (note > 127) break;
-      const { data, error } = await supabase.from('midi_cues').insert({
-        song_id: id,
-        order_index: i,
-        midi_note: note,
-        label: sorted[i].text.slice(0, 60),
-        jump_to_seconds: sorted[i].start_time_seconds,
-      }).select().single();
-      if (error) { alert('Error: ' + error.message); break; }
-      if (data) newCues.push(data);
+    const rows = sorted.slice(0, 80).map((l, i) => ({
+      song_id: id,
+      order_index: i,
+      midi_note: startNote + i,
+      label: (l.text || '').slice(0, 60),
+      jump_to_seconds: Number(l.start_time_seconds),
+    }));
+
+    // PASO 4: Bulk insert en una sola operación (atómica)
+    const { data, error } = await supabase.from('midi_cues').insert(rows).select();
+    if (error) {
+      alert('Error creando cues: ' + error.message + '\n\nProbá tocar el botón otra vez en 3 segundos.');
+      return;
     }
-    setCues(newCues);
-    alert(`✓ ${newCues.length} cues creados. Ahora podés tocar "Copiar para Logic" y pegarlos en el Event List.`);
+    setCues(data || []);
+    alert(`✓ ${data?.length || 0} cues creados con notas C3 → ${data?.length ? noteNumToName(48 + data.length - 1) : 'C3'}.\nAhora tocá "Copiar para Logic".`);
   }
 
   /* Copiar al portapapeles en formato Logic Event List */
