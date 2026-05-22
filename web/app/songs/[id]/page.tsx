@@ -379,7 +379,8 @@ export default function SongEditor() {
   function downloadMidi() {
     if (cues.length === 0) { alert('No hay cues para exportar.'); return; }
     const bytes = generateMidiFile(cues, song.bpm, 2, song.title || 'CAMARAGE Cues');
-    const blob = new Blob([bytes], { type: 'audio/midi' });
+    // Cast a BlobPart porque TS 5.x es estricto con Uint8Array<ArrayBufferLike>
+    const blob = new Blob([bytes as unknown as BlobPart], { type: 'audio/midi' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
