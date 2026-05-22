@@ -117,9 +117,16 @@ function generateLogicEventListText(
     .filter(c => c.midi_note >= 0 && c.midi_note <= 127)
     .sort((a, b) => Number(a.jump_to_seconds) - Number(b.jump_to_seconds));
 
-  // Logic usa ♯ Unicode, no # ASCII
+  // Logic usa ♯ Unicode, no # ASCII.
+  // CRÍTICO: Logic usa convención Yamaha (Middle C = C3 = MIDI 60).
+  // Mi app usa convención estándar (Middle C = C4 = MIDI 60).
+  // Para que Logic envíe la nota MIDI que el cue espera, escribir el
+  // nombre en la convención Yamaha = 1 octava más baja que la estándar.
+  // Ejemplo: cue tiene midi_note=48 (mi "C3"). En Logic Yamaha eso es "C2".
+  // Si escribo "C2" en el texto, Logic lo pone como MIDI 48, lo manda como 48,
+  // app recibe 48, busca cue con 48 → MATCH.
   const noteNames = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
-  const noteName = (n: number) => noteNames[n % 12] + (Math.floor(n / 12) - 1);
+  const noteName = (n: number) => noteNames[n % 12] + (Math.floor(n / 12) - 2);
 
   const lines: string[] = [];
   for (const cue of sorted) {
