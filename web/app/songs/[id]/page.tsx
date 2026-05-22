@@ -43,6 +43,9 @@ function generateMidiFile(
     .filter(c => c.midi_note >= 0 && c.midi_note <= 127)
     .sort((a, b) => Number(a.jump_to_seconds) - Number(b.jump_to_seconds));
 
+  // Desplazar todo para que el primer cue arranque en tiempo 0 (bar 1)
+  const firstCueTime = sorted.length ? Number(sorted[0].jump_to_seconds) : 0;
+
   // Build events with absolute ticks
   type MidiEvent = { tick: number; bytes: number[]; order: number };
   const events: MidiEvent[] = [];
@@ -58,10 +61,11 @@ function generateMidiFile(
     (microsPerBeat >> 8) & 0xFF,
     microsPerBeat & 0xFF], order: order++ });
 
-  // Note On / Note Off for each cue
+  // Note On / Note Off for each cue (con offset desde el primer cue)
   const channelByte = (channel - 1) & 0x0F;
   for (const cue of sorted) {
-    const tick = Math.round(Number(cue.jump_to_seconds) * ticksPerSecond);
+    const adjustedSec = Number(cue.jump_to_seconds) - firstCueTime;
+    const tick = Math.round(adjustedSec * ticksPerSecond);
     events.push({ tick, bytes: [0x90 | channelByte, cue.midi_note, 80], order: order++ });
     events.push({ tick: tick + noteDuration, bytes: [0x80 | channelByte, cue.midi_note, 64], order: order++ });
   }
@@ -122,15 +126,19 @@ function generateLogicEventListText(
   // Mi app usa convención estándar (Middle C = C4 = MIDI 60).
   // Para que Logic envíe la nota MIDI que el cue espera, escribir el
   // nombre en la convención Yamaha = 1 octava más baja que la estándar.
-  // Ejemplo: cue tiene midi_note=48 (mi "C3"). En Logic Yamaha eso es "C2".
-  // Si escribo "C2" en el texto, Logic lo pone como MIDI 48, lo manda como 48,
-  // app recibe 48, busca cue con 48 → MATCH.
   const noteNames = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
   const noteName = (n: number) => noteNames[n % 12] + (Math.floor(n / 12) - 2);
 
+  // CLAVE: desplazar todo para que el PRIMER cue arranque en bar 1.
+  // Así el usuario puede pegar el clipboard EXACTAMENTE donde quiere que
+  // suene la primera nota en Logic (ej: donde arranca la canción en su proyecto).
+  // Sin esto, los bars serían "absolutos desde tiempo 0 de la canción" y
+  // la primera nota caería 31s después de donde el usuario pega.
+  const firstCueTime = sorted.length ? Number(sorted[0].jump_to_seconds) : 0;
+
   const lines: string[] = [];
   for (const cue of sorted) {
-    const sec = Number(cue.jump_to_seconds);
+    const sec = Number(cue.jump_to_seconds) - firstCueTime; // restar offset del primer cue
     const totalBeats = (sec / 60) * bpm;
     // Bar (1-based), Beat (1-based), Division (1-based, 16ths = 4 por beat), Tick (1-240)
     const bar = Math.floor(totalBeats / beatsPerBar) + 1;
@@ -372,7 +380,7 @@ export default function SongEditor() {
     const text = generateLogicEventListText(cues, song.bpm, 2);
     try {
       await navigator.clipboard.writeText(text);
-      alert(`✓ ${cues.length} notas copiadas al portapapeles.\n\nEn Logic:\n1. Abrí Event List (Cmd+0 o View → Event List)\n2. Posicionate en bar 1 (o donde arranca tu canción)\n3. Pegá con Cmd+V\n4. Las notas aparecen en su posición correcta`);
+      alert(`✓ ${cues.length} notas copiadas al portapapeles.\n\nLas notas están desplazadas para que la PRIMERA arranque en bar 1 (relativo). Cuando pegues en Logic, todas las notas se ubican relativo a donde tengas la cabeza de lectura.\n\nEn Logic:\n1. Abrí Event List (Cmd+0)\n2. Movés la cabeza de lectura al bar donde querés que arranque la PRIMERA nota (ej: bar 600 si tu canción arranca ahí)\n3. Cmd+V\n4. Las demás notas se ubican relativas a esa primera`);
     } catch (e) {
       // Fallback con textarea
       const ta = document.createElement('textarea');
