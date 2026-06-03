@@ -496,13 +496,21 @@
     border: 1px solid #000;
     border-radius: 8px;
     box-shadow: inset 0 1px 0 var(--bevel-hi), 0 4px 15px rgba(0,0,0,0.7);
-    padding: 16px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     position: sticky;
     top: 60px;
+    max-height: calc(100vh - 76px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
+  /* compact VU meters + logo + faders so everything fits */
+  .master-panel > div:first-child { transform: scale(0.85); transform-origin: top center; margin-bottom: -22px; }
+  .master-panel [style*="height:180px"] { height: 140px !important; }
+  .master-panel [style*="height:160px"] { height: 124px !important; }
+  .master-panel .vertical-fader-input { top: 58px !important; left: -58px !important; width: 124px !important; }
   
   .led { width: 10px; height: 10px; border-radius: 50%; background: #0c0e11; box-shadow: inset 0 0 2px #000, 0 0 0 2px var(--line); transition: .05s; }
   .led.on { background: radial-gradient(circle at 40% 35%, #bfffb0, var(--ok)); box-shadow: 0 0 8px var(--ok), 0 0 0 2px #000; }
