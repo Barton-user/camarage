@@ -7,36 +7,89 @@
 <style>
   :root {
     /* Waves Scheps Omni Channel 2 - Deep Carbon matte, brushed steel, glowing amber/orange accents */
-    --bg: #07080a; 
-    --panel: #111317; 
-    --panel2: #191c22; 
+    --bg: #07080a;
+    --panel: #111317;
+    --panel2: #191c22;
     --line: #2e323b;
-    --txt: #eceae3; 
-    --mut: #7e8593; 
+    --txt: #eceae3;
+    --mut: #7e8593;
     --acc: #ec8b2e; /* Signature Waves Scheps Orange */
-    --acc-deep: #bd6a14; 
-    --acc2: #404652; 
+    --acc-deep: #bd6a14;
+    --acc2: #404652;
     --ok: #36c0d6; /* Scheps light-blue/cyan for main LEDs and meters */
     --danger: #e0584e; /* Red indicator for hot peaks */
-    --face: #0c0e11; 
-    --knobface: #272930; 
+    --face: #0c0e11;
+    --knobface: #272930;
     --screen: #000000;
-    --metal1: #222630; 
-    --metal2: #14161c; 
-    --metal3: #090a0d; 
-    --bevel-hi: rgba(255,255,255,0.06); 
+    --screen-txt: #eceae3;
+    --metal1: #222630;
+    --metal2: #14161c;
+    --metal3: #090a0d;
+    --bevel-hi: rgba(255,255,255,0.06);
     --bevel-lo: rgba(0,0,0,0.85);
-    --screw: #3a3f4b; 
+    --screw: #3a3f4b;
     --screw-hi: #555b6b;
-    --btnA: #282c36; 
-    --btnB: #1a1b21; 
+    --btnA: #282c36;
+    --btnB: #1a1b21;
     --btnC: #0e0f12;
-    --kf1: #3b3f49; 
-    --kf2: #24262c; 
-    --kf3: #131418; 
-    --kf4: #060709; 
+    --kf1: #3b3f49;
+    --kf2: #24262c;
+    --kf3: #131418;
+    --kf4: #060709;
     --kptr: #ffffff;
     --col-w: 236px;
+    --bg-grad: radial-gradient(130% 90% at 50% -10%, #161b24 0%, #050608 65%);
+    --bg-streak: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.005) 0 1px, transparent 1px 3px);
+    --shadow-card: 0 3px 8px rgba(0,0,0,0.55);
+    --shadow-deep: 0 4px 15px rgba(0,0,0,0.7);
+    --inset-deep: inset 0 1.5px 3px rgba(0,0,0,0.95);
+    --track-grad: linear-gradient(180deg, #050505, #202020, #050505);
+    --slot-bg: #060709;
+    --acc-rgb: 236,139,46;
+    --ok-rgb: 54,192,214;
+  }
+
+  /* --- Light theme overrides --- */
+  [data-theme="light"] {
+    --bg: #f0ede4;
+    --panel: #e6e1d2;
+    --panel2: #d5cfbd;
+    --line: #a8a292;
+    --txt: #1a1c20;
+    --mut: #6b6f7a;
+    --acc: #c46810;
+    --acc-deep: #9a5008;
+    --acc2: #8d8e95;
+    --ok: #0e7a8e;
+    --danger: #b8362d;
+    --face: #c4bea9;
+    --knobface: #b3ad99;
+    --screen: #0d0f13;
+    --screen-txt: #d8d4c4;
+    --metal1: #c8c2af;
+    --metal2: #b6b09b;
+    --metal3: #9e9881;
+    --bevel-hi: rgba(255,255,255,0.7);
+    --bevel-lo: rgba(0,0,0,0.18);
+    --screw: #7a7568;
+    --screw-hi: #a39d8d;
+    --btnA: #ddd7c4;
+    --btnB: #c8c2af;
+    --btnC: #b0aa96;
+    --kf1: #b8b2a0;
+    --kf2: #a39d8b;
+    --kf3: #8d8775;
+    --kf4: #756f5e;
+    --kptr: #1a1c20;
+    --bg-grad: radial-gradient(130% 90% at 50% -10%, #f5f1e4 0%, #d8d2bf 65%);
+    --bg-streak: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.015) 0 1px, transparent 1px 3px);
+    --shadow-card: 0 3px 8px rgba(60,50,30,0.18);
+    --shadow-deep: 0 4px 15px rgba(60,50,30,0.25);
+    --inset-deep: inset 0 1.5px 3px rgba(60,50,30,0.4);
+    --track-grad: linear-gradient(180deg, #9c9683, #c0baa6, #9c9683);
+    --slot-bg: #d8d2bf;
+    --acc-rgb: 196,104,16;
+    --ok-rgb: 14,122,142;
   }
   
   * { box-sizing: border-box; }
@@ -48,12 +101,11 @@
     font-size: 13px;
     -webkit-font-smoothing: antialiased;
     letter-spacing: .2px;
-    background: 
-      repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.005) 0 1px, transparent 1px 3px),
-      radial-gradient(130% 90% at 50% -10%, #161b24 0%, #050608 65%);
+    background: var(--bg-streak), var(--bg-grad);
     background-attachment: fixed;
     scrollbar-width: thin;
     scrollbar-color: var(--acc2) transparent;
+    transition: background 0.3s;
   }
 
   /* --- Fine scrollbars --- */
@@ -220,11 +272,11 @@
   .card>.hd .tag {
     font-size: 9.5px;
     color: var(--mut);
-    background: #060709;
+    background: var(--slot-bg);
     border: 1px solid var(--line);
     padding: 2px 7px;
     border-radius: 4px;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.8);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
     font-variant-numeric: tabular-nums;
   }
 
@@ -248,7 +300,7 @@
   /* --- Premium Switch --- */
   .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
   .switch input { display: none; }
-  .switch .dot { width: 34px; height: 18px; background: linear-gradient(180deg, #101216, #1f2229); border-radius: 10px; position: relative; border: 1px solid #000; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8); transition: .15s; }
+  .switch .dot { width: 34px; height: 18px; background: linear-gradient(180deg, var(--metal2), var(--metal1)); border-radius: 10px; position: relative; border: 1px solid var(--line); box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); transition: .15s; }
   .switch .dot::after { content: ""; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: linear-gradient(180deg, #ffffff 0%, #cacaca 100%); top: 1px; left: 1px; box-shadow: 0 1.5px 3px rgba(0,0,0,0.7); transition: .15s; }
   .switch input:checked + .dot { background: linear-gradient(180deg, var(--acc), var(--acc-deep)); box-shadow: inset 0 1px 2px rgba(0,0,0,0.4), 0 0 8px rgba(236,139,46,0.3); }
   .switch input:checked + .dot::after { left: 17px; }
@@ -363,7 +415,7 @@
   }
   .vbarwrap { width: 26px; height: 60px; display: flex; align-items: center; justify-content: center; flex: none; }
   .vbar { width: 54px; height: 16px; transform: rotate(-90deg); -webkit-appearance: none; appearance: none; background: transparent; cursor: ns-resize; }
-  .vbar::-webkit-slider-runnable-track { height: 4px; background: linear-gradient(180deg, #050505, #202020, #050505); border-radius: 2px; border: 0.8px solid #000; }
+  .vbar::-webkit-slider-runnable-track { height: 4px; background: var(--track-grad); border-radius: 2px; border: 0.8px solid var(--line); }
   .vbar::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 10px;
@@ -562,20 +614,20 @@
     <!-- 2. Andrew Scheps Signature Logo (Vector Art) -->
     <div style="text-align:center; padding:10px 0; border-bottom:1px solid var(--line); display:flex; flex-direction:column; align-items:center; gap:8px;">
       <svg class="scheps-face" viewBox="0 0 80 80" style="width:64px; height:64px; fill:none; stroke:var(--mut); filter:drop-shadow(0 1px 3px rgba(0,0,0,0.6));">
-        <circle cx="40" cy="40" r="38" stroke="#2e323b" stroke-width="1"/>
+        <circle cx="40" cy="40" r="38" stroke="var(--line)" stroke-width="1"/>
         <!-- Glasses -->
-        <rect x="23" y="32" width="13" height="9" rx="2" stroke="#eceae3" stroke-width="1.8"/>
-        <rect x="44" y="32" width="13" height="9" rx="2" stroke="#eceae3" stroke-width="1.8"/>
-        <path d="M36,36 L44,36" stroke="#eceae3" stroke-width="1.8"/>
+        <rect x="23" y="32" width="13" height="9" rx="2" stroke="var(--txt)" stroke-width="1.8"/>
+        <rect x="44" y="32" width="13" height="9" rx="2" stroke="var(--txt)" stroke-width="1.8"/>
+        <path d="M36,36 L44,36" stroke="var(--txt)" stroke-width="1.8"/>
         <!-- Beard outline -->
-        <path d="M19,30 C20,38 22,46 27,52 C32,58 48,58 53,52 C58,46 60,38 61,30 C58,34 55,36 52,36 C49,36 48,33 40,33 C32,33 31,36 28,36 C25,36 22,34 19,30 Z" fill="#7e8593" fill-opacity="0.15" stroke="#7e8593" stroke-width="1.5"/>
+        <path d="M19,30 C20,38 22,46 27,52 C32,58 48,58 53,52 C58,46 60,38 61,30 C58,34 55,36 52,36 C49,36 48,33 40,33 C32,33 31,36 28,36 C25,36 22,34 19,30 Z" fill="var(--mut)" fill-opacity="0.15" stroke="var(--mut)" stroke-width="1.5"/>
         <!-- Hair outline -->
-        <path d="M22,23 C26,18 34,16 40,16 C46,16 54,18 58,23 C62,28 63,35 62,42 C61,46 59,50 59,54 M21,54 C21,50 19,46 18,42 C17,35 18,28 22,23" stroke="#7e8593" stroke-width="1.3"/>
+        <path d="M22,23 C26,18 34,16 40,16 C46,16 54,18 58,23 C62,28 63,35 62,42 C61,46 59,50 59,54 M21,54 C21,50 19,46 18,42 C17,35 18,28 22,23" stroke="var(--mut)" stroke-width="1.3"/>
         <!-- Nose & Mouth details -->
-        <path d="M40,33 L40,42 L38,44 L42,44" stroke="#eceae3" stroke-width="1.3" fill="none"/>
-        <path d="M35,48 C37,50 43,50 45,48" stroke="#eceae3" stroke-width="1.3" fill="none"/>
+        <path d="M40,33 L40,42 L38,44 L42,44" stroke="var(--txt)" stroke-width="1.3" fill="none"/>
+        <path d="M35,48 C37,50 43,50 45,48" stroke="var(--txt)" stroke-width="1.3" fill="none"/>
       </svg>
-      <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.8px; color:#eceae3; text-shadow:0 1.5px 1px #000;">
+      <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.8px; color:var(--txt); text-shadow:0 1.5px 1px var(--bevel-lo);">
         KEOGAN SL2 <span style="color:var(--acc);">EDITOR</span>
       </div>
     </div>
@@ -694,6 +746,16 @@
 
 <script>
 "use strict";
+
+// ---------- Theme color resolver (hoisted) ----------
+var __themeCache = {};
+function themeColor(name){
+  if(!__themeCache[name]){
+    __themeCache[name] = (getComputedStyle(document.documentElement).getPropertyValue(name)||"").trim() || "#000";
+  }
+  return __themeCache[name];
+}
+function __clearThemeCache(){ for(const k in __themeCache) delete __themeCache[k]; }
 
 // Global Error Handler for high-end debugging
 window.onerror = function(msg, url, line, col, error) {
@@ -1043,7 +1105,7 @@ function updateOscilloscopes() {
         // Draw vintage slot background
         ctx.fillStyle = "#0c0d12";
         ctx.fillRect(b.x, 8, 20, H - 24);
-        ctx.strokeStyle = "#2e323b";
+        ctx.strokeStyle = themeColor("--line");
         ctx.strokeRect(b.x, 8, 20, H - 24);
         
         // Draw level bar
@@ -1052,19 +1114,19 @@ function updateOscilloscopes() {
         
         if (barH > 0) {
           const grad = ctx.createLinearGradient(0, H - 16 - barH, 0, H - 16);
-          grad.addColorStop(0, "#e0584e");
-          grad.addColorStop(0.3, "#ec8b2e");
-          grad.addColorStop(1, "#36c0d6");
+          grad.addColorStop(0, themeColor("--danger"));
+          grad.addColorStop(0.3, themeColor("--acc"));
+          grad.addColorStop(1, themeColor("--ok"));
           
           ctx.fillStyle = grad;
-          ctx.shadowColor = "#ec8b2e";
+          ctx.shadowColor = themeColor("--acc");
           ctx.shadowBlur = 4;
           ctx.fillRect(b.x + 2, H - 16 - barH, 16, barH);
           ctx.shadowBlur = 0;
         }
         
         // Label
-        ctx.fillStyle = "#7e8593";
+        ctx.fillStyle = themeColor("--mut");
         ctx.font = "bold 8px sans-serif";
         ctx.fillText(b.label, b.x + 1, H - 4);
       });
@@ -1086,8 +1148,8 @@ function updateOscilloscopes() {
     
     o.phase += (freq * 0.04);
     
-    ctx.strokeStyle = "#36c0d6"; ctx.lineWidth = 1.8;
-    ctx.shadowColor = "#36c0d6"; ctx.shadowBlur = 6;
+    ctx.strokeStyle = themeColor("--ok"); ctx.lineWidth = 1.8;
+    ctx.shadowColor = themeColor("--ok"); ctx.shadowBlur = 6;
     ctx.beginPath();
     
     const centerY = H / 2;
@@ -1139,8 +1201,8 @@ function drawPeqCurve(canvas, arr) {
   const gLowMid = (arr[6] - 50) * 0.35;
   const gHighMid = (arr[9] - 50) * 0.35;
   
-  ctx.strokeStyle = "#36c0d6"; ctx.lineWidth = 2.0;
-  ctx.shadowColor = "#36c0d6"; ctx.shadowBlur = 8;
+  ctx.strokeStyle = themeColor("--ok"); ctx.lineWidth = 2.0;
+  ctx.shadowColor = themeColor("--ok"); ctx.shadowBlur = 8;
   ctx.beginPath();
   
   const lowShelf = f => f < 0.3 ? Math.cos((f / 0.3) * Math.PI * 0.5) : 0;
@@ -1160,7 +1222,7 @@ function drawPeqCurve(canvas, arr) {
   ctx.stroke();
   ctx.shadowBlur = 0;
   
-  ctx.fillStyle = "#7e8593"; ctx.font = "8px sans-serif";
+  ctx.fillStyle = themeColor("--mut"); ctx.font = "8px sans-serif";
   ctx.fillText("LF", 10, H - 6);
   ctx.fillText("LM", 55, H - 6);
   ctx.fillText("HM", 100, H - 6);
@@ -1185,10 +1247,10 @@ function createFadingVisualizer(key, arr) {
         <rect x="2" y="2" width="96" height="61" rx="2" fill="url(#compVuFace)"/>
         <rect x="2" y="2" width="96" height="61" rx="2" fill="url(#compVuVig)"/>
         <path d="M 16 55 A 42 42 0 0 1 84 55" fill="none" stroke="#2c271b" stroke-width="0.8" stroke-dasharray="1 1"/>
-        <path d="M 16 55 A 42 42 0 0 1 50 22" fill="none" stroke="#e0584e" stroke-width="1.8"/>
+        <path d="M 16 55 A 42 42 0 0 1 50 22" fill="none" stroke="var(--danger)" stroke-width="1.8"/>
         <text x="50" y="44" font-size="5.5" text-anchor="middle" font-family="sans-serif" font-weight="900" fill="#6f6850" opacity="0.6">GR (dB)</text>
-        <text x="18" y="52" font-size="4.5" font-family="sans-serif" font-weight="700" fill="#e0584e">-20</text>
-        <text x="32" y="34" font-size="4.5" font-family="sans-serif" font-weight="700" fill="#e0584e">-10</text>
+        <text x="18" y="52" font-size="4.5" font-family="sans-serif" font-weight="700" fill="var(--danger)">-20</text>
+        <text x="32" y="34" font-size="4.5" font-family="sans-serif" font-weight="700" fill="var(--danger)">-10</text>
         <text x="50" y="26" font-size="4.5" font-family="sans-serif" font-weight="700" fill="#2c271b">0</text>
         <line id="compNeedle" x1="50" y1="60" x2="50" y2="12" stroke="#120f09" stroke-width="1.3"/>
         <circle cx="50" cy="60" r="3.5" fill="#120f09"/><circle cx="50" cy="60" r="1" fill="#bbb"/>
@@ -1358,7 +1420,7 @@ function knob(label,val,min,max,onInput){
   const id="kg"+(_knobN++), hl="kh"+_knobN, kr="kr"+_knobN;
   let ticks="";
   for(let i=0;i<=10;i++){const d=(-135+i*27)*Math.PI/180,r=16;
-    ticks+='<circle cx="'+(20+Math.sin(d)*r).toFixed(1)+'" cy="'+(20-Math.cos(d)*r).toFixed(1)+'" r="0.7" fill="#7e8593"/>';}
+    ticks+='<circle cx="'+(20+Math.sin(d)*r).toFixed(1)+'" cy="'+(20-Math.cos(d)*r).toFixed(1)+'" r="0.7" fill="var(--mut)"/>';}
   const c=document.createElement("div"); c.className="kcell";
   c.innerHTML='<div class="klabel">'+label+'</div>'+
     '<div class="krow"><span class="kmin">'+min+'</span>'+
@@ -1458,14 +1520,14 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
   function redraw(){
     W=cnv.width=pad.clientWidth; H=cnv.height=pad.clientHeight; ctx=cnv.getContext("2d");
     ctx.clearRect(0,0,W,H);
-    ctx.strokeStyle="#2e323b"; ctx.lineWidth=1;
+    ctx.strokeStyle="var(--line)"; ctx.lineWidth=1;
     for(let i=1;i<nSteps;i++){const x=W*i/nSteps; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();}
     const s=SL[key][0];
     for(let i=0;i<nSteps;i++){
       const val=arr[s+i], frac=val/max, w=W/nSteps, x=i*w, h=H*frac;
       ctx.fillStyle="rgba(54,192,214,0.16)"; ctx.fillRect(x,H-h,w,h);
-      ctx.fillStyle="#36c0d6"; ctx.fillRect(x,H-h,w,3);
-      ctx.fillStyle="#eceae3"; ctx.font="9px monospace";
+      ctx.fillStyle="var(--ok)"; ctx.fillRect(x,H-h,w,3);
+      ctx.fillStyle="var(--txt)"; ctx.font="9px monospace";
       let txt=String(val);
       if(key==="pitch")txt=pitchNote(val,ss.root);
       else if(key==="band"&&val===0)txt="OFF";
@@ -1499,7 +1561,7 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
     renderBlocks();
   }
   let down=false;
-  pad.onpointerdown=e=>{down=true; drag(e); pad.setPointerCapture(e.pointerId);};
+  pad.onpointerdown=e=>{down=true; drag(e); try{pad.setPointerCapture(e.pointerId);}catch(_){}}
   pad.onpointermove=e=>{if(down)drag(e);};
   pad.onpointerup=()=>down=false; pad.onpointercancel=()=>down=false;
 
@@ -1897,7 +1959,7 @@ function importAudio(file){
 
 function toast(msg,bad){
   const t=document.getElementById("toast"); t.textContent=msg;
-  t.style.background=bad?"#e0584e":"#36c0d6"; t.style.color=bad?"#2c0c0e":"#06281a";
+  t.style.background=bad?themeColor("--danger"):themeColor("--ok"); t.style.color=bad?"#2c0c0e":"#06281a";
   t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200);
 }
 
@@ -2225,7 +2287,26 @@ document.getElementById("btnMetro").onclick=()=>{
 };
 document.getElementById("beatsSel").onchange=e=>Audio.setBeats(+e.target.value);
 document.querySelectorAll(".modebtn").forEach(b=>b.onclick=()=>applyModeTemplate(b.dataset.mode));
-document.getElementById("btnTheme").onclick=()=>{const r=document.documentElement; r.dataset.theme=(r.dataset.theme==="light")?"dark":"light";};
+// ---------- Theme toggle ----------
+function setTheme(t){
+  const r = document.documentElement;
+  if(t==="light") r.dataset.theme="light"; else delete r.dataset.theme;
+  __clearThemeCache();
+  try { localStorage.setItem("sl2_theme", t); } catch(e){}
+  const btn = document.getElementById("btnTheme");
+  if(btn) btn.textContent = (t==="light") ? "◐ Oscuro" : "◐ Claro";
+  if(typeof renderBlocks==="function") renderBlocks();
+  if(typeof Audio!=="undefined" && Audio.refreshAll) Audio.refreshAll();
+}
+try {
+  const saved = localStorage.getItem("sl2_theme");
+  if(saved==="light") document.documentElement.dataset.theme = "light";
+} catch(e){}
+document.getElementById("btnTheme").onclick = ()=>{
+  const cur = document.documentElement.dataset.theme==="light" ? "light":"dark";
+  setTheme(cur==="light" ? "dark" : "light");
+};
+(()=>{const t=document.documentElement.dataset.theme==="light"?"light":"dark"; const btn=document.getElementById("btnTheme"); if(btn) btn.textContent=(t==="light")?"◐ Oscuro":"◐ Claro";})();
 
 // ---------- Init ----------
 buildFactoryPresets();
