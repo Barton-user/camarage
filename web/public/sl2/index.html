@@ -539,15 +539,15 @@
     <!-- 2. Andrew Scheps Signature Logo (Vector Art) -->
     <div style="text-align:center; padding:10px 0; border-bottom:1px solid var(--line); display:flex; flex-direction:column; align-items:center; gap:8px;">
       <svg class="scheps-face" viewBox="0 0 80 80" style="width:64px; height:64px; fill:none; stroke:var(--mut); filter:drop-shadow(0 1px 3px rgba(0,0,0,0.6));">
-        <circle cx="40" cy="40" r="38" stroke="var(--line)" stroke-width="1"/>
+        <circle cx="40" cy="40" r="38" stroke="#2e323b" stroke-width="1"/>
         <!-- Glasses -->
         <rect x="23" y="32" width="13" height="9" rx="2" stroke="#eceae3" stroke-width="1.8"/>
         <rect x="44" y="32" width="13" height="9" rx="2" stroke="#eceae3" stroke-width="1.8"/>
         <path d="M36,36 L44,36" stroke="#eceae3" stroke-width="1.8"/>
         <!-- Beard outline -->
-        <path d="M19,30 C20,38 22,46 27,52 C32,58 48,58 53,52 C58,46 60,38 61,30 C58,34 55,36 52,36 C49,36 48,33 40,33 C32,33 31,36 28,36 C25,36 22,34 19,30 Z" fill="var(--mut)" fill-opacity="0.15" stroke="var(--mut)" stroke-width="1.5"/>
+        <path d="M19,30 C20,38 22,46 27,52 C32,58 48,58 53,52 C58,46 60,38 61,30 C58,34 55,36 52,36 C49,36 48,33 40,33 C32,33 31,36 28,36 C25,36 22,34 19,30 Z" fill="#7e8593" fill-opacity="0.15" stroke="#7e8593" stroke-width="1.5"/>
         <!-- Hair outline -->
-        <path d="M22,23 C26,18 34,16 40,16 C46,16 54,18 58,23 C62,28 63,35 62,42 C61,46 59,50 59,54 M21,54 C21,50 19,46 18,42 C17,35 18,28 22,23" stroke="var(--mut)" stroke-width="1.3"/>
+        <path d="M22,23 C26,18 34,16 40,16 C46,16 54,18 58,23 C62,28 63,35 62,42 C61,46 59,50 59,54 M21,54 C21,50 19,46 18,42 C17,35 18,28 22,23" stroke="#7e8593" stroke-width="1.3"/>
         <!-- Nose & Mouth details -->
         <path d="M40,33 L40,42 L38,44 L42,44" stroke="#eceae3" stroke-width="1.3" fill="none"/>
         <path d="M35,48 C37,50 43,50 45,48" stroke="#eceae3" stroke-width="1.3" fill="none"/>
@@ -1020,7 +1020,7 @@ function updateOscilloscopes() {
         // Draw vintage slot background
         ctx.fillStyle = "#0c0d12";
         ctx.fillRect(b.x, 8, 20, H - 24);
-        ctx.strokeStyle = "var(--line)";
+        ctx.strokeStyle = "#2e323b";
         ctx.strokeRect(b.x, 8, 20, H - 24);
         
         // Draw level bar
@@ -1029,19 +1029,19 @@ function updateOscilloscopes() {
         
         if (barH > 0) {
           const grad = ctx.createLinearGradient(0, H - 16 - barH, 0, H - 16);
-          grad.addColorStop(0, "var(--danger)");
-          grad.addColorStop(0.3, "var(--acc)");
-          grad.addColorStop(1, "var(--ok)");
+          grad.addColorStop(0, "#e0584e");
+          grad.addColorStop(0.3, "#ec8b2e");
+          grad.addColorStop(1, "#36c0d6");
           
           ctx.fillStyle = grad;
-          ctx.shadowColor = "var(--acc)";
+          ctx.shadowColor = "#ec8b2e";
           ctx.shadowBlur = 4;
           ctx.fillRect(b.x + 2, H - 16 - barH, 16, barH);
           ctx.shadowBlur = 0;
         }
         
         // Label
-        ctx.fillStyle = "var(--mut)";
+        ctx.fillStyle = "#7e8593";
         ctx.font = "bold 8px sans-serif";
         ctx.fillText(b.label, b.x + 1, H - 4);
       });
@@ -1063,8 +1063,8 @@ function updateOscilloscopes() {
     
     o.phase += (freq * 0.04);
     
-    ctx.strokeStyle = "var(--ok)"; ctx.lineWidth = 1.8;
-    ctx.shadowColor = "var(--ok)"; ctx.shadowBlur = 6;
+    ctx.strokeStyle = "#36c0d6"; ctx.lineWidth = 1.8;
+    ctx.shadowColor = "#36c0d6"; ctx.shadowBlur = 6;
     ctx.beginPath();
     
     const centerY = H / 2;
@@ -1116,8 +1116,8 @@ function drawPeqCurve(canvas, arr) {
   const gLowMid = (arr[6] - 50) * 0.35;
   const gHighMid = (arr[9] - 50) * 0.35;
   
-  ctx.strokeStyle = "var(--ok)"; ctx.lineWidth = 2.0;
-  ctx.shadowColor = "var(--ok)"; ctx.shadowBlur = 8;
+  ctx.strokeStyle = "#36c0d6"; ctx.lineWidth = 2.0;
+  ctx.shadowColor = "#36c0d6"; ctx.shadowBlur = 8;
   ctx.beginPath();
   
   const lowShelf = f => f < 0.3 ? Math.cos((f / 0.3) * Math.PI * 0.5) : 0;
@@ -1137,7 +1137,7 @@ function drawPeqCurve(canvas, arr) {
   ctx.stroke();
   ctx.shadowBlur = 0;
   
-  ctx.fillStyle = "var(--mut)"; ctx.font = "8px sans-serif";
+  ctx.fillStyle = "#7e8593"; ctx.font = "8px sans-serif";
   ctx.fillText("LF", 10, H - 6);
   ctx.fillText("LM", 55, H - 6);
   ctx.fillText("HM", 100, H - 6);
@@ -1335,7 +1335,7 @@ function knob(label,val,min,max,onInput){
   const id="kg"+(_knobN++), hl="kh"+_knobN, kr="kr"+_knobN;
   let ticks="";
   for(let i=0;i<=10;i++){const d=(-135+i*27)*Math.PI/180,r=16;
-    ticks+='<circle cx="'+(20+Math.sin(d)*r).toFixed(1)+'" cy="'+(20-Math.cos(d)*r).toFixed(1)+'" r="0.7" fill="var(--mut)"/>';}
+    ticks+='<circle cx="'+(20+Math.sin(d)*r).toFixed(1)+'" cy="'+(20-Math.cos(d)*r).toFixed(1)+'" r="0.7" fill="#7e8593"/>';}
   const c=document.createElement("div"); c.className="kcell";
   c.innerHTML='<div class="klabel">'+label+'</div>'+
     '<div class="krow"><span class="kmin">'+min+'</span>'+
@@ -1435,14 +1435,14 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
   function redraw(){
     W=cnv.width=pad.clientWidth; H=cnv.height=pad.clientHeight; ctx=cnv.getContext("2d");
     ctx.clearRect(0,0,W,H);
-    ctx.strokeStyle="var(--line)"; ctx.lineWidth=1;
+    ctx.strokeStyle="#2e323b"; ctx.lineWidth=1;
     for(let i=1;i<nSteps;i++){const x=W*i/nSteps; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();}
     const s=SL[key][0];
     for(let i=0;i<nSteps;i++){
       const val=arr[s+i], frac=val/max, w=W/nSteps, x=i*w, h=H*frac;
       ctx.fillStyle="rgba(54,192,214,0.16)"; ctx.fillRect(x,H-h,w,h);
-      ctx.fillStyle="var(--ok)"; ctx.fillRect(x,H-h,w,3);
-      ctx.fillStyle="var(--txt)"; ctx.font="9px monospace";
+      ctx.fillStyle="#36c0d6"; ctx.fillRect(x,H-h,w,3);
+      ctx.fillStyle="#eceae3"; ctx.font="9px monospace";
       let txt=String(val);
       if(key==="pitch")txt=pitchNote(val,ss.root);
       else if(key==="band"&&val===0)txt="OFF";
@@ -1860,7 +1860,7 @@ function importAudio(file){
 
 function toast(msg,bad){
   const t=document.getElementById("toast"); t.textContent=msg;
-  t.style.background=bad?"var(--danger)":"var(--ok)"; t.style.color=bad?"#2c0c0e":"#06281a";
+  t.style.background=bad?"#e0584e":"#36c0d6"; t.style.color=bad?"#2c0c0e":"#06281a";
   t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200);
 }
 
