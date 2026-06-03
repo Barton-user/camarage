@@ -11,6 +11,7 @@ const items: NavItem[] = [
   { href: "/setlists", label: "Setlists", icon: "📋" },
   { href: "/songs", label: "Canciones", icon: "🎵" },
   { href: "/sl2/", label: "SL-2 Studio", icon: "🎛️", external: true },
+  { href: "/xs100/", label: "XS-100 Studio", icon: "🎚️", external: true },
   { href: "/settings", label: "Configuración", icon: "⚙️" },
 ];
 

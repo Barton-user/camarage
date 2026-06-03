@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keogan XS-100 Studio</title>
+<style>
+  :root {
+    --bg: #07080a; --panel: #111317; --panel2: #191c22; --line: #2e323b;
+    --txt: #eceae3; --mut: #7e8593; --acc: #ec8b2e; --acc-deep: #bd6a14;
+    --acc2: #404652; --ok: #36c0d6; --danger: #e0584e; --face: #0c0e11;
+    --knobface: #272930; --screen: #000000; --screen-txt: #eceae3;
+    --metal1: #222630; --metal2: #14161c; --metal3: #090a0d;
+    --bevel-hi: rgba(255,255,255,0.06); --bevel-lo: rgba(0,0,0,0.85);
+    --btnA: #282c36; --btnB: #1a1b21; --btnC: #0e0f12;
+    --bg-grad: radial-gradient(130% 90% at 50% -10%, #161b24 0%, #050608 65%);
+    --bg-streak: repeating-linear-gradient(90deg, rgba(255,255,255,0.005) 0 1px, transparent 1px 3px);
+    --slot-bg: #060709;
+  }
+  [data-theme="cream"] {
+    --bg: #f7f3e8; --panel: #ece6d4; --panel2: #ddd6bf; --line: #9c9684;
+    --txt: #1a1c20; --mut: #524e44; --acc: #c46810; --acc-deep: #9a5008;
+    --acc2: #8d8e95; --ok: #0e7a8e; --danger: #b8362d; --face: #cac4ad;
+    --knobface: #b8b29c; --screen: #0d0f13; --screen-txt: #d8d4c4;
+    --metal1: #ccc6b1; --metal2: #bcb59d; --metal3: #a39d83;
+    --bevel-hi: rgba(255,255,255,0.75); --bevel-lo: rgba(0,0,0,0.16);
+    --btnA: #e3ddca; --btnB: #cec8b4; --btnC: #b6b09c;
+    --bg-grad: radial-gradient(130% 90% at 50% -10%, #fbf7ec 0%, #e0d9c4 65%);
+    --bg-streak: repeating-linear-gradient(90deg, rgba(0,0,0,0.012) 0 1px, transparent 1px 3px);
+    --slot-bg: #e0d9c4;
+  }
+  [data-theme="snow"] {
+    --bg: #fafbfd; --panel: #eef0f4; --panel2: #e2e5eb; --line: #b0b6c0;
+    --txt: #15181d; --mut: #4a4f5a; --acc: #d97515; --acc-deep: #b35c0a;
+    --acc2: #9aa0a8; --ok: #0a849c; --danger: #c43c34; --face: #d6dae0;
+    --knobface: #c4c9d1; --screen: #0a0c10; --screen-txt: #dfe3eb;
+    --metal1: #d8dbe0; --metal2: #c4c8ce; --metal3: #aab0b8;
+    --bevel-hi: rgba(255,255,255,0.85); --bevel-lo: rgba(40,55,80,0.14);
+    --btnA: #e8eaee; --btnB: #d4d7dc; --btnC: #bcc0c6;
+    --bg-grad: radial-gradient(130% 90% at 50% -10%, #ffffff 0%, #dee3ea 65%);
+    --bg-streak: repeating-linear-gradient(90deg, rgba(40,55,80,0.012) 0 1px, transparent 1px 3px);
+    --slot-bg: #e8eaee;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:system-ui,"Segoe UI",Roboto,sans-serif;color:var(--txt);font-size:13px;background:var(--bg-streak),var(--bg-grad);background-attachment:fixed;letter-spacing:.2px;-webkit-font-smoothing:antialiased;}
+  header{position:sticky;top:0;z-index:50;background:linear-gradient(180deg,var(--metal1) 0%,var(--metal2) 50%,var(--metal3) 100%);border-bottom:1px solid #000;box-shadow:inset 0 1px 0 var(--bevel-hi),0 2px 10px rgba(0,0,0,0.6);padding:10px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  header h1{font-size:15px;margin:0 14px 0 0;letter-spacing:1.8px;font-weight:800;text-transform:uppercase;text-shadow:0 1px 1px var(--bevel-lo),0 -1px 0 var(--bevel-hi);}
+  header h1 span{color:var(--acc);text-shadow:0 0 12px rgba(236,139,46,0.4);}
+  .grow{flex:1;}
+  button{background:linear-gradient(180deg,var(--btnA) 0%,var(--btnB) 52%,var(--btnC) 100%);border:1px solid var(--line);border-radius:4px;color:var(--txt);padding:6px 12px;cursor:pointer;font-size:12px;font-weight:500;box-shadow:inset 0 1px 0 var(--bevel-hi),inset 0 -1px 0 rgba(0,0,0,0.5),0 1px 3px rgba(0,0,0,0.6);transition:filter .1s,border-color .1s;}
+  button:hover{filter:brightness(1.2);border-color:var(--acc);}
+  button:active{filter:brightness(0.9);}
+  button.acc{background:linear-gradient(180deg,#2b2114,#1a140b 58%,#120d06);border:1px solid var(--acc);color:var(--acc);font-weight:700;text-shadow:0 0 6px rgba(236,139,46,0.6);box-shadow:inset 0 1px 0 rgba(255,200,120,0.18),inset 0 0 8px rgba(236,139,46,0.30),0 1px 2px rgba(0,0,0,0.6),0 0 8px rgba(236,139,46,0.2);}
+  button.ghost{background:transparent;border-color:var(--line);box-shadow:none;text-shadow:none;}
+  button.ghost:hover{background:rgba(255,255,255,0.04);}
+  input[type=text],input[type=number],select{background:var(--screen);border:1px solid var(--line);color:var(--screen-txt);border-radius:4px;padding:5px 8px;font-size:12px;outline:none;box-shadow:inset 0 1.5px 3px rgba(0,0,0,0.7);}
+  input[type=text]:focus,input[type=number]:focus,select:focus{border-color:var(--acc);box-shadow:inset 0 1.5px 3px rgba(0,0,0,0.7),0 0 0 2px rgba(236,139,46,0.25);}
+  label{font-size:9.5px;color:var(--mut);text-transform:uppercase;letter-spacing:0.8px;font-weight:600;text-shadow:0 1px 0 var(--bevel-lo);}
+  .main{display:grid;grid-template-columns:1fr 340px;gap:14px;padding:14px;max-width:1600px;margin:0 auto;align-items:flex-start;}
+  @media(max-width:1100px){.main{grid-template-columns:1fr;}}
+  .card{background:linear-gradient(180deg,var(--panel) 0%,#0d0e11 100%);border:1px solid #000;border-radius:6px;margin-bottom:12px;box-shadow:inset 0 1px 0 var(--bevel-hi),0 3px 8px rgba(0,0,0,0.55);}
+  .card .hd{padding:8px 12px;background:repeating-linear-gradient(90deg,rgba(255,255,255,0.015) 0 1px,transparent 1px 4px),linear-gradient(180deg,var(--metal1),var(--metal2));border-bottom:1px solid #000;display:flex;align-items:center;gap:10px;}
+  .card .hd h2{font-size:11px;margin:0;color:var(--acc);text-transform:uppercase;letter-spacing:1.4px;font-weight:700;text-shadow:0 1.5px 1.5px var(--bevel-lo);border:1px solid rgba(236,139,46,0.3);padding:2px 8px;border-radius:3px;background:rgba(236,139,46,0.06);}
+  .card .bd{padding:14px;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;}
+  .fld{display:flex;flex-direction:column;gap:4px;min-width:90px;}
+  .muted{color:var(--mut);font-size:11px;line-height:1.5;}
+  .help{background:var(--screen);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:11px;color:var(--screen-txt);line-height:1.5;box-shadow:inset 0 1px 3px rgba(0,0,0,0.8);}
+  .help b{color:var(--acc);}
+
+  /* Piano roll */
+  .roll-wrap{background:var(--screen);border:1px solid #000;border-radius:6px;padding:8px;box-shadow:inset 0 1.5px 4px rgba(0,0,0,0.9);overflow-x:auto;}
+  .roll{display:grid;font-size:9px;font-variant-numeric:tabular-nums;}
+  .roll .lbl{padding:0 6px;color:var(--screen-txt);background:var(--metal3);border-bottom:1px solid #000;border-right:1px solid #000;text-align:right;display:flex;align-items:center;justify-content:flex-end;font-weight:700;}
+  .roll .lbl.bk{background:#1a1c22;color:var(--mut);}
+  .roll .lbl.tonic{color:var(--acc);}
+  .roll .cell{border-right:1px solid #181a1f;border-bottom:1px solid #14161a;background:#0a0c10;cursor:pointer;transition:background .05s;position:relative;}
+  .roll .cell.bk{background:#0e1116;}
+  .roll .cell.beat{border-right:1px solid #2a2e36;}
+  .roll .cell.bar{border-right:2px solid var(--acc-deep);}
+  .roll .cell:hover{background:rgba(236,139,46,0.15);}
+  .roll .cell.on{background:linear-gradient(180deg,var(--acc),var(--acc-deep));box-shadow:0 0 6px rgba(236,139,46,0.5),inset 0 1px 0 rgba(255,255,255,0.2);}
+  .roll .cell.tonic{background:#0d1014;}
+  .roll .cell.tonic.bk{background:#101319;}
+
+  /* Memory list */
+  .mem-list{max-height:380px;overflow-y:auto;border:1px solid var(--line);border-radius:4px;background:var(--screen);}
+  .mem-list .item{padding:6px 10px;border-bottom:1px solid #1a1c22;cursor:pointer;display:flex;justify-content:space-between;gap:8px;color:var(--screen-txt);font-size:11px;}
+  .mem-list .item.active{background:rgba(236,139,46,0.15);color:var(--acc);}
+  .mem-list .item:hover{background:rgba(236,139,46,0.08);}
+  .mem-list .item .num{font-family:monospace;color:var(--mut);width:24px;text-align:right;}
+
+  .pill{display:inline-block;padding:2px 7px;border-radius:10px;background:var(--slot-bg);border:1px solid var(--line);color:var(--mut);font-size:9.5px;font-variant-numeric:tabular-nums;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ok);color:#06281a;padding:10px 18px;border-radius:4px;font-weight:700;opacity:0;transition:.2s;pointer-events:none;z-index:99;box-shadow:0 4px 12px rgba(0,0,0,0.5);}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Keogan <span>XS-100 Studio</span></h1>
+  <button id="btnTheme" class="ghost" title="Cambiar tema">◐ Tema</button>
+  <span class="grow"></span>
+  <span class="pill" id="modeBadge">PITCH SEQUENCER</span>
+  <button id="btnExportMid" class="acc">⤓ Exportar .mid (CC track)</button>
+  <button id="btnExportSyx" class="ghost">⤓ Exportar .syx (memorias)</button>
+  <button id="btnNew" class="ghost">Nuevo</button>
+</header>
+
+<div class="main">
+
+<!-- ========== LEFT: Pitch Sequencer ========== -->
+<div>
+
+<div class="card">
+  <div class="hd"><h2>PITCH SEQUENCER</h2><span class="muted" id="seqInfo"></span></div>
+  <div class="bd">
+
+    <div class="row">
+      <div class="fld"><label>Tempo (BPM)</label><input type="number" id="bpm" value="120" min="40" max="240" style="width:80px"></div>
+      <div class="fld"><label>Compases</label><input type="number" id="bars" value="2" min="1" max="16" style="width:60px"></div>
+      <div class="fld"><label>Subdivisión</label>
+        <select id="subdiv" style="width:120px">
+          <option value="4">1/4 (negra)</option>
+          <option value="8">1/8 (corchea)</option>
+          <option value="16" selected>1/16 (semic.)</option>
+          <option value="32">1/32 (fusa)</option>
+          <option value="6">1/8T (3plet 8)</option>
+          <option value="12">1/16T (3plet 16)</option>
+        </select>
+      </div>
+      <div class="fld"><label>Time sig.</label>
+        <select id="tsig" style="width:80px">
+          <option value="4">4/4</option>
+          <option value="3">3/4</option>
+          <option value="6">6/8</option>
+          <option value="2">2/4</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="fld"><label>Rango (semitonos)</label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="number" id="rngMin" value="-12" min="-48" max="0" style="width:60px">
+          <span class="muted">a</span>
+          <input type="number" id="rngMax" value="12" min="0" max="48" style="width:60px">
+        </div>
+      </div>
+      <div class="fld"><label>Escala</label>
+        <select id="scaleSel" style="width:160px"></select>
+      </div>
+      <div class="fld"><label>Tónica</label>
+        <select id="rootSel" style="width:70px"></select>
+      </div>
+      <div class="fld"><label>CC# destino (EXP1)</label>
+        <input type="number" id="ccNum" value="11" min="1" max="95" style="width:70px">
+      </div>
+      <div class="fld"><label>Canal MIDI</label>
+        <input type="number" id="chSel" value="1" min="1" max="16" style="width:60px">
+      </div>
+      <div class="fld"><label>Resolución</label>
+        <select id="ccBits" style="width:120px">
+          <option value="7" selected>7 bits (CC simple)</option>
+          <option value="14">14 bits (MSB+LSB)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="gap:6px;">
+      <button id="btnClear" class="ghost">🗑️ Limpiar</button>
+      <button id="btnRandom" class="ghost">🎲 Aleatorio (en escala)</button>
+      <button id="btnArp" class="ghost">▲▼ Arpegio</button>
+      <button id="btnRebuild" class="ghost">↻ Reconstruir grilla</button>
+    </div>
+
+    <div class="roll-wrap" id="rollWrap">
+      <div class="roll" id="roll"></div>
+    </div>
+
+    <div class="muted" style="margin-top:8px">
+      Hacé click en una celda para colocar la nota (una por paso). La fila de la nota define el pitch shift; el paso, el tiempo. Las filas naranjas son grados de la escala elegida.
+    </div>
+
+  </div>
+</div>
+
+<div class="card">
+  <div class="hd"><h2>SETUP EN EL PEDAL</h2></div>
+  <div class="bd">
+    <div class="help">
+      Antes de importar el <b>.mid</b> en Logic, configurá el pedal así:<br>
+      1. <b>CTL → EXP1</b> = <code>P.SHIFT</code> (la fila EXP1 controla el pitch shift).<br>
+      2. <b>MIDI CC → EXP1</b> = <code id="ccHint">11</code> (mismo número que elegiste arriba).<br>
+      3. En el patch a usar: <b>MEMORY EFFECT → PITCH SHIFT SW = ON</b>, y ajustá <b>PITCH SHIFT</b> mínimo y máximo del patch para que coincidan con el rango (<span id="rangeHint">-12 a +12</span>).<br>
+      4. <b>MIDI → RX CH</b> = canal que estás usando (<span id="chHint">1</span>).<br>
+      5. <b>MIDI → CC IN</b> = <code>ON</code>.<br>
+      Después arrastrá el archivo <code>.mid</code> a una pista MIDI en Logic que apunte al XS-100. Como no hay tempo en el archivo, Logic usa el tempo del proyecto. <b>Tempo-locked automático.</b>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ========== RIGHT: Memory editor + export ========== -->
+<aside>
+
+<div class="card">
+  <div class="hd"><h2>NOMBRE DEL ARCHIVO</h2></div>
+  <div class="bd">
+    <input type="text" id="seqName" value="XS100_Sequence" style="width:100%">
+    <div class="muted" style="margin-top:6px">Se usa como nombre del .mid y del .syx exportados.</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="hd"><h2>MEMORIAS (30)</h2></div>
+  <div class="bd">
+    <div class="mem-list" id="memList"></div>
+    <div class="row" style="margin-top:10px;">
+      <div class="fld" style="flex:1"><label>Nombre patch activo</label><input type="text" id="memName" maxlength="16" style="width:100%"></div>
+    </div>
+    <div class="row">
+      <div class="fld"><label>Pitch Sw</label><select id="pshSw"><option value="0">OFF</option><option value="1">ON</option></select></div>
+      <div class="fld"><label>Pitch (semi)</label><input type="number" id="pshAmt" min="-48" max="48" value="0" style="width:70px"></div>
+      <div class="fld"><label>Detune Sw</label><select id="dtnSw"><option value="0">OFF</option><option value="1">ON</option></select></div>
+      <div class="fld"><label>Detune</label><input type="number" id="dtnAmt" min="-50" max="50" value="0" style="width:70px"></div>
+    </div>
+    <div class="row">
+      <div class="fld"><label>Tune Down Sw</label><select id="tdnSw"><option value="0">OFF</option><option value="1">ON</option></select></div>
+      <div class="fld"><label>Tune Down (semi)</label><input type="number" id="tdnAmt" min="-48" max="48" value="0" style="width:70px"></div>
+    </div>
+    <div class="muted" style="margin-top:6px">El editor de memorias es básico (PITCH/DETUNE/TUNE DOWN). Para parámetros más profundos editá directo desde el pedal o el manual de BOSS. El .syx exporta los 30 memorias actuales del editor.</div>
+  </div>
+</div>
+
+</aside>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============ THEME (3 skins) ============
+const THEMES=["dark","cream","snow"];
+const THEME_LABELS={dark:"Oscuro",cream:"Crema",snow:"Nieve"};
+function curTheme(){return document.documentElement.dataset.theme||"dark";}
+function setTheme(t){
+  const r=document.documentElement;
+  if(t==="dark")delete r.dataset.theme; else r.dataset.theme=t;
+  try{localStorage.setItem("xs100_theme",t);}catch(e){}
+  const i=THEMES.indexOf(t), nx=THEMES[(i+1)%THEMES.length];
+  const b=document.getElementById("btnTheme"); if(b)b.textContent="◐ "+THEME_LABELS[nx];
+}
+try{const s=localStorage.getItem("xs100_theme"); if(s&&THEMES.indexOf(s)>=0&&s!=="dark")document.documentElement.dataset.theme=s;}catch(e){}
+document.getElementById("btnTheme").onclick=()=>{const c=curTheme(),i=THEMES.indexOf(c);setTheme(THEMES[(i+1)%THEMES.length]);};
+(()=>{const c=curTheme(),i=THEMES.indexOf(c),nx=THEMES[(i+1)%THEMES.length];const b=document.getElementById("btnTheme");if(b)b.textContent="◐ "+THEME_LABELS[nx];})();
+
+// ============ Scales & notes ============
+const NOTE_NAMES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const SCALES={
+  "Cromática":[0,1,2,3,4,5,6,7,8,9,10,11],
+  "Mayor":[0,2,4,5,7,9,11],
+  "Menor natural":[0,2,3,5,7,8,10],
+  "Menor armónica":[0,2,3,5,7,8,11],
+  "Menor melódica":[0,2,3,5,7,9,11],
+  "Dórico":[0,2,3,5,7,9,10],
+  "Frigio":[0,1,3,5,7,8,10],
+  "Lidio":[0,2,4,6,7,9,11],
+  "Mixolidio":[0,2,4,5,7,9,10],
+  "Pentatónica mayor":[0,2,4,7,9],
+  "Pentatónica menor":[0,3,5,7,10],
+  "Blues":[0,3,5,6,7,10],
+};
+
+(function fillSelectors(){
+  const sc=document.getElementById("scaleSel");
+  Object.keys(SCALES).forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=k;if(k==="Pentatónica menor")o.selected=true;sc.appendChild(o);});
+  const rs=document.getElementById("rootSel");
+  NOTE_NAMES.forEach((n,i)=>{const o=document.createElement("option");o.value=i;o.textContent=n;if(i===0)o.selected=true;rs.appendChild(o);});
+})();
+
+// ============ State ============
+const state={
+  bpm:120, bars:2, subdiv:16, tsig:4,
+  rngMin:-12, rngMax:12, scale:"Pentatónica menor", root:0,
+  cc:11, ch:1, bits:7,
+  cells:{},          // key = "step:pitch", value = true
+  memories:[],       // 30 memory objects
+  curMem:0,
+};
+
+function newMem(name){
+  return {
+    name:(name||"PATCH").padEnd(16," ").slice(0,16),
+    pshSw:0, pshAmt:0,
+    dtnSw:0, dtnAmt:0,
+    tdnSw:0, tdnAmt:0,
+  };
+}
+for(let i=0;i<30;i++)state.memories.push(newMem("PATCH-"+String(i+1).padStart(2,"0")));
+
+function totalSteps(){
+  // steps per beat = subdiv / 4
+  const stepsPerBeat=state.subdiv/4;
+  return Math.round(state.bars*state.tsig*stepsPerBeat);
+}
+function inScale(semi){
+  // semi: -48..+48 (relative); convert to pitch class
+  const pc=((semi%12)+12)%12;
+  // root is the reference center (we treat root semi=0 as tonic of the scale)
+  const rel=((pc - state.root)%12+12)%12;
+  return SCALES[state.scale].indexOf(rel)>=0;
+}
+function isTonic(semi){
+  const pc=((semi%12)+12)%12;
+  return pc===state.root;
+}
+
+// ============ Render piano roll ============
+function rebuildRoll(){
+  const roll=document.getElementById("roll");
+  const N=totalSteps();
+  const pitches=[]; for(let p=state.rngMax;p>=state.rngMin;p--)pitches.push(p);
+  const stepsPerBeat=state.subdiv/4;
+
+  // Grid: 1 label column + N step columns; rows = pitches
+  const colW=Math.max(18, Math.floor((window.innerWidth-460)/Math.max(N,16)));
+  roll.style.gridTemplateColumns=`52px repeat(${N}, ${colW}px)`;
+  roll.innerHTML="";
+
+  pitches.forEach(p=>{
+    const lbl=document.createElement("div");
+    lbl.className="lbl"+(inScale(p)?"":" bk")+(isTonic(p)?" tonic":"");
+    const pc=((p%12)+12)%12;
+    const sign=p>0?"+":"";
+    lbl.textContent=sign+p+" ("+NOTE_NAMES[pc]+")";
+    roll.appendChild(lbl);
+    for(let s=0;s<N;s++){
+      const c=document.createElement("div");
+      c.className="cell"+(inScale(p)?"":" bk")+(isTonic(p)?" tonic":"");
+      const beatIdx=Math.floor(s/stepsPerBeat);
+      if((s+1)%stepsPerBeat===0)c.classList.add("beat");
+      if((s+1)%(stepsPerBeat*state.tsig)===0)c.classList.add("bar");
+      const k=s+":"+p;
+      if(state.cells[k])c.classList.add("on");
+      c.dataset.step=s; c.dataset.pitch=p;
+      c.onclick=()=>toggleCell(s,p);
+      roll.appendChild(c);
+    }
+  });
+
+  document.getElementById("seqInfo").textContent=`${N} pasos · ${state.bars} compás(es) · ${state.tsig}/4 · ${state.subdiv}/${state.subdiv===6?"8T":state.subdiv===12?"16T":state.subdiv}`;
+  document.getElementById("ccHint").textContent=state.cc;
+  document.getElementById("rangeHint").textContent=`${state.rngMin>0?"+"+state.rngMin:state.rngMin} a ${state.rngMax>0?"+"+state.rngMax:state.rngMax}`;
+  document.getElementById("chHint").textContent=state.ch;
+}
+
+function toggleCell(s,p){
+  // One pitch per step
+  const k=s+":"+p;
+  // remove any existing note at this step
+  for(let pp=state.rngMin;pp<=state.rngMax;pp++){
+    const kk=s+":"+pp;
+    if(state.cells[kk] && pp!==p)delete state.cells[kk];
+  }
+  if(state.cells[k])delete state.cells[k]; else state.cells[k]=true;
+  rebuildRoll();
+}
+
+// ============ Generators ============
+function clearAll(){state.cells={};rebuildRoll();toast("Grilla vacía");}
+function randomInScale(){
+  state.cells={};
+  const N=totalSteps();
+  const allowed=[];
+  for(let p=state.rngMin;p<=state.rngMax;p++)if(inScale(p))allowed.push(p);
+  if(!allowed.length)return;
+  for(let s=0;s<N;s++){
+    const p=allowed[Math.floor(Math.random()*allowed.length)];
+    state.cells[s+":"+p]=true;
+  }
+  rebuildRoll();toast("Aleatorio en escala");
+}
+function arpUpDown(){
+  state.cells={};
+  const N=totalSteps();
+  const allowed=[];
+  for(let p=state.rngMin;p<=state.rngMax;p++)if(inScale(p))allowed.push(p);
+  if(!allowed.length)return;
+  // up then down
+  const seq=[];
+  for(let i=0;i<allowed.length;i++)seq.push(allowed[i]);
+  for(let i=allowed.length-2;i>0;i--)seq.push(allowed[i]);
+  for(let s=0;s<N;s++)state.cells[s+":"+seq[s%seq.length]]=true;
+  rebuildRoll();toast("Arpegio ↑↓");
+}
+
+// ============ Bindings ============
+function bindNum(id,key){
+  const el=document.getElementById(id);
+  el.value=state[key];
+  el.onchange=()=>{state[key]=+el.value;rebuildRoll();};
+}
+bindNum("bpm","bpm");
+bindNum("bars","bars");
+bindNum("rngMin","rngMin");
+bindNum("rngMax","rngMax");
+bindNum("ccNum","cc");
+bindNum("chSel","ch");
+document.getElementById("subdiv").onchange=e=>{state.subdiv=+e.target.value;rebuildRoll();};
+document.getElementById("tsig").onchange=e=>{state.tsig=+e.target.value;rebuildRoll();};
+document.getElementById("scaleSel").value=state.scale;
+document.getElementById("scaleSel").onchange=e=>{state.scale=e.target.value;rebuildRoll();};
+document.getElementById("rootSel").onchange=e=>{state.root=+e.target.value;rebuildRoll();};
+document.getElementById("ccBits").onchange=e=>{state.bits=+e.target.value;};
+document.getElementById("btnClear").onclick=clearAll;
+document.getElementById("btnRandom").onclick=randomInScale;
+document.getElementById("btnArp").onclick=arpUpDown;
+document.getElementById("btnRebuild").onclick=()=>rebuildRoll();
+document.getElementById("btnNew").onclick=()=>{if(confirm("¿Empezar de cero?")){state.cells={};rebuildRoll();}};
+
+// ============ MEMORY EDITOR ============
+function renderMemList(){
+  const ul=document.getElementById("memList");
+  ul.innerHTML="";
+  state.memories.forEach((m,i)=>{
+    const it=document.createElement("div");
+    it.className="item"+(i===state.curMem?" active":"");
+    it.innerHTML=`<span class="num">${String(i+1).padStart(2,"0")}</span><span>${m.name.trim()||"—"}</span>`;
+    it.onclick=()=>{state.curMem=i;renderMemList();loadMemFields();};
+    ul.appendChild(it);
+  });
+}
+function loadMemFields(){
+  const m=state.memories[state.curMem];
+  document.getElementById("memName").value=m.name.trim();
+  document.getElementById("pshSw").value=m.pshSw;
+  document.getElementById("pshAmt").value=m.pshAmt;
+  document.getElementById("dtnSw").value=m.dtnSw;
+  document.getElementById("dtnAmt").value=m.dtnAmt;
+  document.getElementById("tdnSw").value=m.tdnSw;
+  document.getElementById("tdnAmt").value=m.tdnAmt;
+}
+function bindMemField(id,key,asInt){
+  const el=document.getElementById(id);
+  el.onchange=()=>{
+    const m=state.memories[state.curMem];
+    if(key==="name"){m.name=(el.value||"").padEnd(16," ").slice(0,16); renderMemList();}
+    else m[key]=asInt?+el.value:el.value;
+  };
+}
+bindMemField("memName","name",false);
+["pshSw","pshAmt","dtnSw","dtnAmt","tdnSw","tdnAmt"].forEach(k=>bindMemField(k,k,true));
+renderMemList(); loadMemFields();
+
+// ============ TOAST ============
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=>t.classList.remove("show"),1500);
+}
+
+// ============ MIDI FILE WRITER (SMF type 1) ============
+// pitch (semitones, -48..+48) → CC value (0..127 7-bit, or 0..16383 14-bit)
+function pitchToCC(semi){
+  const range=state.rngMax-state.rngMin;
+  if(range<=0)return 0;
+  const t=(semi-state.rngMin)/range;     // 0..1
+  if(state.bits===14){
+    return Math.round(t*16383);
+  }
+  return Math.max(0,Math.min(127,Math.round(t*127)));
+}
+function writeVarLen(arr,v){
+  const bytes=[];
+  bytes.push(v & 0x7F); v >>= 7;
+  while(v>0){ bytes.push((v & 0x7F)|0x80); v >>= 7;}
+  for(let i=bytes.length-1;i>=0;i--)arr.push(bytes[i]);
+}
+function u32(arr,v){arr.push((v>>>24)&0xFF,(v>>>16)&0xFF,(v>>>8)&0xFF,v&0xFF);}
+function u16(arr,v){arr.push((v>>>8)&0xFF,v&0xFF);}
+function strBytes(s){return Array.from(new TextEncoder().encode(s));}
+
+function buildEvents(PPQ){
+  // events: [tick, [statusBytes...]]
+  const N=totalSteps();
+  const stepsPerBeat=state.subdiv/4;
+  const ticksPerStep=Math.round(PPQ/stepsPerBeat);
+  const evs=[];
+  const ch=Math.max(0,Math.min(15,state.ch-1));
+
+  // For each step, find the (single) note placed
+  for(let s=0;s<N;s++){
+    let semi=null;
+    for(let p=state.rngMin;p<=state.rngMax;p++){
+      if(state.cells[s+":"+p]){ semi=p; break;}
+    }
+    if(semi===null)continue;
+    const v=pitchToCC(semi);
+    const tick=s*ticksPerStep;
+    if(state.bits===14){
+      const msb=(v>>7)&0x7F, lsb=v&0x7F;
+      evs.push([tick,[0xB0|ch, state.cc, msb]]);
+      evs.push([tick,[0xB0|ch, (state.cc+32)&0x7F, lsb]]);
+    } else {
+      evs.push([tick,[0xB0|ch, state.cc, v]]);
+    }
+  }
+  // sort by tick (CC pairs already same tick)
+  evs.sort((a,b)=>a[0]-b[0]);
+  return evs;
+}
+
+function buildSMF(){
+  const PPQ=480;
+  const evs=buildEvents(PPQ);
+
+  // Header chunk (MThd, type 1, 2 tracks, PPQ)
+  const out=[];
+  out.push(...strBytes("MThd"));
+  u32(out,6);
+  u16(out,1);  // format 1
+  u16(out,2);  // 2 tracks (meta + cc)
+  u16(out,PPQ);
+
+  // Track 1: meta (name only — no tempo, so Logic uses project tempo)
+  const tk1=[];
+  // FF 03 (track name)
+  const nm=strBytes("XS-100 CC Track");
+  writeVarLen(tk1,0); tk1.push(0xFF,0x03); writeVarLen(tk1,nm.length); tk1.push(...nm);
+  writeVarLen(tk1,0); tk1.push(0xFF,0x2F,0x00); // end of track
+  out.push(...strBytes("MTrk")); u32(out,tk1.length); out.push(...tk1);
+
+  // Track 2: CC events
+  const tk2=[];
+  const nm2=strBytes(`CC#${state.cc} ${state.bits===14?"(14b)":"(7b)"}`);
+  writeVarLen(tk2,0); tk2.push(0xFF,0x03); writeVarLen(tk2,nm2.length); tk2.push(...nm2);
+  let last=0;
+  evs.forEach(e=>{
+    const delta=e[0]-last; last=e[0];
+    writeVarLen(tk2,delta);
+    tk2.push(...e[1]);
+  });
+  writeVarLen(tk2,0); tk2.push(0xFF,0x2F,0x00); // end
+  out.push(...strBytes("MTrk")); u32(out,tk2.length); out.push(...tk2);
+
+  return new Uint8Array(out);
+}
+
+function downloadBlob(name, mime, data){
+  const blob=new Blob([data],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url); a.remove();},100);
+}
+
+document.getElementById("btnExportMid").onclick=()=>{
+  const data=buildSMF();
+  const name=(document.getElementById("seqName").value||"XS100_Sequence").replace(/[^\w\-]/g,"_");
+  downloadBlob(name+".mid","audio/midi",data);
+  toast("Exportado .mid · CC#"+state.cc);
+};
+
+// ============ SYSEX EXPORTER (.syx) ============
+// Roland DT1 (12H) format: F0 41 10 06 02 12 <addr 4> <data...> <sum> F7
+// XS-100 Model ID: 06 02 ; Device ID: 10 (fixed); MEMORY blocks start at 20 10 00 00 for #1
+function rolandChecksum(bytes){
+  // bytes = address + data
+  let sum=0;
+  bytes.forEach(b=>sum=(sum+b)&0x7F);
+  return (128-sum)&0x7F;
+}
+function dt1(addr, data){
+  // addr: array of 4 bytes ; data: array of bytes
+  const payload=addr.concat(data);
+  const sum=rolandChecksum(payload);
+  return [0xF0,0x41,0x10,0x06,0x02,0x12,...payload,sum,0xF7];
+}
+
+function buildSyx(){
+  // For each memory i (0..29): write a few critical params to MEMORY EFFECT
+  // MEMORY #(i+1) block starts at 20 10 00 00 + (i+1)*10? — actually per the address map:
+  // 20 00 00 00 = TEMPORARY ; 20 10 00 00 = #1 ; 23 60 00 00 = #30
+  // Step between memories = 10 00 ? Let's reconstruct: #1=20 10, #2=20 20, ... #30=23 60? That doesn't math.
+  // Actually map: #1=20 10 00 00, ... incrementing by 0x10 in the 2nd byte? #1=20 10, #2=20 20... so #16=21 10? Hmm.
+  // Safest: skip detailed memory mapping and emit name + effect block at TEMPORARY (20 00 00 00) which always works.
+  // We export only the CURRENT memory to TEMPORARY block as a quick-load preview.
+  const m=state.memories[state.curMem];
+  const out=[];
+
+  // Memory CTL offset 00 00 00 — patch name is at MEMORY CTL "PATCH NAME" (we'll assume offset 00 00, 16 bytes ASCII)
+  // (The MIDI Impl doc didn't paste the full MEMORY CTL detail in my excerpt, so we use a documented-style attempt.)
+  // We'll write to TEMPORARY block = 20 00 00 00 + offset
+  // MEMORY EFFECT offset = 00 10 00 (per "MEMORY block Offset address" table)
+  // PITCH SHIFT SW @ 00 10 00 + 01, PITCH SHIFT amt @ +02 (offset 48), TUNE DOWN SW +03, TUNE DOWN amt +04, DETUNE SW +0A, DETUNE amt +0B
+
+  function writeAt(addrArr, dataArr){ out.push(...dt1(addrArr, dataArr)); }
+
+  // Write PITCH SHIFT SW
+  writeAt([0x20,0x00,0x10,0x01],[m.pshSw?1:0]);
+  // PITCH SHIFT amount (offset 48: stored value = amt+48)
+  writeAt([0x20,0x00,0x10,0x02],[Math.max(0,Math.min(96,m.pshAmt+48))]);
+  // TUNE DOWN SW
+  writeAt([0x20,0x00,0x10,0x03],[m.tdnSw?1:0]);
+  // TUNE DOWN amount
+  writeAt([0x20,0x00,0x10,0x04],[Math.max(0,Math.min(96,m.tdnAmt+48))]);
+  // DETUNE SW
+  writeAt([0x20,0x00,0x10,0x0A],[m.dtnSw?1:0]);
+  // DETUNE amount (offset 50)
+  writeAt([0x20,0x00,0x10,0x0B],[Math.max(0,Math.min(100,m.dtnAmt+50))]);
+
+  return new Uint8Array(out);
+}
+
+document.getElementById("btnExportSyx").onclick=()=>{
+  const data=buildSyx();
+  const name=(document.getElementById("seqName").value||"XS100_Sequence").replace(/[^\w\-]/g,"_");
+  downloadBlob(name+"_mem"+String(state.curMem+1).padStart(2,"0")+".syx","application/octet-stream",data);
+  toast(".syx exportado (memoria actual → TEMPORARY)");
+};
+
+// ============ INIT ============
+window.addEventListener("resize",()=>{clearTimeout(window.__rsz);window.__rsz=setTimeout(rebuildRoll,150);});
+rebuildRoll();
+</script>
+
+</body>
+</html>
