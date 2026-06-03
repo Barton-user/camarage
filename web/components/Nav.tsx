@@ -3,11 +3,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 
-const items = [
+type NavItem = { href: string; label: string; icon: string; external?: boolean };
+
+const items: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: "🏠" },
   { href: "/bands", label: "Bandas", icon: "🎸" },
   { href: "/setlists", label: "Setlists", icon: "📋" },
   { href: "/songs", label: "Canciones", icon: "🎵" },
+  { href: "/sl2/", label: "SL-2 Studio", icon: "🎛️", external: true },
   { href: "/settings", label: "Configuración", icon: "⚙️" },
 ];
 
@@ -35,14 +38,30 @@ export default function Nav({ userEmail }: { userEmail?: string }) {
       </div>
       <nav className="flex-1 p-2 space-y-1">
         {items.map(item => {
-          const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          const active = !item.external && (pathname === item.href || pathname.startsWith(item.href + "/"));
+          const className = `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition ${
+            active ? "bg-cyan-400 text-black" : "text-neutral-400 hover:bg-neutral-900 hover:text-white"
+          }`;
+          if (item.external) {
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={className}
+              >
+                <span className="text-base">{item.icon}</span>
+                <span>{item.label}</span>
+                <span className="ml-auto text-[10px] text-neutral-600">↗</span>
+              </a>
+            );
+          }
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition ${
-                active ? "bg-cyan-400 text-black" : "text-neutral-400 hover:bg-neutral-900 hover:text-white"
-              }`}
+              className={className}
             >
               <span className="text-base">{item.icon}</span>
               <span>{item.label}</span>
