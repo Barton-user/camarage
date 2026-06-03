@@ -54,9 +54,9 @@
     --bg: #f7f3e8;
     --panel: #ece6d4;
     --panel2: #ddd6bf;
-    --line: #b0aa9a;
+    --line: #9c9684;
     --txt: #1a1c20;
-    --mut: #6b6f7a;
+    --mut: #524e44;
     --acc: #c46810;
     --acc-deep: #9a5008;
     --acc2: #8d8e95;
@@ -97,9 +97,9 @@
     --bg: #fafbfd;
     --panel: #eef0f4;
     --panel2: #e2e5eb;
-    --line: #c4c9d2;
+    --line: #b0b6c0;
     --txt: #15181d;
-    --mut: #6c7280;
+    --mut: #4a4f5a;
     --acc: #d97515;
     --acc-deep: #b35c0a;
     --acc2: #9aa0a8;
@@ -237,8 +237,8 @@
 
   input[type=text], select {
     background: var(--screen);
-    border: 1px solid #000;
-    color: var(--txt);
+    border: 1px solid var(--line);
+    color: var(--screen-txt);
     border-radius: 4px;
     padding: 5px 8px;
     font-size: 12px;
@@ -337,7 +337,7 @@
   /* --- Fader slider controls --- */
   .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 8px; }
   .fld { display: flex; flex-direction: column; gap: 4px; }
-  .fld label { font-size: 9.5px; color: var(--mut); text-transform: uppercase; letter-spacing: 0.8px; text-shadow: 0 1px 0 rgba(0,0,0,0.8); font-weight: 600; }
+  .fld label { font-size: 9.5px; color: var(--mut); text-transform: uppercase; letter-spacing: 0.8px; text-shadow: 0 1px 0 var(--bevel-lo); font-weight: 600; }
   .muted { color: var(--mut); font-size: 11px; }
 
   /* --- Premium Switch --- */
@@ -372,7 +372,7 @@
   /* --- realistic knob cell --- */
   .kgrid { display: flex; flex-wrap: wrap; gap: 12px 6px; padding: 6px 2px 4px; justify-content: center; }
   .kcell { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 70px; }
-  .klabel { font-size: 8.5px; color: var(--mut); text-align: center; min-height: 20px; display: flex; align-items: center; justify-content: center; text-transform: uppercase; letter-spacing: .6px; line-height: 1.1; font-weight: 700; text-shadow: 0 1px 0 #000; }
+  .klabel { font-size: 8.5px; color: var(--mut); text-align: center; min-height: 20px; display: flex; align-items: center; justify-content: center; text-transform: uppercase; letter-spacing: .6px; line-height: 1.1; font-weight: 700; text-shadow: 0 1px 0 var(--bevel-lo); }
   .krow { display: flex; align-items: center; justify-content: center; gap: 2px; }
   .kmin, .kmax { font-size: 8px; color: var(--mut); width: 12px; text-align: center; font-variant-numeric: tabular-nums; }
   .kval { font-size: 10px; color: var(--ok); font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 0 4px rgba(54,192,214,0.3); }
@@ -442,7 +442,7 @@
 
   /* --- Slicer Secuenciador Card Layout --- */
   .steprow { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-  .steprow .lab { width: 92px; flex: none; font-size: 9.5px; color: var(--mut); font-weight: 700; text-transform: uppercase; text-shadow: 0 1px 0 #000; }
+  .steprow .lab { width: 92px; flex: none; font-size: 9.5px; color: var(--mut); font-weight: 700; text-transform: uppercase; text-shadow: 0 1px 0 var(--bevel-lo); }
   .steps { display: flex; gap: 4px; flex: 1; overflow-x: auto; padding: 4px 0; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid var(--line); }
   .stepwrap { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 2px; transition: background 0.08s, box-shadow 0.08s; }
   .stepwrap.off { opacity: .22; pointer-events: none; }
