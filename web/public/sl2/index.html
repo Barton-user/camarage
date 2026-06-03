@@ -49,12 +49,12 @@
     --ok-rgb: 54,192,214;
   }
 
-  /* --- Light theme overrides --- */
-  [data-theme="light"] {
-    --bg: #f0ede4;
-    --panel: #e6e1d2;
-    --panel2: #d5cfbd;
-    --line: #a8a292;
+  /* --- Cream theme (warm vintage chassis) --- */
+  [data-theme="cream"] {
+    --bg: #f7f3e8;
+    --panel: #ece6d4;
+    --panel2: #ddd6bf;
+    --line: #b0aa9a;
     --txt: #1a1c20;
     --mut: #6b6f7a;
     --acc: #c46810;
@@ -62,34 +62,77 @@
     --acc2: #8d8e95;
     --ok: #0e7a8e;
     --danger: #b8362d;
-    --face: #c4bea9;
-    --knobface: #b3ad99;
+    --face: #cac4ad;
+    --knobface: #b8b29c;
     --screen: #0d0f13;
     --screen-txt: #d8d4c4;
-    --metal1: #c8c2af;
-    --metal2: #b6b09b;
-    --metal3: #9e9881;
-    --bevel-hi: rgba(255,255,255,0.7);
-    --bevel-lo: rgba(0,0,0,0.18);
+    --metal1: #ccc6b1;
+    --metal2: #bcb59d;
+    --metal3: #a39d83;
+    --bevel-hi: rgba(255,255,255,0.75);
+    --bevel-lo: rgba(0,0,0,0.16);
     --screw: #7a7568;
     --screw-hi: #a39d8d;
-    --btnA: #ddd7c4;
-    --btnB: #c8c2af;
-    --btnC: #b0aa96;
-    --kf1: #b8b2a0;
-    --kf2: #a39d8b;
-    --kf3: #8d8775;
-    --kf4: #756f5e;
+    --btnA: #e3ddca;
+    --btnB: #cec8b4;
+    --btnC: #b6b09c;
+    --kf1: #beb8a4;
+    --kf2: #a8a290;
+    --kf3: #928d7a;
+    --kf4: #7a7563;
     --kptr: #1a1c20;
-    --bg-grad: radial-gradient(130% 90% at 50% -10%, #f5f1e4 0%, #d8d2bf 65%);
-    --bg-streak: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.015) 0 1px, transparent 1px 3px);
-    --shadow-card: 0 3px 8px rgba(60,50,30,0.18);
-    --shadow-deep: 0 4px 15px rgba(60,50,30,0.25);
-    --inset-deep: inset 0 1.5px 3px rgba(60,50,30,0.4);
-    --track-grad: linear-gradient(180deg, #9c9683, #c0baa6, #9c9683);
-    --slot-bg: #d8d2bf;
+    --bg-grad: radial-gradient(130% 90% at 50% -10%, #fbf7ec 0%, #e0d9c4 65%);
+    --bg-streak: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.012) 0 1px, transparent 1px 3px);
+    --shadow-card: 0 3px 8px rgba(60,50,30,0.16);
+    --shadow-deep: 0 4px 15px rgba(60,50,30,0.22);
+    --inset-deep: inset 0 1.5px 3px rgba(60,50,30,0.35);
+    --track-grad: linear-gradient(180deg, #a39d83, #c8c2ae, #a39d83);
+    --slot-bg: #e0d9c4;
     --acc-rgb: 196,104,16;
     --ok-rgb: 14,122,142;
+  }
+
+  /* --- Snow theme (cool minimal chrome) --- */
+  [data-theme="snow"] {
+    --bg: #fafbfd;
+    --panel: #eef0f4;
+    --panel2: #e2e5eb;
+    --line: #c4c9d2;
+    --txt: #15181d;
+    --mut: #6c7280;
+    --acc: #d97515;
+    --acc-deep: #b35c0a;
+    --acc2: #9aa0a8;
+    --ok: #0a849c;
+    --danger: #c43c34;
+    --face: #d6dae0;
+    --knobface: #c4c9d1;
+    --screen: #0a0c10;
+    --screen-txt: #dfe3eb;
+    --metal1: #d8dbe0;
+    --metal2: #c4c8ce;
+    --metal3: #aab0b8;
+    --bevel-hi: rgba(255,255,255,0.85);
+    --bevel-lo: rgba(40,55,80,0.14);
+    --screw: #8a909a;
+    --screw-hi: #b0b6c0;
+    --btnA: #e8eaee;
+    --btnB: #d4d7dc;
+    --btnC: #bcc0c6;
+    --kf1: #c8ccd2;
+    --kf2: #b0b5bc;
+    --kf3: #9aa0a8;
+    --kf4: #828891;
+    --kptr: #15181d;
+    --bg-grad: radial-gradient(130% 90% at 50% -10%, #ffffff 0%, #dee3ea 65%);
+    --bg-streak: repeating-linear-gradient(90deg, rgba(40,55,80,0.012) 0 1px, transparent 1px 3px);
+    --shadow-card: 0 3px 8px rgba(50,60,80,0.10);
+    --shadow-deep: 0 4px 15px rgba(50,60,80,0.16);
+    --inset-deep: inset 0 1.5px 3px rgba(50,60,80,0.28);
+    --track-grad: linear-gradient(180deg, #aab0b8, #d8dbe0, #aab0b8);
+    --slot-bg: #e8eaee;
+    --acc-rgb: 217,117,21;
+    --ok-rgb: 10,132,156;
   }
   
   * { box-sizing: border-box; }
@@ -2287,26 +2330,32 @@ document.getElementById("btnMetro").onclick=()=>{
 };
 document.getElementById("beatsSel").onchange=e=>Audio.setBeats(+e.target.value);
 document.querySelectorAll(".modebtn").forEach(b=>b.onclick=()=>applyModeTemplate(b.dataset.mode));
-// ---------- Theme toggle ----------
+// ---------- Theme toggle (3 skins) ----------
+const THEMES = ["dark","cream","snow"];
+const THEME_LABELS = {dark:"Oscuro", cream:"Crema", snow:"Nieve"};
+function currentTheme(){ return document.documentElement.dataset.theme || "dark"; }
 function setTheme(t){
   const r = document.documentElement;
-  if(t==="light") r.dataset.theme="light"; else delete r.dataset.theme;
+  if(t==="dark") delete r.dataset.theme; else r.dataset.theme = t;
   __clearThemeCache();
   try { localStorage.setItem("sl2_theme", t); } catch(e){}
+  const idx = THEMES.indexOf(t);
+  const next = THEMES[(idx+1) % THEMES.length];
   const btn = document.getElementById("btnTheme");
-  if(btn) btn.textContent = (t==="light") ? "◐ Oscuro" : "◐ Claro";
+  if(btn) btn.textContent = "◐ " + THEME_LABELS[next];
   if(typeof renderBlocks==="function") renderBlocks();
   if(typeof Audio!=="undefined" && Audio.refreshAll) Audio.refreshAll();
 }
 try {
   const saved = localStorage.getItem("sl2_theme");
-  if(saved==="light") document.documentElement.dataset.theme = "light";
+  if(saved && THEMES.indexOf(saved)>=0 && saved!=="dark") document.documentElement.dataset.theme = saved;
 } catch(e){}
 document.getElementById("btnTheme").onclick = ()=>{
-  const cur = document.documentElement.dataset.theme==="light" ? "light":"dark";
-  setTheme(cur==="light" ? "dark" : "light");
+  const cur = currentTheme();
+  const idx = THEMES.indexOf(cur);
+  setTheme(THEMES[(idx+1) % THEMES.length]);
 };
-(()=>{const t=document.documentElement.dataset.theme==="light"?"light":"dark"; const btn=document.getElementById("btnTheme"); if(btn) btn.textContent=(t==="light")?"◐ Oscuro":"◐ Claro";})();
+(()=>{const cur=currentTheme(); const idx=THEMES.indexOf(cur); const next=THEMES[(idx+1)%THEMES.length]; const btn=document.getElementById("btnTheme"); if(btn) btn.textContent="◐ "+THEME_LABELS[next];})();
 
 // ---------- Init ----------
 buildFactoryPresets();
