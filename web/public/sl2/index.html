@@ -1537,8 +1537,22 @@ function renderSlicer(chKey){
 
   if(arr[SL.fx]===1){
     const row2=document.createElement("div"); row2.className="row"; row2.style.marginBottom="12px";
-    row2.appendChild(selectFld("Escala",Object.keys(SCALES).map(s=>[s,s]),ss.scale,v=>{ss.scale=v;renderBlocks();}));
-    row2.appendChild(selectFld("Tónica",NOTE_NAMES.map((n,i)=>[""+i,n]),ss.root,v=>{ss.root=+v;renderBlocks();}));
+    const requantizeToScale = ()=>{
+      const al=allowedPitchFor(ss.scale);
+      const p=SL.pitch[0];
+      for(let i=0;i<24;i++) arr[p+i]=nearest(arr[p+i], al);
+      ps[chKey]=int2arr(arr);
+    };
+    row2.appendChild(selectFld("Escala",Object.keys(SCALES).map(s=>[s,s]),ss.scale,v=>{
+      pushUndo(); ss.scale=v; requantizeToScale();
+      renderBlocks(); if(typeof Audio!=="undefined")Audio.refreshAll();
+      toast("Escala: "+v);
+    }));
+    row2.appendChild(selectFld("Tónica",NOTE_NAMES.map((n,i)=>[""+i,n]),ss.root,v=>{
+      pushUndo(); ss.root=+v; requantizeToScale();
+      renderBlocks(); if(typeof Audio!=="undefined")Audio.refreshAll();
+      toast("Tónica: "+NOTE_NAMES[+v]);
+    }));
     const tbMel=document.createElement("div"); tbMel.className="toolbar"; tbMel.style.alignSelf="flex-end";
     const runMel=(type)=>{
       pushUndo();
