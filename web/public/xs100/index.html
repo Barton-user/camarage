@@ -641,6 +641,88 @@ document.getElementById("btnExportSyx").onclick=()=>{
   toast(".syx exportado (memoria actual → TEMPORARY)");
 };
 
+// ============ SAVE / LOAD JSON ============
+function buildSnapshot(){
+  return {
+    format: "xs100-studio",
+    version: 1,
+    savedAt: new Date().toISOString(),
+    name: document.getElementById("seqName").value || "XS100_Sequence",
+    sequencer: {
+      bpm:state.bpm, bars:state.bars, subdiv:state.subdiv, tsig:state.tsig,
+      rngMin:state.rngMin, rngMax:state.rngMax,
+      scale:state.scale, root:state.root,
+      cc:state.cc, ch:state.ch, bits:state.bits,
+      cells:state.cells,
+    },
+    memories: state.memories,
+    curMem: state.curMem,
+  };
+}
+function restoreSnapshot(snap){
+  if(!snap || snap.format!=="xs100-studio"){
+    toast("Archivo no reconocido"); return false;
+  }
+  try{
+    const s=snap.sequencer||{};
+    Object.assign(state, {
+      bpm:s.bpm??120, bars:s.bars??2, subdiv:s.subdiv??16, tsig:s.tsig??4,
+      rngMin:s.rngMin??-12, rngMax:s.rngMax??12,
+      scale:s.scale||"Pentatónica menor", root:s.root??0,
+      cc:s.cc??11, ch:s.ch??1, bits:s.bits??7,
+      cells:s.cells||{},
+    });
+    if(Array.isArray(snap.memories) && snap.memories.length===30){
+      state.memories = snap.memories.map(m=>({
+        name:(m.name||"PATCH").padEnd(16," ").slice(0,16),
+        pshSw:+m.pshSw||0, pshAmt:+m.pshAmt||0,
+        dtnSw:+m.dtnSw||0, dtnAmt:+m.dtnAmt||0,
+        tdnSw:+m.tdnSw||0, tdnAmt:+m.tdnAmt||0,
+      }));
+    }
+    state.curMem = snap.curMem||0;
+    document.getElementById("seqName").value = snap.name || "XS100_Sequence";
+    // Sync all controls
+    document.getElementById("bpm").value=state.bpm;
+    document.getElementById("bars").value=state.bars;
+    document.getElementById("subdiv").value=state.subdiv;
+    document.getElementById("tsig").value=state.tsig;
+    document.getElementById("rngMin").value=state.rngMin;
+    document.getElementById("rngMax").value=state.rngMax;
+    document.getElementById("scaleSel").value=state.scale;
+    document.getElementById("rootSel").value=state.root;
+    document.getElementById("ccNum").value=state.cc;
+    document.getElementById("chSel").value=state.ch;
+    document.getElementById("ccBits").value=state.bits;
+    rebuildRoll();
+    renderMemList(); loadMemFields();
+    return true;
+  }catch(e){ console.error(e); toast("Error al cargar: "+e.message, true); return false; }
+}
+document.getElementById("btnSaveJson").onclick=()=>{
+  const snap=buildSnapshot();
+  const name=(snap.name||"XS100_Sequence").replace(/[^\w\-]/g,"_");
+  const blob=new Blob([JSON.stringify(snap,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=name+".xs100.json";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url); a.remove();},100);
+  toast("Guardado: "+name+".xs100.json");
+};
+document.getElementById("btnLoadJson").onclick=()=>document.getElementById("fileJson").click();
+document.getElementById("fileJson").onchange=e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const snap=JSON.parse(r.result);
+      if(restoreSnapshot(snap)) toast("Cargado: "+(snap.name||f.name));
+    }catch(err){ toast("JSON inválido"); }
+  };
+  r.readAsText(f);
+  e.target.value=""; // allow reloading the same file
+};
+
 // ============ AUDIO PREVIEW (Web Audio simulation) ============
 const Audio=(()=>{
   let ctx=null, osc=null, sub=null, lpf=null, hpf=null, master=null, env=null;
