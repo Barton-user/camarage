@@ -1,0 +1,45 @@
+-- CAMARAGE · INSERT de letras de 'Algo de tiempo'
+-- Transcripción automática Whisper (small, beam=1). 38 líneas.
+-- song_id: 8f02f359-457d-4e6e-8a64-58f3099c1a2a
+
+DELETE FROM lyric_lines WHERE song_id = '8f02f359-457d-4e6e-8a64-58f3099c1a2a';
+
+INSERT INTO lyric_lines (song_id, order_index, start_time_seconds, text) VALUES
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 0, 60.000, 'No me sin palabras me dejaste'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 1, 64.420, 'Y la vez más he concluido una derrota interna'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 2, 69.300, 'Y es complicado aceptar que me empezó a importar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 3, 74.420, 'Y sé que estás enferma y no sos todo para mí'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 4, 79.680, 'Solo te vi en un momento y pensé algo incorrento'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 5, 84.740, 'Yo solo vi una realidad que no está, no estuvo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 6, 89.940, 'y no estará a acabar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 7, 91.940, 'Y aquí hay un aire que me puedo expresar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 8, 96.260, 'Y la vez más lo perdí la llena'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 9, 99.940, 'Pues es solo un error sin el potencial'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 10, 103.940, 'Se lo borró una cura de todo el tiempo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 11, 107.940, 'Y al final llegué a pensar que había algo bueno dentro de ese cuerpo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 12, 115.540, 'Y un error se puede dar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 13, 118.540, 'Dos errores son motivos para hablarte de esto'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 14, 123.040, 'Dime enseños de sonrir'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 15, 126.040, 'Y arreglame en la cara de algunos inentos'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 16, 131.040, 'Yo lo quiero estás conmigo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 17, 134.040, 'Que esté parado fuerte y me sigo con esto'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 18, 138.040, 'Y aquí, ahora que'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 19, 140.000, 'Me puedo expresar que desde el paso perdí la venta'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 20, 145.920, 'Pues es solo un error circunstancial'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 21, 150.080, 'Que la borra una cura de sol de tiempo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 22, 153.520, 'Y aquí ahora que me puedo expresar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 23, 157.680, 'Que desde el paso perdí la venta'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 24, 161.360, 'Pues es solo un error circunstancial'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 25, 165.440, 'Que la borra una cura de sol de tiempo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 26, 225.440, 'Y aquí ahora que me puedo expresar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 27, 229.120, 'Que desde el paso perdí la venta'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 28, 232.720, 'Pues es solo un error circunstancial'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 29, 236.320, 'Que la borra una cura de sol de tiempo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 30, 240.160, 'Y aquí ahora que me puedo expresar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 31, 243.520, 'Que desde el paso perdí la venta'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 32, 247.600, 'Pues es solo un error circunstancial'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 33, 251.760, 'Que la borra una cura de sol de tiempo'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 34, 257.440, 'Y aquí ahora que me puedo expresar'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 35, 261.440, 'Que desde el paso perdí la venta'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 36, 264.880, 'Pues es solo un error circunstancial'),
+  ('8f02f359-457d-4e6e-8a64-58f3099c1a2a', 37, 268.400, 'Que la borra una cura de sol de tiempo');
