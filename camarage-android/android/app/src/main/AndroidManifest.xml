@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
                      android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Necesario para que el celu actúe como periférico BLE MIDI (GATT server + advertising) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
 
     <!-- BLE habilitado pero NO obligatorio -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
