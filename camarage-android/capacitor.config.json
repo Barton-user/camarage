@@ -9,5 +9,8 @@
     "allowMixedContent": false,
     "captureInput": true,
     "webContentsDebuggingEnabled": true
+  },
+  "ios": {
+    "contentInset": "always"
   }
 }
