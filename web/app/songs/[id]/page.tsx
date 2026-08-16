@@ -188,7 +188,12 @@ export default function SongEditor() {
   const [cues, setCues] = useState<any[]>([]);
   const [chords, setChords] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords">("meta");
+  const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio">("meta");
+  // --- Pistas de audio ---
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [audioErr, setAudioErr] = useState<string|null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string|null>(null);
 
   useEffect(() => { if (id) load(); }, [id]);
 
@@ -217,6 +222,96 @@ export default function SongEditor() {
     if (!confirm(`¿Borrar "${song.title}" y todo su contenido?`)) return;
     await supabase.from("songs").delete().eq("id", id);
     router.push("/songs");
+  }
+
+  /* ===================== PISTAS DE AUDIO =====================
+   * El archivo va a Storage en <band_id>/<song_id>.<ext> y la fila de la
+   * canción guarda la ruta. Los dispositivos comparan audio_updated_at
+   * con lo que tienen cacheado para saber si hay que volver a bajarlo.
+   * ========================================================== */
+  const AUDIO_BUCKET = "song-audio";
+  const MAX_BYTES = 50 * 1024 * 1024;   // tope del plan gratis de Supabase
+
+  function fmtBytes(n: number) {
+    if (!n) return "—";
+    return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+  }
+
+  async function uploadAudio(file: File) {
+    if (!song) return;
+    setAudioErr(null);
+
+    if (file.size > MAX_BYTES) {
+      setAudioErr(
+        `El archivo pesa ${fmtBytes(file.size)} y el máximo es 50 MB. ` +
+        `Si es un WAV, exportalo como MP3 320 kbps: suena igual por in-ears y pesa la cuarta parte.`
+      );
+      return;
+    }
+
+    setUploading(true);
+    setUploadPct(0);
+    try {
+      const ext = (file.name.split(".").pop() || "mp3").toLowerCase();
+      const path = `${song.band_id}/${song.id}.${ext}`;
+
+      // Si antes había una pista con otra extensión, sacarla para no dejar basura
+      if (song.audio_path && song.audio_path !== path) {
+        await supabase.storage.from(AUDIO_BUCKET).remove([song.audio_path]);
+      }
+
+      const { error: upErr } = await supabase.storage
+        .from(AUDIO_BUCKET)
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      setUploadPct(100);
+
+      const patch = {
+        audio_path: path,
+        audio_filename: file.name,
+        audio_bytes: file.size,
+        audio_updated_at: new Date().toISOString(),
+      };
+      const { error: dbErr } = await supabase.from("songs").update(patch).eq("id", song.id);
+      if (dbErr) throw dbErr;
+
+      setSong({ ...song, ...patch });
+      setPreviewUrl(null);
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      setAudioErr(
+        /bucket/i.test(msg) && /not found/i.test(msg)
+          ? "No existe el bucket 'song-audio'. Corré migration_audio.sql en el SQL Editor de Supabase."
+          : msg
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeAudio() {
+    if (!song?.audio_path) return;
+    if (!confirm("¿Borrar la pista de esta canción?")) return;
+    setAudioErr(null);
+    try {
+      await supabase.storage.from(AUDIO_BUCKET).remove([song.audio_path]);
+      const patch = { audio_path: null, audio_filename: null, audio_bytes: null, audio_updated_at: null };
+      await supabase.from("songs").update(patch).eq("id", song.id);
+      setSong({ ...song, ...patch });
+      setPreviewUrl(null);
+    } catch (e: any) {
+      setAudioErr(e?.message || String(e));
+    }
+  }
+
+  async function loadPreview() {
+    if (!song?.audio_path) return;
+    setAudioErr(null);
+    const { data, error } = await supabase.storage
+      .from(AUDIO_BUCKET)
+      .createSignedUrl(song.audio_path, 3600);
+    if (error) { setAudioErr(error.message); return; }
+    setPreviewUrl(data?.signedUrl || null);
   }
 
   // ===== LYRICS =====
@@ -502,6 +597,7 @@ export default function SongEditor() {
           { id: "lyrics", label: `Letras (${lyrics.length})` },
           { id: "cues", label: `Cues MIDI (${cues.length})` },
           { id: "chords", label: `Cifrado (${chords.length})` },
+          { id: "audio", label: song.audio_path ? "Audio ●" : "Audio" },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
                   className={`px-4 py-2 text-sm font-bold border-b-2 transition ${
@@ -526,6 +622,88 @@ export default function SongEditor() {
               <label className="label">Notas internas</label>
               <textarea value={song.notes || ""} onChange={e => setSong({...song, notes: e.target.value})} onBlur={saveSong} className="input" rows={3} placeholder="Recordatorios para la banda" />
             </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "audio" && (
+        <div className="card space-y-4 max-w-2xl">
+          <div>
+            <h2 className="text-lg font-black mb-1">Pista de audio</h2>
+            <p className="text-xs text-neutral-400">
+              Subí acá el bounce de la canción. Los celulares y el iPad lo descargan solos
+              la primera vez y después funcionan sin internet.
+            </p>
+          </div>
+
+          {song.audio_path ? (
+            <div className="rounded-lg border border-neutral-800 bg-black/40 p-3 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">{song.audio_filename}</p>
+                  <p className="text-[11px] text-neutral-500 font-mono">
+                    {fmtBytes(song.audio_bytes)}
+                    {song.audio_updated_at && ` · subida ${new Date(song.audio_updated_at).toLocaleDateString("es-AR")}`}
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-1 rounded-full bg-cyan-400/10 text-cyan-300 shrink-0">
+                  ● en la nube
+                </span>
+              </div>
+
+              {previewUrl ? (
+                <audio src={previewUrl} controls className="w-full" />
+              ) : (
+                <button onClick={loadPreview}
+                        className="text-xs font-bold text-cyan-300 hover:text-cyan-200">
+                  ▶ Escuchar
+                </button>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <label className="btn cursor-pointer text-xs">
+                  Reemplazar
+                  <input type="file" accept="audio/*" className="hidden" disabled={uploading}
+                         onChange={e => { const f = e.target.files?.[0]; if (f) uploadAudio(f); e.currentTarget.value = ""; }} />
+                </label>
+                <button onClick={removeAudio} disabled={uploading}
+                        className="btn text-xs text-red-400 hover:text-red-300">
+                  Borrar pista
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label className={`block rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition ${
+              uploading ? "border-neutral-800 opacity-60" : "border-neutral-700 hover:border-cyan-400"
+            }`}>
+              <p className="text-sm font-bold mb-1">
+                {uploading ? "Subiendo…" : "Elegí el archivo de audio"}
+              </p>
+              <p className="text-[11px] text-neutral-500">
+                MP3, M4A, AAC, WAV u OGG · hasta 50 MB
+              </p>
+              <input type="file" accept="audio/*" className="hidden" disabled={uploading}
+                     onChange={e => { const f = e.target.files?.[0]; if (f) uploadAudio(f); e.currentTarget.value = ""; }} />
+            </label>
+          )}
+
+          {uploading && (
+            <div className="h-1.5 rounded-full bg-neutral-900 overflow-hidden">
+              <div className="h-full bg-cyan-400 transition-all"
+                   style={{ width: `${uploadPct || 15}%` }} />
+            </div>
+          )}
+
+          {audioErr && (
+            <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3">
+              {audioErr}
+            </p>
+          )}
+
+          <div className="text-[11px] text-neutral-500 space-y-1 pt-2 border-t border-neutral-900">
+            <p><strong className="text-neutral-300">Formato recomendado:</strong> MP3 320 kbps. Un WAV de más de 5 minutos no entra en el límite de 50 MB.</p>
+            <p><strong className="text-neutral-300">Ojo con el arranque:</strong> si el bounce tiene silencio antes del compás 1, la letra va a ir adelantada esa misma cantidad. Exportá desde el compás 1 exacto.</p>
+            <p><strong className="text-neutral-300">Click:</strong> no hace falta que lo incluyas. La app lo genera con el BPM de la canción y lo manda al canal derecho.</p>
           </div>
         </div>
       )}
