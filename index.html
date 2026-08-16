@@ -589,7 +589,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
                          border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.08)] active:bg-[rgba(239,68,68,0.18)]"
                   style="color: var(--accent-red);">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-            STOP
+            <span id="stopLabel">STOP</span>
           </button>
           <button id="playBtn"
                   class="btn-stage col-span-5 h-16 rounded-2xl flex items-center justify-center gap-2 font-black uppercase
@@ -871,7 +871,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <div>
             <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Editor</p>
             <h2 class="text-xl font-black" id="editorSetlistName">Setlist · Vivo Niceto</h2>
+            <p class="mono text-[10px] text-neutral-500 mt-0.5" id="setlistTotals">—</p>
           </div>
+          <button id="resetShowBtn"
+                  class="btn-stage rounded-xl px-2.5 py-2 mono text-[10px] uppercase tracking-wider mr-1.5"
+                  title="Marcar todas como no tocadas">↺ Show</button>
           <button id="addSongBtn"
                   class="btn-stage rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wider"
                   style="background: var(--accent-cyan); color: #000;">+ Canción</button>
@@ -1362,9 +1366,15 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   function checkAutoAdvance(sec){
     if (!state.isPlaying) return;
     const song = currentSong();
-    // Estimar duración: explícita en song.duration, o último lyric + 8s
+    // Si la canción encadena con la siguiente, no hay cuenta regresiva: el salto
+    // lo dispara onTrackEnded() en el instante exacto en que termina el audio.
+    if (song && song.chainNext) return;
+    // Duración: la real de la pista si está cargada, si no la del campo de la
+    // base, y como último recurso el tiempo de la última letra + 8s.
     const lastLyric = song.lyrics?.[song.lyrics.length-1];
-    const estDuration = song.duration || (lastLyric ? lastLyric.t + 8 : 9999);
+    const realDur = (typeof TRACKS !== 'undefined' && TRACKS && TRACKS.isMaster())
+      ? TRACKS.durationSec() : 0;
+    const estDuration = realDur || song.duration || (lastLyric ? lastLyric.t + 8 : 9999);
     const secondsLeft = estDuration - sec;
     const overlay = document.getElementById('autoAdvanceOverlay');
     if (!overlay) return;
@@ -2002,11 +2012,30 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       st.source = null;
     }
     function onTrackEnded(){
+      const song = currentSong();
       logMidi('■ Pista terminada', [], 'var(--accent-cyan)');
       pause();
       st.pausedAt = 0;
       state.pausedElapsed = 0;
       renderBar();
+      // Queda marcada como tocada en el setlist
+      try { markPlayed(song); } catch(e){}
+      // Encadenado: si esta canción está marcada para seguir de largo, cargamos
+      // la próxima y arranca sola. Si no, no hacemos nada — la cuenta regresiva
+      // de checkAutoAdvance ya dejó la siguiente lista esperando el PLAY.
+      if (song && song.chainNext && setlist.currentSongIdx < setlist.songs.length - 1){
+        const nextIdx = setlist.currentSongIdx + 1;
+        logMidi(`⛓ Encadena · ${setlist.songs[nextIdx].title}`, [], 'var(--accent-purple)');
+        nextSong();
+        // Esperar a que la pista de la próxima esté decodificada antes de arrancar
+        const arrancar = (intentos) => {
+          if (st.buffer){ play(0); return; }
+          if (intentos <= 0){ logMidi('✗ La próxima no tenía pista lista', [], 'var(--accent-yellow)'); return; }
+          setTimeout(() => arrancar(intentos - 1), 200);
+        };
+        setTimeout(() => arrancar(40), 200);   // hasta 8s de margen para decodificar
+      }
+      try { renderSetlistEditor(); } catch(e){}
     }
 
     /* ---------- Carga de archivos ---------- */
@@ -2374,14 +2403,62 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     });
   }
 
+  /* ---------- PROTECCIÓN DE DOBLE TOQUE ----------
+   * Cortar la música delante de la gente por un roce con el pulgar es el peor
+   * accidente posible en escenario. Todo lo que INTERRUMPE (pausa y stop) pide
+   * dos toques dentro de 2 segundos; arrancar sigue siendo un toque solo,
+   * porque ahí querés velocidad y equivocarse no cuesta nada.
+   * =================================================================== */
+  const CONFIRM_MS = 2000;
+  let _confirmPending = null;   // 'pause' | 'stop'
+  let _confirmTimer = null;
+
+  function needsConfirm(accion, botones){
+    if (_confirmPending === accion) {          // segundo toque: pasa
+      clearTimeout(_confirmTimer);
+      _confirmPending = null;
+      pintarConfirm(botones, false);
+      return false;
+    }
+    _confirmPending = accion;                   // primer toque: arma y avisa
+    pintarConfirm(botones, true);
+    clearTimeout(_confirmTimer);
+    _confirmTimer = setTimeout(() => {
+      _confirmPending = null;
+      pintarConfirm(botones, false);
+    }, CONFIRM_MS);
+    return true;
+  }
+  function pintarConfirm(ids, on){
+    ids.forEach(id => {
+      const e = document.getElementById(id); if (!e) return;
+      e.classList.toggle('blink', on);
+      e.style.outline = on ? '2px solid var(--accent-yellow)' : '';
+      e.style.outlineOffset = on ? '2px' : '';
+    });
+    ['playLabel','drumPlayLabel'].forEach(id => {
+      const e = document.getElementById(id); if (!e) return;
+      if (on && _confirmPending === 'pause') e.textContent = '¿SEGURO?';
+      else if (!on) updateTransportUI();
+    });
+    const st = document.getElementById('stopLabel');
+    if (st) st.textContent = (on && _confirmPending === 'stop') ? '¿SEGURO?' : 'STOP';
+  }
+
   function setPlay(){
     // MODO PISTAS: el botón maneja el audio, y el audio arrastra a todo lo demás.
     if (TRACKS && TRACKS.isEnabled() && TRACKS.hasTrack()){
-      if (TRACKS.isPlaying()) TRACKS.pause();
-      else TRACKS.play();
+      if (TRACKS.isPlaying()){
+        if (needsConfirm('pause', ['playBtn','drumPlayBtn'])) return;
+        TRACKS.pause();
+      } else {
+        TRACKS.play();
+      }
       updateTransportUI();
       return;
     }
+    // Modo MIDI: misma protección al pausar
+    if (state.isPlaying && needsConfirm('pause', ['playBtn','drumPlayBtn'])) return;
     if (state.isPlaying){
       state.pausedElapsed += performance.now() - state.startedAt;
       state.isPlaying = false;
@@ -2395,7 +2472,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
     updateTransportUI();
   }
-  function setStop(){
+  /* fromUser: solo los toques del músico piden confirmación. Las llamadas
+     internas (cargar otra canción, Stop entrante por MIDI) pasan de largo —
+     si no, loadSong() se quedaría esperando un segundo toque que nunca llega. */
+  function setStop(fromUser){
+    // Solo pide confirmación si hay algo sonando. Con la música parada, STOP es
+    // inofensivo (resetea la posición) y no tiene sentido molestar.
+    if (fromUser === true && state.isPlaying && needsConfirm('stop', ['stopBtn','drumStopBtn'])) return;
     if (TRACKS && TRACKS.isEnabled()) TRACKS.stop();
     state.isPlaying = false;
     state.pausedElapsed = 0;
@@ -2427,12 +2510,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
   // Wiring de los botones del CANTANTE
   playBtn.addEventListener('click', setPlay);
-  stopBtn.addEventListener('click', setStop);
+  stopBtn.addEventListener('click', () => setStop(true));
   metroBtn.addEventListener('click', toggleMetronome);
 
   // Wiring de los botones del BATERISTA (apuntan a las mismas funciones — clock compartido)
   document.getElementById('drumPlayBtn').addEventListener('click', setPlay);
-  document.getElementById('drumStopBtn').addEventListener('click', setStop);
+  document.getElementById('drumStopBtn').addEventListener('click', () => setStop(true));
   document.getElementById('drumMetroBtn').addEventListener('click', toggleMetronome);
 
   // Wiring de los botones de SETLIST NAV (cantante + baterista)
@@ -2512,14 +2595,62 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   const setlistListEl = document.getElementById('setlistList');
   let editingIdx = 0;
 
+  /* ---------- Estado de cada canción durante el show ----------
+   * TOCADA  · ya sonó en este show
+   * SONANDO · es la que está cargada ahora
+   * PRÓXIMA · la que sigue
+   * Se lee de un vistazo en un escenario oscuro, que es todo el punto.   */
+  const playedSongs = new Set();
+  function markPlayed(song){ if (song) playedSongs.add(String(song.id || song.title)); }
+  function isPlayed(song){ return song && playedSongs.has(String(song.id || song.title)); }
+  function resetShow(){ playedSongs.clear(); renderSetlistEditor(); }
+
+  function songStatus(i){
+    const s = setlist.songs[i];
+    if (i === setlist.currentSongIdx) return { txt:'SONANDO', color:'var(--accent-green)', bg:'rgba(34,197,94,0.12)' };
+    if (i === setlist.currentSongIdx + 1) return { txt:'PRÓXIMA', color:'var(--accent-cyan)', bg:'rgba(34,211,238,0.10)' };
+    if (isPlayed(s)) return { txt:'TOCADA', color:'#71717a', bg:'rgba(113,113,122,0.10)' };
+    return null;
+  }
+
+  function fmtDur(sec){
+    if (!sec || !isFinite(sec)) return null;
+    const m = Math.floor(sec/60), s = Math.round(sec%60);
+    return m + ':' + String(s).padStart(2,'0');
+  }
+  /* Duración total del show, sumando las canciones que tienen pista. */
+  function showTotals(){
+    let total = 0, con = 0;
+    setlist.songs.forEach(s => { if (s.duration){ total += s.duration; con++; } });
+    return { total, con, sin: setlist.songs.length - con };
+  }
+
   function renderSetlistEditor(){
     document.getElementById('editorSetlistName').textContent = setlist.name;
-    setlistListEl.innerHTML = setlist.songs.map((s,i) => `
-      <div class="rounded-xl border ${i===editingIdx?'border-cyan-400/60':'border-neutral-800'} bg-[var(--bg-card)] p-3 flex items-center gap-3" data-idx="${i}">
+    // Cabecera con el total del show
+    const tot = showTotals();
+    const totEl = document.getElementById('setlistTotals');
+    if (totEl){
+      const h = Math.floor(tot.total/3600), m = Math.round((tot.total%3600)/60);
+      totEl.innerHTML = tot.con
+        ? `<span class="text-white font-bold">${h ? h+'h '+m+'m' : m+' min'}</span> de show`
+          + ` · ${tot.con}/${setlist.songs.length} con pista`
+          + (tot.sin ? ` · <span style="color:var(--accent-yellow)">${tot.sin} sin audio</span>` : '')
+        : `${setlist.songs.length} canciones · ninguna tiene pista todavía`;
+    }
+    setlistListEl.innerHTML = setlist.songs.map((s,i) => {
+      const st = songStatus(i);
+      const dur = fmtDur(s.duration);
+      return `
+      <div class="rounded-xl border ${i===editingIdx?'border-cyan-400/60':'border-neutral-800'} bg-[var(--bg-card)] p-3 flex items-center gap-3 ${isPlayed(s)&&i!==setlist.currentSongIdx?'opacity-60':''}" data-idx="${i}">
         <span class="mono text-xs text-neutral-500 w-6">${String(i+1).padStart(2,'0')}</span>
         <div class="flex-1 min-w-0">
-          <p class="font-bold truncate">${s.title}</p>
-          <p class="mono text-[10px] text-neutral-500">${s.key} · ${s.bpm} BPM · ${s.timeSig} · PC#${String(s.programChange).padStart(2,'0')}</p>
+          <div class="flex items-center gap-2">
+            <p class="font-bold truncate">${s.title}</p>
+            ${st ? `<span class="mono text-[9px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style="color:${st.color}; background:${st.bg};">${st.txt}</span>` : ''}
+            ${s.chainNext ? `<span class="mono text-[9px] flex-shrink-0" style="color:var(--accent-purple);" title="Encadena con la siguiente">⛓</span>` : ''}
+          </div>
+          <p class="mono text-[10px] text-neutral-500">${s.key} · ${s.bpm} BPM · ${s.timeSig} · PC#${String(s.programChange).padStart(2,'0')}${dur ? ` · <span class="text-neutral-400">${dur}</span>` : (s.audioPath ? '' : ' · <span style="color:var(--accent-yellow)">sin pista</span>')}</p>
         </div>
         <div class="flex items-center gap-1">
           <button class="rs-up p-2 rounded-md hover:bg-neutral-900" aria-label="Subir">↑</button>
@@ -2529,7 +2660,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <button class="rs-del p-2 rounded-md hover:bg-neutral-900 text-neutral-500" aria-label="Eliminar">×</button>
         </div>
       </div>
-    `).join('');
+    `;}).join('');
 
     // Wire buttons
     setlistListEl.querySelectorAll('[data-idx]').forEach(row => {
@@ -2655,6 +2786,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     setTimeout(()=>btn.textContent=txt, 1200);
   });
 
+  // Reiniciar el show: borra las marcas de "tocada" para arrancar una lista limpia
+  const _resetShowBtn = document.getElementById('resetShowBtn');
+  if (_resetShowBtn) _resetShowBtn.addEventListener('click', () => {
+    resetShow();
+    logMidi('↺ Show reiniciado — ninguna canción marcada como tocada', [], 'var(--accent-cyan)');
+  });
+
   document.getElementById('addSongBtn').addEventListener('click', () => {
     setlist.songs.push({
       id: 's'+(setlist.songs.length+1),
@@ -2675,7 +2813,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
     if (e.code === 'Space') { e.preventDefault(); setPlay(); }
-    if (e.code === 'KeyS') setStop();
+    if (e.code === 'KeyS') setStop(true);
     if (e.code === 'KeyM') metroBtn.click();
     if (e.code === 'Digit1') switchView('viewSinger');
     if (e.code === 'Digit2') switchView('viewBassist');
@@ -3989,6 +4127,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           audioName: s.audio_filename || null,
           audioBytes: s.audio_bytes || null,
           audioUpdatedAt: s.audio_updated_at || null,
+          // Duración de la pista (para el setlist y el auto-avance) y si esta
+          // canción encadena con la siguiente sin esperar el PLAY.
+          duration: s.audio_duration_seconds ? parseFloat(s.audio_duration_seconds) : null,
+          chainNext: !!s.chain_next,
           // IMPORTANTE: ordenar letras por tiempo (no por order_index).
           // Sin esto, el lyric scroll falla si las letras se agregaron
           // fuera de orden cronológico en el web admin.

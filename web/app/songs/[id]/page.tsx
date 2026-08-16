@@ -230,11 +230,36 @@ export default function SongEditor() {
    * con lo que tienen cacheado para saber si hay que volver a bajarlo.
    * ========================================================== */
   const AUDIO_BUCKET = "song-audio";
-  const MAX_BYTES = 50 * 1024 * 1024;   // tope del plan gratis de Supabase
+  // 200 MB. Tiene que coincidir con el file_size_limit del bucket Y con el
+  // "Upload file size limit" global en Settings → Storage: manda el más chico
+  // de los tres. Si subís este número, subí también los otros dos.
+  const MAX_MB = 200;
+  const MAX_BYTES = MAX_MB * 1024 * 1024;
 
   function fmtBytes(n: number) {
     if (!n) return "—";
     return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+  }
+  function fmtDur(sec: number | null) {
+    if (!sec || !isFinite(sec)) return "—";
+    return Math.floor(sec / 60) + ":" + String(Math.round(sec % 60)).padStart(2, "0");
+  }
+
+  /* Medir la duración del archivo antes de subirlo. El navegador la saca del
+     header sin decodificar todo, así que es instantáneo incluso con un WAV
+     de 100 MB. Con esto el setlist puede mostrar la duración de cada tema y
+     el total del show sin que Pato cargue nada a mano. */
+  function readDuration(file: File): Promise<number | null> {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file);
+      const el = document.createElement("audio");
+      const done = (v: number | null) => { URL.revokeObjectURL(url); resolve(v); };
+      el.preload = "metadata";
+      el.onloadedmetadata = () => done(isFinite(el.duration) ? el.duration : null);
+      el.onerror = () => done(null);
+      setTimeout(() => done(null), 8000);   // si el formato no lo soporta, seguimos igual
+      el.src = url;
+    });
   }
 
   async function uploadAudio(file: File) {
@@ -243,8 +268,8 @@ export default function SongEditor() {
 
     if (file.size > MAX_BYTES) {
       setAudioErr(
-        `El archivo pesa ${fmtBytes(file.size)} y el máximo es 50 MB. ` +
-        `Si es un WAV, exportalo como MP3 320 kbps: suena igual por in-ears y pesa la cuarta parte.`
+        `El archivo pesa ${fmtBytes(file.size)} y el máximo es ${MAX_MB} MB. ` +
+        `Para un tema así de largo conviene MP3 320 kbps.`
       );
       return;
     }
@@ -252,6 +277,7 @@ export default function SongEditor() {
     setUploading(true);
     setUploadPct(0);
     try {
+      const duracion = await readDuration(file);
       const ext = (file.name.split(".").pop() || "mp3").toLowerCase();
       const path = `${song.band_id}/${song.id}.${ext}`;
 
@@ -271,6 +297,7 @@ export default function SongEditor() {
         audio_filename: file.name,
         audio_bytes: file.size,
         audio_updated_at: new Date().toISOString(),
+        audio_duration_seconds: duracion,
       };
       const { error: dbErr } = await supabase.from("songs").update(patch).eq("id", song.id);
       if (dbErr) throw dbErr;
@@ -295,7 +322,7 @@ export default function SongEditor() {
     setAudioErr(null);
     try {
       await supabase.storage.from(AUDIO_BUCKET).remove([song.audio_path]);
-      const patch = { audio_path: null, audio_filename: null, audio_bytes: null, audio_updated_at: null };
+      const patch = { audio_path: null, audio_filename: null, audio_bytes: null, audio_updated_at: null, audio_duration_seconds: null };
       await supabase.from("songs").update(patch).eq("id", song.id);
       setSong({ ...song, ...patch });
       setPreviewUrl(null);
@@ -619,6 +646,25 @@ export default function SongEditor() {
               <p className="text-[10px] text-neutral-500 mt-1">Logic manda este PC para cargar esta canción en el celu.</p>
             </div>
             <div className="col-span-2">
+              <label className="flex items-start gap-3 rounded-lg border border-neutral-800 p-3 cursor-pointer hover:border-neutral-700">
+                <input type="checkbox" className="mt-0.5"
+                       checked={!!song.chain_next}
+                       onChange={async e => {
+                         const v = e.target.checked;
+                         setSong({ ...song, chain_next: v });
+                         await supabase.from("songs").update({ chain_next: v }).eq("id", id);
+                       }} />
+                <span>
+                  <span className="block text-sm font-bold">Encadenar con la siguiente</span>
+                  <span className="block text-[11px] text-neutral-500 mt-0.5">
+                    Al terminar esta canción, la próxima arranca sola y sin cuenta regresiva.
+                    Para medleys o bloques seguidos. Si está apagado, la app cuenta 5 segundos,
+                    deja la próxima cargada y espera tu PLAY.
+                  </span>
+                </span>
+              </label>
+            </div>
+            <div className="col-span-2">
               <label className="label">Notas internas</label>
               <textarea value={song.notes || ""} onChange={e => setSong({...song, notes: e.target.value})} onBlur={saveSong} className="input" rows={3} placeholder="Recordatorios para la banda" />
             </div>
@@ -642,7 +688,7 @@ export default function SongEditor() {
                 <div className="min-w-0">
                   <p className="text-sm font-bold truncate">{song.audio_filename}</p>
                   <p className="text-[11px] text-neutral-500 font-mono">
-                    {fmtBytes(song.audio_bytes)}
+                    {fmtDur(song.audio_duration_seconds)} · {fmtBytes(song.audio_bytes)}
                     {song.audio_updated_at && ` · subida ${new Date(song.audio_updated_at).toLocaleDateString("es-AR")}`}
                   </p>
                 </div>
@@ -680,7 +726,7 @@ export default function SongEditor() {
                 {uploading ? "Subiendo…" : "Elegí el archivo de audio"}
               </p>
               <p className="text-[11px] text-neutral-500">
-                MP3, M4A, AAC, WAV u OGG · hasta 50 MB
+                MP3, M4A, AAC, WAV u OGG · hasta {MAX_MB} MB
               </p>
               <input type="file" accept="audio/*" className="hidden" disabled={uploading}
                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadAudio(f); e.currentTarget.value = ""; }} />
@@ -701,7 +747,7 @@ export default function SongEditor() {
           )}
 
           <div className="text-[11px] text-neutral-500 space-y-1 pt-2 border-t border-neutral-900">
-            <p><strong className="text-neutral-300">Formato recomendado:</strong> MP3 320 kbps. Un WAV de más de 5 minutos no entra en el límite de 50 MB.</p>
+            <p><strong className="text-neutral-300">WAV o MP3:</strong> los dos andan. El WAV suena idéntico al bounce, pero un tema de 5 minutos pesa ~53 MB contra ~12 del MP3 320: tarda cuatro veces más en bajar al celu y ocupa más memoria al reproducirlo. Si vas a tocar con mal WiFi, MP3.</p>
             <p><strong className="text-neutral-300">Ojo con el arranque:</strong> si el bounce tiene silencio antes del compás 1, la letra va a ir adelantada esa misma cantidad. Exportá desde el compás 1 exacto.</p>
             <p><strong className="text-neutral-300">Click:</strong> no hace falta que lo incluyas. La app lo genera con el BPM de la canción y lo manda al canal derecho.</p>
           </div>
