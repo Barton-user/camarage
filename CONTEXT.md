@@ -246,6 +246,116 @@ Instalar sin perder datos: `adb install -r CAMARAGE-pistas-debug.apk`
 | `IDEAS_STAGE_TRAXX.md` | Qué copiarle a Stage Traxx 4, ordenado por valor/esfuerzo |
 
 ---
+
+# 8 · Notas operativas (cosas que hicieron perder tiempo)
+
+### El APK SÍ se puede compilar en la nube
+El archivo histórico dice que no se puede por falta de espacio. **Eso quedó
+desactualizado**: en la sesión del 17 ago se compiló entero en el contenedor de
+Cowork. La receta, si hace falta repetirla:
+
+```bash
+# JDK 17 (Gradle 8.2 no corre sobre JDK 21)
+curl -sL -o jdk17.tar.gz "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse"
+mkdir -p /opt/jdk17 && tar xzf jdk17.tar.gz -C /opt/jdk17 --strip-components=1
+
+# SDK de Android
+curl -sL -o cmdtools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+# descomprimir en /opt/android-sdk/cmdline-tools/latest, aceptar licencias, y:
+sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+export JAVA_HOME=/opt/jdk17 ANDROID_HOME=/opt/android-sdk
+# NO borrar JAVA_TOOL_OPTIONS: trae el truststore del proxy y sin eso Gradle
+# no puede bajar nada (falla con "PKIX path building failed")
+```
+
+**Ojo importante:** el código nativo (`MidiPeripheralPlugin.java`, el
+`MainActivity.java` con keep-screen-on) estuvo mucho tiempo **sin commitear**. Si
+se compila clonando desde GitHub sin verificar, sale un APK **sin el plugin MIDI**.
+Verificar siempre que esos archivos estén en el árbol antes de compilar.
+
+### Un APK compilado en otra máquina tiene otra firma
+El debug keystore es distinto por máquina, así que Android **rechaza instalar
+encima**. Hay que desinstalar primero — y **eso borra el localStorage**: se pierde
+la sesión de Supabase, la caché de canciones y **los audios cacheados en IndexedDB**.
+Después hay que re-loguear, sincronizar y volver a bajar las pistas.
+
+Los APK compilados en la misma máquina se instalan con `adb install -r` sin perder
+nada. Conviene compilar siempre desde el mismo lugar.
+
+### adb con el Samsung
+Si `adb devices` dice `unauthorized`, en orden:
+1. Desbloquear el teléfono y aceptar el cartel (no aparece con la pantalla bloqueada).
+2. Ajustes → Seguridad y privacidad → **Bloqueador automático** desactivado (bloquea
+   las conexiones USB de datos y es la causa número uno).
+3. Opciones de desarrollador → **Revocar autorizaciones de depuración USB**.
+4. En la Mac: `adb kill-server && rm -f ~/.android/adbkey*` para forzar un cartel nuevo.
+
+### La terminal de Pato no acepta comentarios
+Su zsh tiene `interactive_comments` desactivado: **cualquier bloque de comandos con
+líneas que empiezan con `#` falla** con `parse error`. Pasarle comandos sin
+comentarios. Se arregla de raíz con:
+```bash
+echo 'setopt interactive_comments' >> ~/.zshrc
+```
+
+---
+
+# 9 · De dónde salen los tiempos de las letras (importante)
+
+Las letras **no** se cronometraron a mano: salieron de **transcribir los MP3 con
+Whisper**, y cada línea tiene el segundo exacto en que suena *dentro de ese archivo*.
+Se ve en los `insert_*_lyrics.sql` del repo — por ejemplo la primera línea de
+"Cuando despierte" entra a los 30,000 s porque el tema tiene 30 segundos de intro.
+
+**La consecuencia práctica:** los tiempos están atados a esos MP3 puntuales. Si se
+re-bouncean los temas y el nuevo archivo arranca en otro punto —aunque sea medio
+segundo— **se desincronizan todas las letras de ese tema**.
+
+Por eso el offset por canción (§4) importa más de lo que parece: convierte un
+re-bounce corrido en un solo número a ajustar, en vez de retocar 39 líneas a mano.
+
+**Regla al bouncear:** siempre desde el primer sonido del tema, sin silencio ni
+cuenta de baqueta adelante, y siempre igual.
+
+---
+
+# 10 · Llevar el MIDI de efectos de Logic a la app
+
+Procedimiento:
+
+1. En Logic, seleccionar la región MIDI de efectos de la canción.
+2. `Archivo → Exportar → Selección como archivo MIDI` (o arrastrar la región al Finder).
+3. Web admin → la canción → solapa **MIDI out** → subir el `.mid`.
+4. Antes de guardar muestra la lista de eventos con su tiempo: **revisar el tiempo
+   del primer evento**. Si arranca cerca de 0:00, la región estaba bien puesta en el
+   compás 1. Si aparece en 2:30, hay que moverla al compás 1 y exportar de nuevo.
+5. Elegir el destino: `master` (lo dispara quien reproduce, precisión de ms) o el rol
+   de un integrante (lo dispara su dispositivo, al equipo que tiene al lado).
+
+Vale la misma regla del punto cero que las letras: el `.mid` tiene que estar referido
+al mismo instante que el bounce de audio.
+
+---
+
+# 11 · Credenciales
+
+- Supabase: proyecto `ccytqubmroxjaiwtzsfh`, plan **Pro**. La anon key está
+  hardcodeada en `index.html` y en las env vars de Vercel.
+- Login de la app: `keogan3d@gmail.com`. **La contraseña se cambió el 17 ago 2026.**
+  No queda escrita acá a propósito. Para cambiarla de nuevo, SQL Editor de Supabase:
+  ```sql
+  update auth.users
+  set encrypted_password = crypt('LA_NUEVA', gen_salt('bf'))
+  where email = 'keogan3d@gmail.com';
+  ```
+  Las contraseñas se guardan hasheadas: no se pueden leer desde el dashboard ni
+  desde ningún lado.
+- GitHub: `https://github.com/Barton-user/camarage`, branch `main`.
+- Vercel: proyecto `camarage`, root directory `web`.
+
+
+---
 ---
 
 # ══════════ ARCHIVO HISTÓRICO ══════════
