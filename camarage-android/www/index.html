@@ -434,13 +434,17 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             cifrado siguen al audio, sin depender de Logic.
           </p>
 
-          <p class="mono text-[9px] uppercase tracking-widest text-neutral-600 mb-1.5">Ruteo de salida</p>
-          <div class="grid grid-cols-3 gap-1.5 mb-3">
-            <button data-route="split"  class="ms_routeBtn mono text-[9px] leading-tight py-2 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-400">L música<br/>R click</button>
-            <button data-route="baked"  class="ms_routeBtn mono text-[9px] leading-tight py-2 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-400">archivo<br/>ya splitea</button>
-            <button data-route="stereo" class="ms_routeBtn mono text-[9px] leading-tight py-2 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-400">estéreo<br/>mezclado</button>
+          <div class="rounded-lg border border-neutral-800 bg-black/40 p-2.5 mb-3">
+            <p class="mono text-[9px] uppercase tracking-widest text-neutral-600 mb-1">Salida</p>
+            <p class="text-[11px] text-neutral-300 leading-snug">
+              El archivo sale <strong>tal cual</strong>, sin que la app toque los canales.
+              La separación de secuencias y click viene del bounce.
+            </p>
+            <p class="text-[10px] text-neutral-500 mt-1.5 leading-snug">
+              El metrónomo de la app (botón <span class="text-white">METRO</span>) se suma
+              <strong>encima, en los dos canales</strong>. Para ensayo. En vivo va apagado.
+            </p>
           </div>
-          <p id="ms_routeHelp" class="text-[10px] text-neutral-500 mb-3"></p>
 
           <div class="flex items-center justify-between mb-1">
             <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Volumen pista</p>
@@ -1779,16 +1783,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const DB_NAME = 'camarage_audio', DB_VER = 1, STORE = 'tracks';
     const LS = {
       on: 'camarage_tracks_enabled',
-      route: 'camarage_track_route',
       countIn: 'camarage_countin_bars',
       vol: 'camarage_track_vol',
     };
 
     const st = {
       enabled:    localStorage.getItem(LS.on) === '1',
-      route:      localStorage.getItem(LS.route) || 'split',
       countInBars: parseInt(localStorage.getItem(LS.countIn) || '0', 10),
-      vol:        parseFloat(localStorage.getItem(LS.vol) || '0.9'),
+      vol:        parseFloat(localStorage.getItem(LS.vol) || '1'),
       buffer: null,        // AudioBuffer decodificado de la canción actual
       fileName: null,
       songKey: null,
@@ -1854,44 +1856,38 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       return String(song.id || song.title || 'sin-titulo');
     }
 
-    /* ---------- Grafo de audio ---------- */
+    /* ---------- Grafo de audio ----------
+     * REGLA FIJA DEL MODO 2: el archivo pasa INTACTO.
+     *
+     * La separación de secuencias y click viene del bounce, no del código. Es una
+     * decisión de seguridad: lo que ya está impreso en el archivo no se puede
+     * desincronizar ni se rompe por una configuración mal puesta. La app no toca
+     * los canales, no baja nada a mono, no panea.
+     *
+     *   archivo ──────────────▶ master ──▶ salida   (estéreo tal cual)
+     *   click de la app ──────▶ master ──▶ salida   (centrado = los dos canales)
+     *
+     * El click de la app es un AGREGADO opcional para ensayo, controlado por el
+     * botón METRO. Suma encima, en ambos canales. En vivo va apagado y el único
+     * click es el del archivo.
+     * ------------------------------------------------------------------- */
     function buildGraph(){
-      ensureAudio();                       // crea audioCtx + metroGain (click del metrónomo)
+      ensureAudio();
       if (st.master) return;
       st.master = audioCtx.createGain();
       st.master.gain.value = st.vol;
-      st.merger = audioCtx.createChannelMerger(2);
       st.clickBus = audioCtx.createGain();
-      st.clickBus.gain.value = 1;
-      st.merger.connect(st.master);
+      st.clickBus.gain.value = state.mixer.click;   // lo maneja el fader Click del mixer
       st.master.connect(audioCtx.destination);
-      wireRoute();
-    }
-
-    /* Reconecta el click según el ruteo elegido. La fuente se reconecta en cada play. */
-    function wireRoute(){
-      if (!st.clickBus) return;
-      try { st.clickBus.disconnect(); } catch(e){}
-      if (st.route === 'split'){
-        st.clickBus.connect(st.merger, 0, 1);   // click SOLO al canal derecho
-      } else if (st.route === 'stereo'){
-        st.clickBus.connect(st.merger, 0, 0);
-        st.clickBus.connect(st.merger, 0, 1);
-      }
-      // 'baked': el click de la app queda desconectado (viene dentro del archivo)
+      st.clickBus.connect(st.master);               // centrado → suena en L y R
     }
 
     function connectSource(src){
-      if (st.route === 'split'){
-        src.connect(st.merger, 0, 0);   // input mono del merger = downmix automático a mono
-      } else {
-        src.connect(st.master);         // 'baked' y 'stereo' pasan el estéreo intacto
-      }
+      src.connect(st.master);   // sin tocar nada: los canales del archivo mandan
     }
 
     /* ---------- Click propio, agendado sobre el reloj del audio ---------- */
     function clickAt(when, accent){
-      if (st.route === 'baked') return;     // el archivo ya lo trae
       const osc = audioCtx.createOscillator();
       const env = audioCtx.createGain();
       osc.type = 'square';
@@ -2306,18 +2302,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         t.style.background = st.enabled ? 'var(--accent-green)' : '';
         t.style.color = st.enabled ? '#000' : '';
       }
-      document.querySelectorAll('.ms_routeBtn').forEach(b => {
-        const on = b.dataset.route === st.route;
-        b.style.borderColor = on ? 'var(--accent-cyan)' : '';
-        b.style.color = on ? 'var(--accent-cyan)' : '';
-        b.style.background = on ? 'rgba(34,211,238,0.08)' : '';
-      });
-      const help = $('ms_routeHelp');
-      if (help) help.textContent = ({
-        split:  'Cable Y en la salida del iPad: la punta izquierda va a la consola, la derecha a tus in-ears.',
-        baked:  'El archivo ya trae el click en el canal derecho. La app no genera click propio.',
-        stereo: 'Todo mezclado en ambos canales. Para ensayar con auriculares comunes.',
-      })[st.route] || '';
       if ($('ms_trkVolVal'))  $('ms_trkVolVal').textContent = Math.round(st.vol*100) + '%';
       if ($('ms_trkVolRange')) $('ms_trkVolRange').value = Math.round(st.vol*100);
       if ($('ms_countInVal')) $('ms_countInVal').textContent = st.countInBars === 0 ? 'sin cuenta' : st.countInBars + (st.countInBars===1?' compás':' compases');
@@ -2344,14 +2328,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       else loadForCurrentSong();
       renderBar(); renderSettings();
     }
-    function setRoute(r){
-      st.route = r;
-      localStorage.setItem(LS.route, r);
-      if (st.master){ wireRoute(); }
-      // Reconectar la fuente en vivo requiere reiniciar desde la posición actual
-      if (st.playing) play(positionSec());
-      renderSettings();
-    }
+    /* El fader Click del mixer también manda sobre el click de Modo Pistas. */
+    function setClickVol(v){ if (st.clickBus) st.clickBus.gain.value = v; }
     function setVol(v){
       st.vol = v; localStorage.setItem(LS.vol, String(v));
       if (st.master) st.master.gain.value = v;
@@ -2394,7 +2372,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         }
       });
       if ($('ms_tracksToggle')) $('ms_tracksToggle').addEventListener('click', () => setEnabled(!st.enabled));
-      document.querySelectorAll('.ms_routeBtn').forEach(b => b.addEventListener('click', () => setRoute(b.dataset.route)));
       const vr = $('ms_trkVolRange');
       if (vr) vr.addEventListener('input', () => setVol(parseInt(vr.value,10)/100));
       const cr = $('ms_countInRange');
@@ -2419,7 +2396,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       positionSec, durationSec, inCountIn,
       play, pause, stop, seek,
       loadForCurrentSong, loadFromFile, clearCurrent, downloadAll, ensureCached,
-      setEnabled, setRoute, setVol, setCountIn,
+      setEnabled, setVol, setCountIn, setClickVol,
       _state: st,
     };
   })();
@@ -2638,7 +2615,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       meterEl.style.width = v + '%';
       const norm = v / 100;
       state.mixer[channel] = norm;
-      if (channel === 'click' && metroGain) metroGain.gain.value = norm;
+      if (channel === 'click'){
+        if (metroGain) metroGain.gain.value = norm;                              // modo MIDI
+        if (typeof TRACKS !== 'undefined' && TRACKS) TRACKS.setClickVol(norm);   // Modo Pistas
+      }
       // Envío MIDI CC al DAW (solo si hay conexión)
       if (map && midi.device){
         sendMidi(0xB0 | (map.channel & 0x0F), map.cc, Math.round(norm * 127));
