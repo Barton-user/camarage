@@ -1,7 +1,261 @@
-# CAMARAGE · Project Context Snapshot
+# CAMARAGE · Contexto del proyecto
 
-> Documento para retomar el proyecto en otra conversación de Claude.
-> Última actualización: 26 jun 2026 (sesión Cowork — limpieza de onboarding + keep-screen-on)
+> Documento para retomar el proyecto en otra conversación.
+> **Última actualización: 17 ago 2026** — sesión larga: reproductor de pistas,
+> audios en Supabase, MIDI saliente y UX de escenario.
+>
+> ⚠️ **LEER ESTA PRIMERA PARTE ENTERA ANTES DE TOCAR NADA.** Todo lo que está
+> después de la marca «ARCHIVO HISTÓRICO» describe la arquitectura vieja y buena
+> parte ya no aplica. Sirve para no repetir caminos muertos, no como plan.
+
+---
+
+# 1 · Arquitectura: dos modos
+
+La app funciona de dos formas, y la diferencia es **quién es el dueño del tiempo**.
+
+### MODO 1 · Logic manda
+```
+Logic (Mac) ──BLE MIDI: clock, PC, SPP──▶ app
+```
+El audio sale de la Mac. La app traduce el MIDI a posición y mueve letras, cifrado
+y metrónomo. Es la arquitectura original y **sigue funcionando**.
+
+### MODO 2 · El dispositivo manda  ← el foco actual
+```
+celular/iPad reproduce el archivo ──▶ salida de audio (cable Y)
+                                  └──▶ MIDI saliente a pedales
+```
+No hay Mac. El audio sale del dispositivo y **el archivo de audio es el reloj
+maestro**: la posición nace de `audioCtx.currentTime`, no de una estimación.
+
+Los dos modos conviven. Hoy se elige con el interruptor **Modo Pistas** en ⚙;
+está pendiente convertirlo en un selector de modo explícito (§4).
+
+---
+
+# 2 · Lo que funciona hoy
+
+### Reproductor de pistas
+- Reproducción con transporte completo: play, pausa, stop, saltar tocando la barra.
+- **Cuenta previa** configurable de 0 a 4 compases.
+- **El reloj maestro es el audio.** `elapsedSec()` —la única función de la que
+  dependen todas las vistas— tiene una rama que devuelve la posición del archivo.
+  Las vistas no se tocaron.
+- Metrónomo propio agendado sobre el reloj del audio con lookahead, sample-accurate.
+
+### Regla fija del modo 2: el archivo pasa INTACTO
+Decisión de diseño de Pato, y es importante respetarla:
+
+> La separación de secuencias y click viene **del bounce**, no del código. Lo que
+> ya está impreso en el archivo no se puede desincronizar ni se rompe por una
+> configuración mal puesta. Es una decisión de seguridad contra la ley de Murphy.
+
+La app **no** baja a mono, **no** panea, **no** toca los canales. El selector de
+ruteo que existía se eliminó a propósito: era una forma de romper las cosas sin
+ganar nada.
+
+El metrónomo de la app es un **agregado opcional** (botón METRO) que suma encima
+**en los dos canales**, para ensayo. En vivo va apagado y el único click es el del
+archivo. El fader Click del mixer controla su nivel.
+
+**Convención de bounce de Pato:** canal izquierdo = click + secuencias, canal
+derecho = solo secuencias. Por lo tanto el cableado es:
+- **Plug blanco (izq)** → in-ears
+- **Plug rojo (der)** → consola / FOH
+
+### Audios en Supabase Storage
+- Bucket privado `song-audio`, rutas `<band_id>/<song_id>.<ext>`, permisos por banda.
+- Solapa **Audio** en la web admin: subir, escuchar, reemplazar, borrar.
+- El dispositivo **baja la pista solo** la primera vez, con barra de progreso, y la
+  cachea en IndexedDB por canción. Después funciona sin internet.
+- Detecta versiones nuevas comparando `audio_updated_at`; si no cambió, no rebaja.
+- Los archivos cargados a mano tienen prioridad y no se pisan solos.
+- Botón **⇩ Bajar todas las pistas** para dejar el teléfono listo antes del show.
+- Tope de 200 MB por archivo (plan Pro), para poder subir WAV.
+
+### Sin dependencias de CDN  ← bug grave arreglado
+Tailwind y el SDK de Supabase venían de un CDN. Sin internet, **la app se quedaba
+sin una sola regla de estilo** y todo aparecía apilado en una columna. Para una app
+de escenario era inaceptable. Ahora los dos viajan **dentro del `index.html`**
+(425 KB). Verificado con la red totalmente bloqueada.
+
+Para regenerar el CSS si se agregan clases nuevas:
+```bash
+npx tailwindcss -c tailwind.config.js -i tw-input.css -o tw.css --minify
+# y pegar el resultado en el <style> inline del index.html
+```
+
+### UX de escenario
+- **Duración por canción y total del show.** Se mide sola al subir el archivo.
+- **Estados en el setlist**: SONANDO / PRÓXIMA / TOCADA, más botón ↺ Show para
+  limpiar las marcas.
+- **Encadenado por canción** (`chain_next`): si está prendido, al terminar arranca
+  la siguiente sola, sin cuenta. Para medleys. Si no, cuenta 5 s, deja la próxima
+  cargada y espera el PLAY.
+- **Doble toque en PAUSE y STOP.** Cortar la música de un roce delante de la gente
+  era el peor accidente posible. Arrancar sigue siendo un toque solo.
+  Ojo: solo confirma cuando el toque viene del músico — `loadSong()` llama
+  internamente a `setStop()` y se trabaría esperando un segundo toque.
+
+### MIDI saliente
+- Tabla `midi_events`: tiempo en segundos, tipo, canal, datos, y **destino**
+  (`master` o el rol de un integrante).
+- **Parser propio de Standard MIDI File** en `web/lib/midi-file.ts`. Se escribió a
+  mano porque las librerías populares de JS modelan el archivo como "notas" y
+  **pierden los Program Change**, que son justamente los cambios de patch.
+  Soporta formatos 0/1/2, running status, mapa de tempo con cambios a mitad, SMPTE.
+  Validado contra archivos generados con `mido`, incluido un tema que cambia de
+  120 a 60 BPM en el medio.
+- Importador de `.mid` en la solapa **MIDI out** de cada canción, con vista previa
+  antes de guardar.
+- Disparo agendado contra el reloj del audio: **error medio 2,8 ms, peor caso 19 ms**.
+  Los eventos pendientes se cancelan al pausar.
+
+### Hardware resuelto
+- El Samsung A56 **no saca audio analógico por USB-C**: hace falta un adaptador
+  **activo con DAC**. Uno pasivo no suena.
+- El cable tiene que ser **TRS a 2× TS mono** (tipo insert). Un splitter de
+  auriculares (TRS a 2× TRS) duplica el estéreo y no separa nada.
+- Para la consola: **DI4000** con **ground-lift levantado**, atenuación en 0 dB,
+  filtro de 8 kHz apagado. Eso corta el acople por masa compartida.
+- Con el USB-C ocupado por el audio no se puede cargar: para shows largos hace
+  falta un hub con audio + power delivery.
+
+---
+
+# 3 · Estado de la base de datos
+
+Migraciones **ya corridas** en Supabase (no repetir):
+
+| Archivo | Qué agregó |
+|---|---|
+| `migration_audio.sql` | bucket `song-audio`, columnas de audio en `songs`, 4 políticas |
+| `migration_pendiente.sql` | tope de 200 MB, `audio_duration_seconds`, `chain_next` |
+| `migration_midi_events.sql` | tabla `midi_events` + 2 políticas |
+
+**Paso a mano que puede faltar:** Dashboard → Settings → Storage →
+*Upload file size limit* → 200 MB. Manda sobre el tope del bucket; si quedó en 50,
+los WAV grandes van a fallar igual.
+
+Datos de acceso: proyecto `ccytqubmroxjaiwtzsfh`, plan **Pro**.
+Login de la app: `keogan3d@gmail.com`.
+
+---
+
+# 4 · Pendientes
+
+### 🔴 Datos — es lo único que separa de un ensayo real
+- **Cargar los BPM de las 13 canciones.** Varias están en el default de 120 y el
+  click miente en todas ellas. Es lo más urgente porque afecta tocar.
+- **Subir los 12 audios que faltan** (uno solo está subido).
+- Cargar las tonalidades faltantes (Absorber, Algo de tiempo, Lo que digo…).
+- Cifrado: varias canciones tienen 0 acordes.
+- **Volver a subir "Cuando despierte"**: se subió antes de que existiera la columna
+  de duración, así que no la tiene.
+
+### 🟠 Funciones
+1. **Offset por canción.** Un número que corrige un desfase constante entre el
+   bounce y los tiempos de las letras. Se vuelve necesario al reemplazar los MP3
+   por bounces en WAV: si el arranque cambia, hoy habría que retocar 39 líneas a
+   mano. Corrige también el punto cero de los `.mid` importados.
+2. **Modo "marcar tiempos"**: dar play en la web e ir tocando una tecla por línea
+   para estampar el tiempo. Los tiempos actuales salieron de Whisper y algunos
+   están corridos medio segundo.
+3. **Selector de modo explícito** en ⚙ (Logic manda / Yo mando), en vez del
+   interruptor implícito de Modo Pistas. Tener dos maestros a la vez es el error
+   clásico y conviene que sea una decisión consciente.
+4. **Sync entre integrantes.** Diseño ya analizado en `ANALISIS_LATENCIA_SYNC.md`:
+   balizas cada 2 s + disciplina de reloj estilo NTP, cada dispositivo corriendo su
+   reloj local a 60 fps. Precisión esperada ±5-15 ms en WiFi. **No** transmitir la
+   posición continuamente: el jitter la arruina.
+5. **Rol de seguidor**, y que los eventos MIDI con destino de otro integrante
+   disparen desde el dispositivo de ese músico (el pedal está a sus pies, no al
+   lado del master).
+6. **Arranque agendado**: el master dice "arrancamos en T+300 ms" en vez de
+   "arrancá ahora", para que todos empiecen en el mismo instante.
+7. **Secciones con salto en vivo** (loopear el estribillo, saltear el puente). La
+   tabla `song_sections` ya existe. Es el salto de calidad más grande pendiente.
+8. **`versionName` con fecha y hora** en el build, mostrado en ⚙, para saber qué
+   versión tiene cada teléfono sin consultar `dumpsys`.
+
+### 🔵 iOS / iPad
+- **`AVAudioSession` en el plugin Swift — crítico.** Sin esto el interruptor de
+  silencio del iPad mutea el show. Son 4 líneas, están en `PLAN_AUDIO_PISTAS.md`.
+- Recompilar la app en el iPad con todo lo de esta sesión.
+- Backup del proyecto de Logic y de los Controller Assignments.
+
+---
+
+# 5 · Lo que quedó OBSOLETO — no perder tiempo acá
+
+Esto era la lista de pendientes de junio y **ya no aplica**, porque al pasar el
+dispositivo a reproductor el problema desapareció por diseño:
+
+- ❌ **El desfase de SPP.** Era el bloqueante número uno. Ya no existe: la posición
+  sale del archivo de audio, que siempre arranca en cero.
+- ❌ **Las tres preguntas sobre cómo estaba armado Logic** (proyecto único o uno por
+  canción, PC automático, etc.). Sin efecto.
+- ❌ **El flapping de BLE como bloqueante.** El show ya no depende de una conexión
+  Bluetooth viva.
+- ❌ **MPK → Mac pasando por el celular.** Confirmado imposible en junio: macOS
+  recibe los mensajes pero no los entrega a CoreMIDI cuando es periférico y un
+  central Android le escribe. No se arregla desde la app. La salida es un WIDI Bud
+  Pro, si alguna vez se quiere el MPK inalámbrico al MainStage.
+
+---
+
+# 6 · Decisiones tomadas que no conviene revisar
+
+- **El archivo de audio pasa intacto** (§2). Es una decisión de seguridad.
+- **El baterista toca contra el click en sus in-ears, no contra la pantalla.** La
+  sincronización con destellos visuales es marcadamente peor que con clicks
+  auditivos, y la pantalla del dispositivo agrega 30-60 ms sola. El metrónomo
+  visual es referencia de posición, no fuente de tempo.
+- **MP3 320 antes que WAV** para las pistas: por in-ears no se distingue y baja
+  cuatro veces más rápido al teléfono. El tope de 200 MB está por si igual se
+  quieren WAV.
+- **El sync entre integrantes va con disciplina de reloj**, no transmitiendo la
+  posición.
+
+---
+
+# 7 · Compilar
+
+**APK de Android** (se compiló en la nube durante esta sesión; en la Mac de Pato):
+```bash
+cd camarage-android
+npm install
+npx cap sync android
+cd android && echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
+./gradlew assembleDebug
+```
+Instalar sin perder datos: `adb install -r CAMARAGE-pistas-debug.apk`
+
+**Web admin:** `git push` y Vercel despliega solo.
+
+### Archivos clave
+| Archivo | Qué es |
+|---|---|
+| `index.html` | La app entera. Módulo `TRACKS` = motor de pistas. `elapsedSec()` = el reloj |
+| `camarage-android/www/index.html` | Copia idéntica, es la que se compila |
+| `web/lib/midi-file.ts` | Parser de Standard MIDI File |
+| `web/app/songs/[id]/page.tsx` | Editor de canción: Datos, Letras, Cues, Cifrado, Audio, MIDI out |
+| `PLAN_AUDIO_PISTAS.md` | Diseño del reproductor + el fix de `AVAudioSession` |
+| `ANALISIS_LATENCIA_SYNC.md` | Diseño del sync entre integrantes, con números |
+| `IDEAS_STAGE_TRAXX.md` | Qué copiarle a Stage Traxx 4, ordenado por valor/esfuerzo |
+
+---
+---
+
+# ══════════ ARCHIVO HISTÓRICO ══════════
+
+> Todo lo que sigue es de junio 2026 y describe la arquitectura vieja, cuando Logic
+> era el maestro y el celular un seguidor. **No es un plan de trabajo.** Se conserva
+> porque documenta caminos ya agotados —sobre todo la saga del BLE en Android y el
+> límite de macOS— y evita repetirlos.
+
+---
 
 ## Sesión 26 jun 2026 — cambios de UI/UX (sin compilar al APK todavía)
 
