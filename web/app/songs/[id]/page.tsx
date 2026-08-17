@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 import Link from "next/link";
+import { parseMidiFile, describeEvent, type MidiEvent } from "@/lib/midi-file";
 
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 function noteNumToName(n: number) { return NOTE_NAMES[n%12] + (Math.floor(n/12)-1); }
@@ -188,12 +189,18 @@ export default function SongEditor() {
   const [cues, setCues] = useState<any[]>([]);
   const [chords, setChords] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio">("meta");
+  const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio"|"midiout">("meta");
   // --- Pistas de audio ---
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [audioErr, setAudioErr] = useState<string|null>(null);
   const [previewUrl, setPreviewUrl] = useState<string|null>(null);
+  // --- Eventos MIDI salientes ---
+  const [midiEvents, setMidiEvents] = useState<any[]>([]);
+  const [midiPreview, setMidiPreview] = useState<{ eventos: MidiEvent[]; nombre: string } | null>(null);
+  const [midiTarget, setMidiTarget] = useState("master");
+  const [midiErr, setMidiErr] = useState<string|null>(null);
+  const [midiBusy, setMidiBusy] = useState(false);
 
   useEffect(() => { if (id) load(); }, [id]);
 
@@ -206,6 +213,96 @@ export default function SongEditor() {
     setCues(c || []);
     const { data: ch } = await supabase.from("chord_charts").select("*").eq("song_id", id).order("order_index");
     setChords(ch || []);
+    const { data: me } = await supabase.from("midi_events").select("*").eq("song_id", id).order("time_seconds");
+    setMidiEvents(me || []);
+  }
+
+  /* ===================== EVENTOS MIDI SALIENTES =====================
+   * El .mid exportado de Logic se traduce acá mismo, en el navegador, a
+   * eventos con tiempo absoluto en segundos. Nada se sube a Storage: van
+   * como filas a la base, que es lo que después agenda la app.
+   * ================================================================== */
+  const TARGETS = [
+    { v: "master",    l: "El que reproduce (master)" },
+    { v: "guitarist", l: "Dispositivo del guitarrista" },
+    { v: "bassist",   l: "Dispositivo del bajista" },
+    { v: "drummer",   l: "Dispositivo del baterista" },
+    { v: "singer",    l: "Dispositivo del cantante" },
+    { v: "keys",      l: "Dispositivo del tecladista" },
+  ];
+
+  async function elegirMidi(file: File) {
+    setMidiErr(null);
+    setMidiPreview(null);
+    try {
+      const buf = await file.arrayBuffer();
+      const r = parseMidiFile(buf);
+      if (!r.events.length) {
+        setMidiErr("El archivo no trae ningún Program Change, CC ni nota. ¿Exportaste la región correcta?");
+        return;
+      }
+      setMidiPreview({ eventos: r.events, nombre: file.name });
+    } catch (e: any) {
+      setMidiErr(e?.message || String(e));
+    }
+  }
+
+  async function confirmarImportMidi(reemplazar: boolean) {
+    if (!midiPreview) return;
+    setMidiBusy(true);
+    setMidiErr(null);
+    try {
+      if (reemplazar) await supabase.from("midi_events").delete().eq("song_id", id);
+      const filas = midiPreview.eventos.map(e => ({
+        song_id: id,
+        time_seconds: e.timeSeconds,
+        kind: e.kind,
+        channel: e.channel,
+        data1: e.data1,
+        data2: e.data2,
+        label: e.trackName || null,
+        target: midiTarget,
+        source: midiPreview.nombre,
+      }));
+      // De a tandas, por si el .mid trae cientos de eventos
+      for (let i = 0; i < filas.length; i += 200) {
+        const { error } = await supabase.from("midi_events").insert(filas.slice(i, i + 200));
+        if (error) throw error;
+      }
+      setMidiPreview(null);
+      await load();
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      setMidiErr(/midi_events/.test(msg) && /exist/i.test(msg)
+        ? "Falta la tabla midi_events. Corré migration_midi_events.sql en Supabase."
+        : msg);
+    } finally {
+      setMidiBusy(false);
+    }
+  }
+
+  async function borrarEvento(evId: string) {
+    await supabase.from("midi_events").delete().eq("id", evId);
+    setMidiEvents(midiEvents.filter(e => e.id !== evId));
+  }
+  async function borrarTodosLosEventos() {
+    if (!confirm(`¿Borrar los ${midiEvents.length} eventos MIDI de esta canción?`)) return;
+    await supabase.from("midi_events").delete().eq("song_id", id);
+    setMidiEvents([]);
+  }
+  async function cambiarTarget(evId: string, target: string) {
+    await supabase.from("midi_events").update({ target }).eq("id", evId);
+    setMidiEvents(midiEvents.map(e => e.id === evId ? { ...e, target } : e));
+  }
+  function fmtT(sec: number) {
+    const s = Number(sec) || 0;
+    return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0") + "." + String(Math.round((s % 1) * 10));
+  }
+  function describeRow(e: any): string {
+    const ch = `ch${(e.channel ?? 0) + 1}`;
+    if (e.kind === "pc") return `Program Change ${e.data1} · ${ch}`;
+    if (e.kind === "cc") return `CC${e.data1} = ${e.data2} · ${ch}`;
+    return `Nota ${e.data1} ${e.kind === "note_on" ? "on" : "off"} · ${ch}`;
   }
 
   async function saveSong() {
@@ -625,6 +722,7 @@ export default function SongEditor() {
           { id: "cues", label: `Cues MIDI (${cues.length})` },
           { id: "chords", label: `Cifrado (${chords.length})` },
           { id: "audio", label: song.audio_path ? "Audio ●" : "Audio" },
+          { id: "midiout", label: `MIDI out (${midiEvents.length})` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
                   className={`px-4 py-2 text-sm font-bold border-b-2 transition ${
@@ -669,6 +767,122 @@ export default function SongEditor() {
               <textarea value={song.notes || ""} onChange={e => setSong({...song, notes: e.target.value})} onBlur={saveSong} className="input" rows={3} placeholder="Recordatorios para la banda" />
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === "midiout" && (
+        <div className="card space-y-4 max-w-3xl">
+          <div>
+            <h2 className="text-lg font-black mb-1">MIDI que dispara la app</h2>
+            <p className="text-xs text-neutral-400">
+              Los cambios de patch y efectos que hoy tenés en pistas MIDI de Logic. Exportá
+              la región desde Logic (<span className="font-mono">Archivo → Exportar → Selección como archivo MIDI</span>)
+              y subí el <span className="font-mono">.mid</span> acá: se traduce a eventos con
+              tiempo, y la app los dispara sobre el reloj del audio.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+            <p className="text-[11px] text-amber-200/90">
+              <strong>Importante — el punto cero.</strong> Los tiempos del .mid tienen que estar
+              referidos al mismo instante que el bounce de audio. Si en Logic el tema arranca en
+              el compás 50, la exportación va a traer los eventos en el minuto 2:30 y no en 0:00.
+              Movė la región al compás 1 antes de exportar.
+            </p>
+          </div>
+
+          {!midiPreview ? (
+            <label className={`block rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition ${
+              midiBusy ? "border-neutral-800 opacity-60" : "border-neutral-700 hover:border-cyan-400"
+            }`}>
+              <p className="text-sm font-bold mb-1">Elegí el archivo .mid</p>
+              <p className="text-[11px] text-neutral-500">Program Change, CC y notas · con mapa de tempo</p>
+              <input type="file" accept=".mid,.midi,audio/midi" className="hidden" disabled={midiBusy}
+                     onChange={e => { const f = e.target.files?.[0]; if (f) elegirMidi(f); e.currentTarget.value = ""; }} />
+            </label>
+          ) : (
+            <div className="rounded-lg border border-cyan-400/40 bg-cyan-400/5 p-3 space-y-3">
+              <div>
+                <p className="text-sm font-bold">{midiPreview.nombre}</p>
+                <p className="text-[11px] text-neutral-400">
+                  {midiPreview.eventos.length} eventos ·{" "}
+                  {["pc","cc","note_on"].map(k => {
+                    const n = midiPreview.eventos.filter(e => e.kind === k).length;
+                    return n ? `${n} ${k === "pc" ? "cambios de patch" : k === "cc" ? "CC" : "notas"}` : null;
+                  }).filter(Boolean).join(" · ")}
+                </p>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto rounded border border-neutral-800 divide-y divide-neutral-900">
+                {midiPreview.eventos.slice(0, 40).map((e, i) => (
+                  <div key={i} className="flex items-center gap-3 px-2 py-1 text-[11px] font-mono">
+                    <span className="text-cyan-300 w-14">{fmtT(e.timeSeconds)}</span>
+                    <span className="text-neutral-300">{describeEvent(e)}</span>
+                    {e.trackName && <span className="text-neutral-600 ml-auto">{e.trackName}</span>}
+                  </div>
+                ))}
+                {midiPreview.eventos.length > 40 && (
+                  <p className="px-2 py-1 text-[11px] text-neutral-500">
+                    …y {midiPreview.eventos.length - 40} más
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="label">¿Qué dispositivo los dispara?</label>
+                <select value={midiTarget} onChange={e => setMidiTarget(e.target.value)} className="input">
+                  {TARGETS.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
+                </select>
+                <p className="text-[10px] text-neutral-500 mt-1">
+                  El master tiene precisión de milisegundos porque no pasa por la red. El
+                  dispositivo de otro integrante hereda el error de sincronía (±10-50 ms):
+                  perfecto para cambios de patch, justo para efectos rítmicos.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={() => confirmarImportMidi(true)} disabled={midiBusy}
+                        className="btn text-xs font-bold">
+                  {midiBusy ? "Importando…" : `Reemplazar todo con estos ${midiPreview.eventos.length}`}
+                </button>
+                {midiEvents.length > 0 && (
+                  <button onClick={() => confirmarImportMidi(false)} disabled={midiBusy}
+                          className="btn text-xs">Agregar a los existentes</button>
+                )}
+                <button onClick={() => setMidiPreview(null)} disabled={midiBusy}
+                        className="btn text-xs text-neutral-400">Cancelar</button>
+              </div>
+            </div>
+          )}
+
+          {midiErr && (
+            <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3">{midiErr}</p>
+          )}
+
+          {midiEvents.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-bold">{midiEvents.length} eventos guardados</p>
+                <button onClick={borrarTodosLosEventos} className="text-xs text-red-400 hover:text-red-300">
+                  Borrar todos
+                </button>
+              </div>
+              <div className="rounded-lg border border-neutral-800 divide-y divide-neutral-900 max-h-96 overflow-y-auto">
+                {midiEvents.map(e => (
+                  <div key={e.id} className="flex items-center gap-3 px-3 py-2">
+                    <span className="font-mono text-xs text-cyan-300 w-14 shrink-0">{fmtT(e.time_seconds)}</span>
+                    <span className="font-mono text-xs text-neutral-300 flex-1 truncate">{describeRow(e)}</span>
+                    <select value={e.target} onChange={ev => cambiarTarget(e.id, ev.target.value)}
+                            className="bg-black border border-neutral-800 rounded px-2 py-1 text-[11px]">
+                      {TARGETS.map(t => <option key={t.v} value={t.v}>{t.v}</option>)}
+                    </select>
+                    <button onClick={() => borrarEvento(e.id)}
+                            className="text-neutral-600 hover:text-red-400 text-sm px-1">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

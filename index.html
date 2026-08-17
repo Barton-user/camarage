@@ -1803,6 +1803,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       loading: false,
       downloading: false,  // bajando de Supabase
       dlPct: 0,            // porcentaje de esa descarga
+      midiList: [],        // eventos MIDI que ESTE dispositivo dispara
+      midiIdx: 0,          // próximo evento a agendar
+      midiTimers: [],      // timers pendientes, para poder cancelarlos al pausar
     };
 
     /* ---------- IndexedDB (guardar los audios en el dispositivo) ---------- */
@@ -1923,14 +1926,68 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         n++;
       }
     }
+    /* ---------- MIDI saliente agendado sobre el reloj del audio ----------
+     * Los eventos de la canción (cambios de patch, CC de efectos) se agendan
+     * con el mismo lookahead que el click. La diferencia: el click se agenda en
+     * el timeline de Web Audio (sample-accurate) y el MIDI con setTimeout, que
+     * tiene ~1-4 ms de error. Es de sobra: el propio BLE agrega más que eso.
+     *
+     * Este dispositivo dispara:
+     *   · los eventos 'master'  → si es el que está reproduciendo
+     *   · los de su propio rol  → cuando sea seguidor (todavía no implementado)
+     * ------------------------------------------------------------------- */
+    function meTocaDisparar(ev){
+      if (ev.target === 'master') return true;          // hoy siempre reproducimos nosotros
+      return ev.target === state.role;
+    }
+    function enviarEventoMidi(ev){
+      try {
+        if (ev.kind === 'pc')       sendMidi(0xC0 | (ev.ch & 0x0F), ev.d1);
+        else if (ev.kind === 'cc')  sendMidi(0xB0 | (ev.ch & 0x0F), ev.d1, ev.d2 == null ? 0 : ev.d2);
+        else if (ev.kind === 'note_on')  sendMidi(0x90 | (ev.ch & 0x0F), ev.d1, ev.d2 == null ? 100 : ev.d2);
+        else if (ev.kind === 'note_off') sendMidi(0x80 | (ev.ch & 0x0F), ev.d1, 0);
+        const desc = ev.kind === 'pc' ? `PC ${ev.d1}` : ev.kind === 'cc' ? `CC${ev.d1}=${ev.d2}` : `nota ${ev.d1}`;
+        logMidi(`▶ MIDI out · ${desc} ch${ev.ch+1}`, [], 'var(--accent-purple)');
+      } catch(e){ console.warn('[TRACKS] envío MIDI falló', e); }
+    }
+
+    function resetMidiSchedule(){
+      st.midiTimers.forEach(t => clearTimeout(t));
+      st.midiTimers = [];
+      const song = currentSong();
+      const lista = (song && song.midiOut) ? song.midiOut : [];
+      st.midiList = lista.filter(meTocaDisparar);
+      // Primer evento que todavía no pasó, desde la posición actual
+      const pos = positionSec();
+      st.midiIdx = 0;
+      while (st.midiIdx < st.midiList.length && st.midiList[st.midiIdx].t < pos) st.midiIdx++;
+    }
+
+    function scheduleMidi(){
+      if (!st.playing || !st.midiList.length) return;
+      const pos = positionSec();
+      const horizonte = pos + 0.25;
+      while (st.midiIdx < st.midiList.length && st.midiList[st.midiIdx].t <= horizonte){
+        const ev = st.midiList[st.midiIdx++];
+        const enMs = Math.max(0, (ev.t - pos) * 1000);
+        const timer = setTimeout(() => enviarEventoMidi(ev), enMs);
+        st.midiTimers.push(timer);
+      }
+      // Limpieza de timers ya disparados para que el array no crezca sin freno
+      if (st.midiTimers.length > 64) st.midiTimers = st.midiTimers.slice(-32);
+    }
+
     function startScheduler(){
       stopScheduler();
-      st.schedTimer = setInterval(scheduleClicks, 25);
-      scheduleClicks();
+      resetMidiSchedule();
+      st.schedTimer = setInterval(() => { scheduleClicks(); scheduleMidi(); }, 25);
+      scheduleClicks(); scheduleMidi();
     }
     function stopScheduler(){
       if (st.schedTimer) clearInterval(st.schedTimer);
       st.schedTimer = null;
+      st.midiTimers.forEach(t => clearTimeout(t));   // nada de eventos huérfanos tras pausar
+      st.midiTimers = [];
     }
 
     /* ---------- Posición ---------- */
@@ -4109,10 +4166,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       // Pull lyrics, cues y chords de todas las canciones en paralelo
       const songsWithDetails = await Promise.all((setlistSongs||[]).map(async ss => {
         const s = ss.songs;
-        const [lyR, cuR, chR] = await Promise.all([
+        const [lyR, cuR, chR, meR] = await Promise.all([
           client.from('lyric_lines').select('*').eq('song_id', s.id).order('order_index'),
           client.from('midi_cues').select('*').eq('song_id', s.id).order('order_index'),
           client.from('chord_charts').select('*').eq('song_id', s.id).order('order_index'),
+          // Eventos MIDI que la app DISPARA (contraparte de midi_cues, que recibe).
+          // Si la tabla todavía no existe, la consulta falla sin romper el resto.
+          client.from('midi_events').select('*').eq('song_id', s.id).order('time_seconds')
+            .then(r => r, () => ({ data: [] })),
         ]);
         return {
           id: s.id,
@@ -4131,6 +4192,19 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           // canción encadena con la siguiente sin esperar el PLAY.
           duration: s.audio_duration_seconds ? parseFloat(s.audio_duration_seconds) : null,
           chainNext: !!s.chain_next,
+          // Eventos MIDI salientes, ordenados por tiempo (el scheduler asume orden)
+          midiOut: ((meR && meR.data) || [])
+            .filter(e => e.enabled !== false)
+            .map(e => ({
+              t: parseFloat(e.time_seconds),
+              kind: e.kind,
+              ch: e.channel || 0,
+              d1: e.data1,
+              d2: e.data2,
+              target: e.target || 'master',
+              label: e.label || null,
+            }))
+            .sort((a, b) => a.t - b.t),
           // IMPORTANTE: ordenar letras por tiempo (no por order_index).
           // Sin esto, el lyric scroll falla si las letras se agregaron
           // fuera de orden cronológico en el web admin.
