@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 import Link from "next/link";
@@ -201,6 +201,14 @@ export default function SongEditor() {
   const [midiTarget, setMidiTarget] = useState("master");
   const [midiErr, setMidiErr] = useState<string|null>(null);
   const [midiBusy, setMidiBusy] = useState(false);
+  // --- Modo "marcar tiempos" ---
+  const [tapOn, setTapOn] = useState(false);
+  const [tapIdx, setTapIdx] = useState(0);
+  const [tapUrl, setTapUrl] = useState<string|null>(null);
+  const [tapPos, setTapPos] = useState(0);
+  const [tapMarks, setTapMarks] = useState<Record<string, number>>({});
+  const [tapErr, setTapErr] = useState<string|null>(null);
+  const tapAudio = useRef<HTMLAudioElement|null>(null);
 
   useEffect(() => { if (id) load(); }, [id]);
 
@@ -313,6 +321,88 @@ export default function SongEditor() {
       artist: song.artist, notes: song.notes,
     }).eq("id", id);
     setSaving(false);
+  }
+
+  /* ===================== MODO "MARCAR TIEMPOS" =====================
+   * Los tiempos de las letras salieron de Whisper y algunos están corridos.
+   * Corregir 39 líneas escribiendo mm:ss a mano es un suplicio; marcándolas al
+   * ritmo mientras suena la pista son tres minutos.
+   *
+   * Detalle que importa: se guarda `audio.currentTime + offset − reacción`.
+   *   · + offset   → así queda en la misma referencia que usa la app para buscar
+   *                  la línea (posición del audio + offset de la canción).
+   *   · − reacción → uno aprieta DESPUÉS de escuchar la frase. Sin compensar,
+   *                  todas las líneas quedan sistemáticamente tarde.
+   * ================================================================ */
+  const [tapReaccion, setTapReaccion] = useState(0.15);
+
+  async function abrirTap() {
+    setTapErr(null);
+    if (!song?.audio_path) { setTapErr("Esta canción no tiene pista subida. Subila en la solapa Audio."); return; }
+    if (!lyrics.length)    { setTapErr("Esta canción no tiene letras cargadas."); return; }
+    const { data, error } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(song.audio_path, 3600);
+    if (error) { setTapErr(error.message); return; }
+    setTapUrl(data?.signedUrl || null);
+    setTapMarks({});
+    setTapIdx(0);
+    setTapOn(true);
+  }
+  function cerrarTap() {
+    setTapOn(false);
+    try { tapAudio.current?.pause(); } catch {}
+  }
+  const marcarAhora = useCallback(() => {
+    const el = tapAudio.current;
+    if (!el || tapIdx >= lyrics.length) return;
+    const t = Math.max(0, el.currentTime + (song?.offset_seconds || 0) - tapReaccion);
+    setTapMarks(prev => ({ ...prev, [lyrics[tapIdx].id]: Number(t.toFixed(2)) }));
+    setTapIdx(i => Math.min(i + 1, lyrics.length));
+  }, [tapIdx, lyrics, song, tapReaccion]);
+  const deshacerTap = useCallback(() => {
+    if (tapIdx <= 0) return;
+    const prevIdx = tapIdx - 1;
+    setTapMarks(prev => { const c = { ...prev }; delete c[lyrics[prevIdx].id]; return c; });
+    setTapIdx(prevIdx);
+  }, [tapIdx, lyrics]);
+
+  async function guardarTap() {
+    const entradas = Object.entries(tapMarks);
+    if (!entradas.length) { cerrarTap(); return; }
+    for (const [lyricId, seg] of entradas) {
+      await supabase.from("lyric_lines").update({ start_time_seconds: seg }).eq("id", lyricId);
+    }
+    cerrarTap();
+    await load();
+  }
+
+  // Teclado: espacio marca, backspace deshace, escape sale
+  useEffect(() => {
+    if (!tapOn) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space")      { e.preventDefault(); marcarAhora(); }
+      else if (e.code === "Backspace") { e.preventDefault(); deshacerTap(); }
+      else if (e.code === "Escape")    { e.preventDefault(); cerrarTap(); }
+      else if (e.code === "KeyP")      { e.preventDefault();
+        const el = tapAudio.current; if (el) { el.paused ? el.play() : el.pause(); } }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tapOn, marcarAhora, deshacerTap]);
+
+  // Posición del audio para la UI
+  useEffect(() => {
+    if (!tapOn) return;
+    const iv = setInterval(() => {
+      const el = tapAudio.current;
+      if (el) setTapPos(el.currentTime);
+    }, 100);
+    return () => clearInterval(iv);
+  }, [tapOn]);
+
+  async function guardarOffset(v: number) {
+    const val = Math.max(-30, Math.min(30, Number(v.toFixed(3))));
+    setSong({ ...song, offset_seconds: val });
+    await supabase.from("songs").update({ offset_seconds: val }).eq("id", id);
   }
 
   async function deleteSong() {
@@ -744,6 +834,29 @@ export default function SongEditor() {
               <p className="text-[10px] text-neutral-500 mt-1">Logic manda este PC para cargar esta canción en el celu.</p>
             </div>
             <div className="col-span-2">
+              <label className="label">Offset de sincronía (segundos)</label>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => guardarOffset(Number(((song.offset_seconds||0) - 0.1).toFixed(3)))}
+                        className="btn text-xs px-3">−0,1</button>
+                <input type="number" step="0.05" value={song.offset_seconds ?? 0}
+                       onChange={e => setSong({...song, offset_seconds: parseFloat(e.target.value) || 0})}
+                       onBlur={e => guardarOffset(parseFloat(e.target.value) || 0)}
+                       className="input text-center" style={{maxWidth: 120}} />
+                <button type="button" onClick={() => guardarOffset(Number(((song.offset_seconds||0) + 0.1).toFixed(3)))}
+                        className="btn text-xs px-3">+0,1</button>
+                {!!song.offset_seconds && (
+                  <button type="button" onClick={() => guardarOffset(0)}
+                          className="text-xs text-neutral-500 hover:text-white ml-1">a cero</button>
+                )}
+              </div>
+              <p className="text-[10px] text-neutral-500 mt-1 leading-snug">
+                Corrige un desfase <strong>constante</strong> entre el archivo de audio y los
+                tiempos de las letras y del MIDI. Si la letra va <strong>adelantada</strong>, subí
+                el número. Si va <strong>atrasada</strong>, bajalo. No cambia el tiempo que
+                muestra el transporte.
+              </p>
+            </div>
+            <div className="col-span-2">
               <label className="flex items-start gap-3 rounded-lg border border-neutral-800 p-3 cursor-pointer hover:border-neutral-700">
                 <input type="checkbox" className="mt-0.5"
                        checked={!!song.chain_next}
@@ -970,6 +1083,94 @@ export default function SongEditor() {
 
       {tab === "lyrics" && (
         <div className="space-y-2">
+
+          {/* ---------- MODO MARCAR TIEMPOS ---------- */}
+          {!tapOn ? (
+            <div className="card mb-3 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-neutral-400 flex-1 min-w-0">
+                <b className="text-white">Marcar tiempos:</b> escuchá la pista y apretá una tecla
+                en cada línea. Mucho más rápido y preciso que escribir mm:ss a mano.
+              </p>
+              <button onClick={abrirTap} className="btn text-xs font-bold whitespace-nowrap">
+                ◉ Marcar tiempos
+              </button>
+            </div>
+          ) : (
+            <div className="card mb-3 border-cyan-400/40 bg-cyan-400/5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-black">Marcando tiempos</p>
+                <p className="font-mono text-xs text-neutral-400">
+                  {Math.min(tapIdx, lyrics.length)} / {lyrics.length} · {fmtT(tapPos)}
+                </p>
+              </div>
+
+              {tapUrl && (
+                <audio ref={tapAudio} src={tapUrl} controls className="w-full"
+                       onEnded={() => { /* deja la marcación como está */ }} />
+              )}
+
+              {/* Línea actual, grande */}
+              <div className="rounded-lg border border-neutral-800 bg-black/50 p-4 text-center">
+                {tapIdx < lyrics.length ? (
+                  <>
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-1">
+                      próxima a marcar
+                    </p>
+                    <p className="text-xl font-black leading-tight">{lyrics[tapIdx].text}</p>
+                    {lyrics[tapIdx + 1] && (
+                      <p className="text-xs text-neutral-600 mt-2 truncate">
+                        después: {lyrics[tapIdx + 1].text}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-lg font-black text-green-400">
+                    ✓ Marcaste las {lyrics.length} líneas
+                  </p>
+                )}
+              </div>
+
+              <button onClick={marcarAhora} disabled={tapIdx >= lyrics.length}
+                      className="w-full rounded-xl py-4 text-lg font-black bg-cyan-400 text-black disabled:opacity-40">
+                MARCAR ESTA LÍNEA
+              </button>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <button onClick={deshacerTap} disabled={tapIdx <= 0} className="btn text-xs disabled:opacity-40">
+                  ← Deshacer
+                </button>
+                <button onClick={() => setTapIdx(i => Math.min(i + 1, lyrics.length))}
+                        disabled={tapIdx >= lyrics.length} className="btn text-xs disabled:opacity-40">
+                  Saltear línea →
+                </button>
+                <span className="flex-1" />
+                <button onClick={cerrarTap} className="btn text-xs text-neutral-400">Cancelar</button>
+                <button onClick={guardarTap} disabled={!Object.keys(tapMarks).length}
+                        className="btn text-xs font-bold text-green-400 disabled:opacity-40">
+                  Guardar {Object.keys(tapMarks).length} tiempos
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t border-neutral-900">
+                <label className="text-[11px] text-neutral-400">Compensar mi reacción</label>
+                <input type="number" step="0.05" min="0" max="0.6" value={tapReaccion}
+                       onChange={e => setTapReaccion(parseFloat(e.target.value) || 0)}
+                       className="input text-center" style={{maxWidth: 80}} />
+                <span className="text-[11px] text-neutral-500">s</span>
+                <span className="text-[10px] text-neutral-600 flex-1 leading-snug">
+                  Se resta de cada marca: uno aprieta después de escuchar la frase.
+                </span>
+              </div>
+
+              <p className="text-[10px] text-neutral-500 font-mono">
+                ESPACIO marcar · BACKSPACE deshacer · P play/pausa · ESC salir
+              </p>
+            </div>
+          )}
+          {tapErr && (
+            <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3 mb-3">{tapErr}</p>
+          )}
+
           <p className="text-xs text-neutral-500 mb-2">
             Cada línea con su tiempo desde el inicio (<code className="text-cyan-400">90</code> o <code className="text-cyan-400">1:30</code> es lo mismo).
             En la columna <span className="text-purple-400">♪ Cue</span> podés asignar una nota MIDI (ej: <code className="text-purple-400">D4</code>) — Logic mandará esa nota para anclar la posición a esta línea.

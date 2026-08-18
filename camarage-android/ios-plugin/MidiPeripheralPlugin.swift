@@ -4,6 +4,7 @@ import CoreBluetooth
 import CoreMIDI
 import CoreAudioKit
 import UIKit
+import AVFoundation
 
 /**
  * CAMARAGE · MIDI Peripheral (iOS / iPadOS)
@@ -54,8 +55,68 @@ public class MidiPeripheralPlugin: CAPPlugin, CAPBridgedPlugin, CBPeripheralMana
         CAPPluginMethod(name: "startInstrument", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "showWidiPicker", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendToMac", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setKeepAwake", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "setKeepAwake", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "configureAudio", returnType: CAPPluginReturnPromise)
     ]
+    // =========================================================================
+    // SESIÓN DE AUDIO · CRÍTICO PARA ESCENARIO
+    // -------------------------------------------------------------------------
+    // Por defecto una WKWebView usa la categoría `ambient`, que se CALLA con el
+    // interruptor de silencio del iPad y al bloquear la pantalla. En un show eso
+    // significa quedarse sin música en el peor momento posible.
+    //
+    // `playback` hace que el audio suene igual con el switch en silencio, y con
+    // el modo background `audio` en Info.plist sigue sonando con la pantalla
+    // apagada. `mixWithOthers` permite que convivan otras fuentes de audio.
+    //
+    // Además re-activamos la sesión cuando el sistema nos la interrumpe (una
+    // llamada entrante, otra app tomando el audio): sin esto, después de una
+    // interrupción la app queda muda hasta reiniciarla.
+    // =========================================================================
+
+    override public func load() {
+        configureAudioSession()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    private func configureAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            // ~5 ms de buffer: baja latencia para el click y el MIDI agendado
+            try session.setPreferredIOBufferDuration(0.005)
+            try session.setActive(true)
+            NSLog("[CAMARAGE] AVAudioSession en .playback · buffer \(session.ioBufferDuration)s")
+        } catch {
+            NSLog("[CAMARAGE] no pude configurar AVAudioSession: \(error.localizedDescription)")
+        }
+    }
+
+    @objc private func handleAudioInterruption(_ note: Notification) {
+        guard let info = note.userInfo,
+              let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let tipo = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        if tipo == .ended {
+            // Volver a tomar la sesión: si no, la app queda muda tras la interrupción
+            configureAudioSession()
+            notifyListeners("audioSessionRestored", data: [:])
+            NSLog("[CAMARAGE] interrupción de audio terminada · sesión reactivada")
+        } else {
+            NSLog("[CAMARAGE] audio interrumpido por el sistema")
+        }
+    }
+
+    /// Permite re-asegurar la sesión desde JS (por ejemplo al tocar PLAY).
+    @objc func configureAudio(_ call: CAPPluginCall) {
+        configureAudioSession()
+        call.resolve(["ok": true])
+    }
+
 
     // BLE MIDI 1.0 spec UUIDs (idénticos a Android y al resto de la app)
     private let serviceUUID = CBUUID(string: "03B80E5A-EDE8-4B33-A751-6CE34EC4C700")
@@ -527,5 +588,14 @@ public class MidiPeripheralPlugin: CAPPlugin, CAPBridgedPlugin, CBPeripheralMana
 public class MainViewController: CAPBridgeViewController {
     override public func capacitorDidLoad() {
         bridge?.registerPluginInstance(MidiPeripheralPlugin())
+        // Red de seguridad: dejamos la sesión de audio en .playback lo antes
+        // posible, sin depender de que el plugin haya corrido su load().
+        do {
+            let s = AVAudioSession.sharedInstance()
+            try s.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try s.setActive(true)
+        } catch {
+            NSLog("[CAMARAGE] AVAudioSession desde MainViewController falló: \(error)")
+        }
     }
 }

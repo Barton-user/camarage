@@ -1,12 +1,112 @@
 # CAMARAGE · Contexto del proyecto
 
 > Documento para retomar el proyecto en otra conversación.
-> **Última actualización: 17 ago 2026** — sesión larga: reproductor de pistas,
-> audios en Supabase, MIDI saliente y UX de escenario.
+> **Última actualización: 17 ago 2026, cierre del día.** Sesión larguísima:
+> reproductor de pistas, audios en Supabase, MIDI saliente, UX de escenario,
+> offset por canción, modo marcar tiempos, selector de modo, sello de versión,
+> **sync entre integrantes andando en aparatos reales**, transporte bloqueado en
+> los seguidores, **los dos iPads compilados**, y dos canciones nuevas analizadas
+> desde el audio (§13). Empezá por **§0**.
 >
 > ⚠️ **LEER ESTA PRIMERA PARTE ENTERA ANTES DE TOCAR NADA.** Todo lo que está
 > después de la marca «ARCHIVO HISTÓRICO» describe la arquitectura vieja y buena
 > parte ya no aplica. Sirve para no repetir caminos muertos, no como plan.
+
+---
+
+# 0 · DÓNDE QUEDAMOS — retomar por acá
+
+**Estado al 17 ago 2026, cierre del día.**
+
+## Lo que quedó andando hoy
+
+- **Samsung A56**: APK instalado, sello `20260817-1931`.
+- **iPad Pro 12,9" (Pato)**: compilado desde Xcode y andando. En el log del
+  aparato real apareció `[CAMARAGE] AVAudioSession en .playback · buffer 0.005s`,
+  o sea que **el fix del interruptor de silencio está confirmado en hardware**,
+  no solo en el archivo. Ese era el pendiente crítico de iOS y queda cerrado.
+- **iPad mini 6 ("iPad de Paloma")**: compilado e instalado también.
+- **Sync entre integrantes probado con aparatos reales** (Samsung maestro, iPad
+  seguidor). Pato lo vio funcionar: "parecen estar sincronizadas, bastante bien".
+  Falta terminar el test formal: salto con la barra, cambio de canción y modo
+  avión en el seguidor.
+- **El transporte queda bloqueado en los seguidores** (ver §2).
+- **Dos canciones nuevas analizadas**, con letra, tiempos, tempo, tonalidad y
+  estructura en compases (ver §13). Los SQL están escritos y **sin correr**.
+
+## Lo primero que hay que hacer al retomar
+
+1. **Correr `migration_offset.sql`.** Sigue sin correr. Sin esto la web tira
+   error al guardar una canción y el offset no existe.
+2. **Correr `insert_la_nueva_sangre.sql`** y **`insert_camine_sin_mirar_atras.sql`**.
+3. **Commitear.** Hay mucho sin commitear: `index.html` (y sus copias de Android
+   e iOS), `page.tsx`, `CONTEXT.md`, los tres `.swift`, más los archivos nuevos
+   (`build.sh`, los dos APK, los SQL de canciones y de altas de usuario).
+   Si git se queja de `index.lock`: `rm -f .git/index.lock` y de nuevo.
+4. **Borrar la carpeta `_to_delete/`**, que tiene locks de git huérfanos que el
+   puente de Cowork no pudo borrar.
+
+## Alta de integrantes — cómo funciona de verdad
+
+Esto se investigó hoy y conviene tenerlo escrito, porque la primera lectura del
+código me llevó a una conclusión equivocada.
+
+**El registro por el usuario mismo YA EXISTE.** En `camarage.vercel.app/login`
+hay un segundo modo, "¿Sin contraseña? Entrar con código": manda un OTP al mail
+con `shouldCreateUser: true`, así que **la cuenta se crea sola** al entrar el
+código. Y en `/settings` el integrante **se pone su propia contraseña** con
+`updateUser({password})`. Pato nunca ve esa contraseña.
+
+**Lo que el integrante NO puede hacer es entrar a la banda.** La política de la
+base lo prohíbe explícitamente:
+
+```sql
+create policy "band_members: insert por owner"
+  on band_members for insert with check (
+    exists (select 1 from bands where id = band_id and owner_id = auth.uid())
+  );
+```
+
+Solo el dueño de la banda inserta miembros. Está bien que sea así: es lo que
+evita que cualquiera que se cree una cuenta se autoinvite al setlist. El costo es
+un paso manual de Pato por cada integrante.
+
+**Orden correcto:** el integrante entra primero (se crea la cuenta), y DESPUÉS
+Pato corre `agregar_integrante.sql`, que busca al usuario por mail. Al revés
+falla, y el script avisa por qué.
+
+**Hasta que exista la fila en `band_members`, el integrante entra y ve la app
+vacía**, porque `is_band_member()` bloquea todo. Hay que avisarle de antemano o
+va a pensar que se rompió algo.
+
+Archivos que quedaron para esto:
+- `agregar_integrante.sql` — el genérico, se editan tres líneas.
+- `agregar_gonzalo.sql` — ya con `vecchie.gonzalo@gmail.com` puesto.
+- `crear_gonzalo_directo.sql` — crea el usuario **por SQL** con contraseña,
+  incluida la fila de `auth.identities` que casi siempre se olvida. Funciona pero
+  toca tablas internas de auth: **no usarlo salvo que haga falta**.
+
+Ojo con un detalle: la contraseña mínima por la API de Supabase es de **6
+caracteres**. Desde el dashboard, `1234` se rechaza. Por SQL directo entra, pero
+mejor no.
+
+**En curso al cerrar el día:** Pato le mandó el link a Gonzalo
+(`vecchie.gonzalo@gmail.com`, baterista) y quedó esperando que entre para correr
+`agregar_gonzalo.sql`. **Revisar que el rol del script sea el instrumento
+correcto** — quedó la duda de si el baterista es Gonzalo o Paloma, porque el iPad
+mini se llama "iPad de Paloma".
+
+## Dos cosas que quedaron ofrecidas y sin hacer
+
+1. **Que la app abra la vista del instrumento según el rol.** Hoy `state.role`
+   está fijo en `'singer'` en el `index.html` y la vista se elige a mano desde la
+   barra de abajo. Leyendo el rol de `band_members` al entrar, cada uno abre la
+   suya. Y una vez que el rol viene de la base, se habilita lo otro: que los
+   eventos MIDI con destino `drummer` disparen desde **su** aparato.
+2. **Pantalla de Miembros en la web admin.** Hoy no existe: `app/bands` solo crea
+   y borra bandas. Necesita una función `security definer` que resuelva
+   mail → `user_id` y valide que quien llama es el dueño, porque el navegador no
+   puede leer `auth.users` (y está bien que no pueda).
 
 ---
 
@@ -29,8 +129,11 @@ celular/iPad reproduce el archivo ──▶ salida de audio (cable Y)
 No hay Mac. El audio sale del dispositivo y **el archivo de audio es el reloj
 maestro**: la posición nace de `audioCtx.currentTime`, no de una estimación.
 
-Los dos modos conviven. Hoy se elige con el interruptor **Modo Pistas** en ⚙;
-está pendiente convertirlo en un selector de modo explícito (§4).
+Los dos modos conviven y **se eligen a mano** en ⚙ con el selector *Logic manda /
+Yo mando*. Elegir "Yo mando" apaga el clock MIDI entrante y prende el motor de
+pistas; elegir "Logic manda" hace lo inverso. Tener dos dueños del tiempo a la vez
+era el error clásico y ahora es imposible por construcción. La elección queda
+guardada en `localStorage` (`camarage_mode`).
 
 ---
 
@@ -80,11 +183,10 @@ sin una sola regla de estilo** y todo aparecía apilado en una columna. Para una
 de escenario era inaceptable. Ahora los dos viajan **dentro del `index.html`**
 (425 KB). Verificado con la red totalmente bloqueada.
 
-Para regenerar el CSS si se agregan clases nuevas:
-```bash
-npx tailwindcss -c tailwind.config.js -i tw-input.css -o tw.css --minify
-# y pegar el resultado en el <style> inline del index.html
-```
+**No regenerar el CSS a mano: correr `bash build.sh`** (§7). Si se agrega una clase
+nueva en el HTML y no se recompila, la clase **no existe** en el CSS y el elemento
+sale deformado sin ningún error. Ya pasó: faltaba `col-span-6` y el botón PLAY
+quedó angosto.
 
 ### UX de escenario
 - **Duración por canción y total del show.** Se mide sola al subir el archivo.
@@ -112,6 +214,106 @@ npx tailwindcss -c tailwind.config.js -i tw-input.css -o tw.css --minify
 - Disparo agendado contra el reloj del audio: **error medio 2,8 ms, peor caso 19 ms**.
   Los eventos pendientes se cancelan al pausar.
 
+### Offset por canción
+Un solo número (`offset_seconds`, décimas) que corre **todo** el contenido de la
+canción contra el audio: letras, cifrado, secciones y los eventos MIDI importados.
+Sirve para cuando se reemplaza un MP3 por un bounce en WAV que arranca distinto:
+antes había que retocar 39 líneas a mano, ahora se toca un campo.
+
+- Se edita en la solapa **Datos** de la web, con botones ±0,1 s.
+- En la app entra por `songOffset()`, sumado dentro de `elapsedSec()`, así que
+  ninguna vista tuvo que cambiar.
+- Cuando hay offset distinto de cero, la vista de escenario lo muestra como
+  insignia, para que nadie se pregunte por qué las letras van corridas.
+
+### Modo "marcar tiempos" (web)
+Los tiempos de las letras salieron de Whisper y varios están corridos medio
+segundo. Ahora se corrigen tocando:
+
+- Play en la web, y **ESPACIO** por cada línea que entra. Cada golpe estampa el
+  tiempo de esa línea y pasa a la siguiente.
+- **BACKSPACE** deshace, **P** play/pausa, **ESC** sale.
+- Descuenta un **tiempo de reacción** configurable (0,15 s por defecto): uno
+  siempre aprieta tarde, y sin esa corrección todas las líneas quedan atrasadas.
+- Suma el offset de la canción, así que se puede marcar contra el audio real.
+- Se ve la línea actual grande y las dos siguientes, para no perderse.
+
+### Sync entre integrantes  ← el más grande de la sesión
+Módulo `SYNC` en el `index.html`. Un dispositivo es **maestro** y los demás
+**seguidores**; se elige en ⚙. Canal de Supabase Realtime `camarage:<band_id>`.
+
+Cómo funciona, y por qué así:
+- El maestro manda una **baliza cada 2 s**: "estoy en la posición P, y eso fue en
+  el instante T de mi reloj". No manda la posición continuamente: el jitter de la
+  red arruinaría todo.
+- Cada seguidor corre **su propio reloj a 60 fps** a partir de esa baliza. Entre
+  baliza y baliza la red no participa.
+- El desfase entre relojes se mide con un ida-y-vuelta de 4 tiempos estilo NTP
+  (`offset = ((t1−t0)+(t2−t3))/2`), 8 muestras, y se queda con las de **menor
+  RTT** —las que menos cola de red tienen.
+- Los cambios de canción, play, stop y salto mandan baliza **al instante**, sin
+  esperar los 2 s.
+- El seguidor entra por `elapsedSec()`, igual que todo lo demás. Sus letras,
+  cifrado y metrónomo visual quedan sincronizados sin tocar ninguna vista.
+
+Medido con dos navegadores de verdad y latencia inyectada:
+
+| Escenario | RTT | Confianza que reporta | Desvío real medio |
+|---|---|---|---|
+| WiFi bueno | ~20 ms | ±3 ms | **2,7 ms** |
+| 4G | ~90 ms | ±9 ms | **6,9 ms** |
+| Red mala, jitter alto | ~350 ms | ±66 ms | 49,5 ms |
+
+Y lo más importante para el escenario: **si la red se corta, el seguidor sigue
+tocando bien.** Con el maestro emitiendo silencio total, a los 6 segundos el
+seguidor estaba a 30-50 ms de la posición real. Además avisa: la insignia pasa a
+**◈ SIN SEÑAL** en rojo y ⚙ dice "sin señal hace N s · reloj propio", en vez de
+seguir mostrando "sincronizado" y mentir.
+
+La insignia de arriba muestra `◈ MAESTRO` o `◈ ±Nms` con color: verde hasta 20 ms,
+amarillo hasta 60, rojo arriba de eso.
+
+### Bugs de escenario arreglados en esta sesión
+- **La barra de pista se quedaba en "cargando…" para siempre.** Eran conexiones de
+  IndexedDB que quedaban abiertas y bloqueaban el siguiente `open()`. Ahora se
+  cierran siempre (`finally`), hay timeout de 6 s, un vigilante de 20 s que
+  desbloquea la interfaz, y el error se muestra escrito en vez de dejar un cartel
+  eterno. La descarga tiene `AbortController` con 45 s.
+- **Tonalidad, compás y PC# estaban escritos a mano en la vista** (mostraba
+  siempre la misma tonalidad y 4/4). Ahora salen de la canción.
+- **`AVAudioSession` en el plugin Swift.** Sin esto, el interruptor de silencio del
+  iPad muteaba el show entero. Categoría `.playback`, buffer de 5 ms, y manejo de
+  interrupciones (llamada entrante) para volver a activar el audio al terminar.
+  Aplicado en los tres `MidiPeripheralPlugin.swift` del repo, más una red de
+  seguridad en `MainViewController.capacitorDidLoad()`.
+
+### El transporte se bloquea en los seguidores
+Decisión de Pato del 17 ago. Si el equipo está en rol **seguidor**, quedan grises
+y sin responder **PLAY**, **STOP** y **anterior/siguiente**, en las dos vistas.
+Medido: opacidad 0,35, escala de grises, sin recibir toques.
+
+El motivo no es estético. Dejar los botones activos es una trampa: el músico toca
+PLAY, no pasa nada útil, y a los 2 segundos la baliza del maestro lo devuelve a
+donde estaba. En escenario eso se lee como "se colgó la app".
+
+Tres detalles del diseño:
+- **Anterior/siguiente también se bloquean**, porque la canción la elige el maestro
+  y la propaga. Cambiarla en un seguidor volvía atrás sola.
+- **El metrónomo NO se bloquea**: es audio local de ese equipo y no toca el tiempo
+  de nadie. Sirve si el músico quiere su propio click de ensayo.
+- **La barra de la pista sigue visible** pero no acepta toques: el seguidor tiene
+  que poder ver por dónde va el tema, lo que no puede es saltar.
+
+Está blindado en la lógica además del CSS: `setPlay`, `setStop`, `nextSong` y
+`prevSong` verifican el rol. Ojo con uno: `loadSong()` llama internamente a
+`setStop()` y eso **tiene** que seguir funcionando en el seguidor para que entre el
+cambio de canción del maestro — por eso el guard de `setStop` mira solo si el toque
+vino del músico (`fromUser === true`).
+
+### Sello de versión
+`APP_BUILD` se estampa con fecha y hora en cada `bash build.sh` y se muestra en ⚙.
+Sirve para saber de un vistazo qué versión tiene cada teléfono sin `dumpsys`.
+
 ### Hardware resuelto
 - El Samsung A56 **no saca audio analógico por USB-C**: hace falta un adaptador
   **activo con DAC**. Uno pasivo no suena.
@@ -134,6 +336,12 @@ Migraciones **ya corridas** en Supabase (no repetir):
 | `migration_pendiente.sql` | tope de 200 MB, `audio_duration_seconds`, `chain_next` |
 | `migration_midi_events.sql` | tabla `midi_events` + 2 políticas |
 
+Migración **pendiente de correr** (una sola, y sin esto el offset no se guarda):
+
+| Archivo | Qué agrega |
+|---|---|
+| `migration_offset.sql` | `songs.offset_seconds numeric(6,3) not null default 0` |
+
 **Paso a mano que puede faltar:** Dashboard → Settings → Storage →
 *Upload file size limit* → 200 MB. Manda sobre el tope del bucket; si quedó en 50,
 los WAV grandes van a fallar igual.
@@ -153,36 +361,54 @@ Login de la app: `keogan3d@gmail.com`.
 - Cifrado: varias canciones tienen 0 acordes.
 - **Volver a subir "Cuando despierte"**: se subió antes de que existiera la columna
   de duración, así que no la tiene.
+- **Correr los SQL de las dos canciones nuevas** (§13) y escuchar las líneas
+  marcadas como dudosas.
+- **Bouncear las pistas de escenario** de las dos canciones nuevas: los mix que
+  pasó Pato no tienen click ni la separación de canales, y arrastran silencio al
+  final.
 
 ### 🟠 Funciones
-1. **Offset por canción.** Un número que corrige un desfase constante entre el
-   bounce y los tiempos de las letras. Se vuelve necesario al reemplazar los MP3
-   por bounces en WAV: si el arranque cambia, hoy habría que retocar 39 líneas a
-   mano. Corrige también el punto cero de los `.mid` importados.
-2. **Modo "marcar tiempos"**: dar play en la web e ir tocando una tecla por línea
-   para estampar el tiempo. Los tiempos actuales salieron de Whisper y algunos
-   están corridos medio segundo.
-3. **Selector de modo explícito** en ⚙ (Logic manda / Yo mando), en vez del
-   interruptor implícito de Modo Pistas. Tener dos maestros a la vez es el error
-   clásico y conviene que sea una decisión consciente.
-4. **Sync entre integrantes.** Diseño ya analizado en `ANALISIS_LATENCIA_SYNC.md`:
-   balizas cada 2 s + disciplina de reloj estilo NTP, cada dispositivo corriendo su
-   reloj local a 60 fps. Precisión esperada ±5-15 ms en WiFi. **No** transmitir la
-   posición continuamente: el jitter la arruina.
-5. **Rol de seguidor**, y que los eventos MIDI con destino de otro integrante
-   disparen desde el dispositivo de ese músico (el pedal está a sus pies, no al
-   lado del master).
-6. **Arranque agendado**: el master dice "arrancamos en T+300 ms" en vez de
-   "arrancá ahora", para que todos empiecen en el mismo instante.
+1. **Vista según el rol del integrante.** Hoy `state.role` está fijo en
+   `'singer'` y cada uno elige su vista a mano en la barra de abajo. Leyendo el rol
+   de `band_members` al entrar, cada uno abre la suya. Es la puerta de entrada al
+   punto siguiente.
+2. **Que los eventos MIDI con destino de un integrante disparen desde SU
+   dispositivo** (el pedal está a sus pies, no al lado del maestro). Depende del
+   punto 1: hasta que el rol no venga de la base, el sistema no distingue quién es
+   quién.
+3. **Pantalla de Miembros en la web admin**, para no depender de correr SQL cada
+   vez que entra alguien. Necesita una función `security definer` que resuelva
+   mail → `user_id` validando que quien llama es el dueño de la banda.
+4. **Vista de seguidor por PWA**, para que un integrante entre desde el navegador
+   sin instalar nada.
+5. **Arranque agendado**: el maestro dice "arrancamos en T+300 ms" en vez de
+   "arrancá ahora", para que todos empiecen en el mismo instante. Hoy el que
+   arranca es el maestro y los demás lo alcanzan en la primera baliza.
+6. **Sync sin internet: el maestro como servidor** en la red local. Hoy las
+   balizas pasan por Supabase, así que sin internet el sync no se puede
+   establecer (una vez establecido, sí sobrevive a la caída). El hotspot con datos
+   móviles lo tapa por ahora. **Hacerlo solo si el hotspot no alcanza**: el código
+   son un par de días y hay que probarlo con aparatos en la mano, no se puede
+   verificar solo. Análisis completo en la conversación del 17 ago.
 7. **Secciones con salto en vivo** (loopear el estribillo, saltear el puente). La
    tabla `song_sections` ya existe. Es el salto de calidad más grande pendiente.
-8. **`versionName` con fecha y hora** en el build, mostrado en ⚙, para saber qué
-   versión tiene cada teléfono sin consultar `dumpsys`.
+8. Botones de navegación para el bajista, autoscroll a velocidad constante,
+   colores por sección, notas visibles en escenario, historial de tocadas,
+   transposición de acordes, letras en markdown, buscador en la biblioteca,
+   fuentes embebidas y layout propio para el iPad mini. Detalle en
+   `IDEAS_STAGE_TRAXX.md`.
 
 ### 🔵 iOS / iPad
-- **`AVAudioSession` en el plugin Swift — crítico.** Sin esto el interruptor de
-  silencio del iPad mutea el show. Son 4 líneas, están en `PLAN_AUDIO_PISTAS.md`.
-- Recompilar la app en el iPad con todo lo de esta sesión.
+> Inventario completo de los equipos de la banda y qué falta en cada uno: **§12**.
+
+- ✅ **Los dos iPads ya están compilados y andando** (17 ago). El fix de
+  `AVAudioSession` está confirmado en el aparato real.
+- **Averiguar si la cuenta de Apple es gratuita o paga.** Xcode → Settings →
+  Accounts. Si es gratuita, la app instalada por cable **caduca a los 7 días** y
+  hay que volver a enchufar cada iPad. Eso convertiría la vista de seguidor por
+  navegador en la única forma sana de que la banda la use.
+- **Verificar cómo se lee la letra en el mini de 8,3"** a la distancia real de la
+  baterista. Si queda chica, layout propio.
 - Backup del proyecto de Logic y de los Controller Assignments.
 
 ---
@@ -222,28 +448,45 @@ dispositivo a reproductor el problema desapareció por diseño:
 
 # 7 · Compilar
 
+**Primero, siempre:**
+```bash
+bash build.sh
+```
+Recompila el CSS de Tailwind escaneando el `index.html`, lo re-inyecta entre los
+marcadores `TW_START` / `TW_END`, estampa la fecha y hora en `APP_BUILD` y copia el
+resultado a `camarage-android/www/`. Saltear este paso rompe el estilo de cualquier
+clase nueva, sin dar ningún error.
+
 **APK de Android** (se compiló en la nube durante esta sesión; en la Mac de Pato):
 ```bash
+bash build.sh
 cd camarage-android
 npm install
-npx cap sync android
+npx cap copy android
 cd android && echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
 ./gradlew assembleDebug
 ```
-Instalar sin perder datos: `adb install -r CAMARAGE-pistas-debug.apk`
+`npx cap copy android` no es opcional: sin eso Gradle compila el HTML viejo que
+quedó en `android/app/src/main/assets/public/` y el APK sale idéntico al anterior.
+
+Instalar sin perder datos: `adb install -r CAMARAGE-sync-debug.apk`
 
 **Web admin:** `git push` y Vercel despliega solo.
 
 ### Archivos clave
 | Archivo | Qué es |
 |---|---|
-| `index.html` | La app entera. Módulo `TRACKS` = motor de pistas. `elapsedSec()` = el reloj |
+| `build.sh` | **Correr siempre antes de compilar.** Tailwind + sello de versión + copia a www |
+| `index.html` | La app entera. `TRACKS` = motor de pistas, `SYNC` = balizas entre integrantes, `elapsedSec()` = el reloj |
 | `camarage-android/www/index.html` | Copia idéntica, es la que se compila |
 | `web/lib/midi-file.ts` | Parser de Standard MIDI File |
 | `web/app/songs/[id]/page.tsx` | Editor de canción: Datos, Letras, Cues, Cifrado, Audio, MIDI out |
 | `PLAN_AUDIO_PISTAS.md` | Diseño del reproductor + el fix de `AVAudioSession` |
 | `ANALISIS_LATENCIA_SYNC.md` | Diseño del sync entre integrantes, con números |
 | `IDEAS_STAGE_TRAXX.md` | Qué copiarle a Stage Traxx 4, ordenado por valor/esfuerzo |
+| `agregar_integrante.sql` | Dar de alta a un integrante en la banda con su rol |
+| `insert_la_nueva_sangre.sql` | Canción + secciones + letra con tiempos (§13) |
+| `insert_camine_sin_mirar_atras.sql` | Ídem (§13) |
 
 ---
 
@@ -284,12 +527,48 @@ Los APK compilados en la misma máquina se instalan con `adb install -r` sin per
 nada. Conviene compilar siempre desde el mismo lugar.
 
 ### adb con el Samsung
+`adb` **no está en el PATH** de Pato. Vive en
+`~/Library/Android/sdk/platform-tools/adb`. Se arregla una vez:
+```bash
+echo 'export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+Su teléfono es el serial `R5CY34PMCRW`.
+
 Si `adb devices` dice `unauthorized`, en orden:
 1. Desbloquear el teléfono y aceptar el cartel (no aparece con la pantalla bloqueada).
 2. Ajustes → Seguridad y privacidad → **Bloqueador automático** desactivado (bloquea
    las conexiones USB de datos y es la causa número uno).
 3. Opciones de desarrollador → **Revocar autorizaciones de depuración USB**.
 4. En la Mac: `adb kill-server && rm -f ~/.android/adbkey*` para forzar un cartel nuevo.
+
+### El sello de versión está en UTC, no en hora argentina
+`build.sh` corre en el contenedor de Cowork, que tiene el reloj en **UTC**: 3 horas
+adelantado. El sello `20260817-1418` es "las 11:18 de Buenos Aires". No es un build
+del futuro. Para cruzarlo con la instalación:
+```bash
+adb shell dumpsys package com.camarage.live | grep -E "versionName|lastUpdateTime"
+```
+`lastUpdateTime` sí está en hora local del teléfono. `versionName` siempre dice
+`1.0` —está fijo en el `build.gradle`— así que **no sirve** para saber qué versión
+hay; el dato bueno es el sello que muestra ⚙ (recuadro **VERSIÓN**, arriba del
+panel).
+
+### Gradle compila el HTML viejo si no se copia
+`./gradlew assembleDebug` **no mira `www/`**: compila lo que está en
+`android/app/src/main/assets/public/`. Si se edita el `index.html` y no se corre
+`npx cap copy android`, el APK sale **idéntico al anterior** y sin ningún error.
+Pasó en esta sesión: Gradle dijo que compiló bien y el APK tenía el HTML de la
+madrugada. Verificar así:
+```bash
+unzip -p app/build/outputs/apk/debug/app-debug.apk assets/public/index.html | grep -o "APP_BUILD = '[^']*'"
+```
+
+### El puente de Cowork deja un `.git/index.lock` que no puede borrar
+Cualquier comando de git corrido desde el sandbox de Claude sobre la carpeta montada
+deja un `index.lock` huérfano —el puente no tiene permiso de borrar archivos— y eso
+**bloquea los commits siguientes**. Si git se queja: `rm -f .git/index.lock`.
+Conclusión práctica: **los commits los hace Pato desde su terminal**, no Claude.
 
 ### La terminal de Pato no acepta comentarios
 Su zsh tiene `interactive_comments` desactivado: **cualquier bloque de comandos con
@@ -312,8 +591,10 @@ Se ve en los `insert_*_lyrics.sql` del repo — por ejemplo la primera línea de
 re-bouncean los temas y el nuevo archivo arranca en otro punto —aunque sea medio
 segundo— **se desincronizan todas las letras de ese tema**.
 
-Por eso el offset por canción (§4) importa más de lo que parece: convierte un
+Por eso el offset por canción (§2) importa más de lo que parece: convierte un
 re-bounce corrido en un solo número a ajustar, en vez de retocar 39 líneas a mano.
+Y para arreglar los tiempos que Whisper dejó corridos, está el modo **marcar
+tiempos** de la web (§2): play y una tecla por línea.
 
 **Regla al bouncear:** siempre desde el primer sonido del tema, sin silencio ni
 cuenta de baqueta adelante, y siempre igual.
@@ -356,6 +637,185 @@ al mismo instante que el bounce de audio.
 
 
 ---
+
+# 12 · Dispositivos de la banda — pendiente de resolver
+
+Inventario real y qué hace falta para cada uno.
+
+| Dispositivo | De quién | Puerto | Rol previsto |
+|---|---|---|---|
+| Samsung A56 (Android) | Pato | USB-C | **Master** — funcionando hoy |
+| iPad Pro 12,9" 3ra gen (2018, A12X, iPadOS 26.3) | Pato | **USB-C** | Master en escenario (pantalla grande) |
+| iPhone 12 | Baterista | **Lightning** | Seguidor (solo pantalla) |
+| iPad mini 6 | Baterista | **USB-C** | Seguidor (solo pantalla) |
+
+> **Corrección de dato:** el iPad Pro figura como "2017" en conversación, pero el
+> modelo anotado es `MTEL2TY/A` = **3ra generación, 2018**, y corre iPadOS 26.3, que
+> el de 2017 (2da gen, Lightning) no soporta. Es **USB-C**, así que le sirve el mismo
+> adaptador con DAC y el mismo cable Y ya validados con el Samsung. No comprar
+> adaptadores Lightning para este equipo.
+
+---
+
+## 12.1 · El problema real: cómo instalar la app en los iOS de otros
+
+Hoy la app se instala en iOS compilando con Xcode y **Apple ID gratuito**. Eso trae
+dos límites que hacen esto inviable para una banda:
+
+- El build **caduca a los 7 días** y hay que re-firmar.
+- Solo instala en dispositivos **enchufados a la Mac de Pato** por cable.
+
+Es decir: cada semana habría que juntarse con el baterista y enchufar sus dos
+equipos. No es una opción.
+
+### Salida recomendada: separar master de seguidores
+
+**Los seguidores no necesitan la app nativa.** Un seguidor solo mira la pantalla —
+letra, cifrado, metrónomo visual — y para eso alcanza el navegador:
+
+- Reproducción de audio: **no la necesita** (el audio sale del master).
+- Bluetooth MIDI: **no lo necesita** (solo el master le habla al hardware).
+- Todo lo demás —letras, cifrado, sincronización, caché offline— es Web Audio,
+  IndexedDB y Supabase: **funciona en Safari sin nada nativo**.
+
+Entonces: los seguidores abren la web, la agregan a la pantalla de inicio y listo.
+Sin Xcode, sin firmas, sin caducidad, sin cables.
+
+El **master sí** necesita el build nativo, porque es el único que usa BLE MIDI para
+los pedales y necesita el arreglo de `AVAudioSession`.
+
+### Tareas concretas
+
+1. **Servir una vista de seguidor en la web** (`camarage.vercel.app/performer` ya
+   existe como página, hay que ponerla al día con la app actual).
+2. **Hacerla instalable como PWA**: manifest, ícono, pantalla completa. En iOS se
+   agrega desde Compartir → "Añadir a pantalla de inicio".
+3. **Mantener la pantalla encendida en Safari**: la Screen Wake Lock API existe en
+   Safari moderno; verificar que agarre en iOS. Si no, el recurso viejo es un video
+   invisible en loop.
+4. **Login por integrante**: hoy hay un solo usuario. Depende de las invitaciones
+   por mail (§4).
+5. **Verificar el metrónomo visual en el iPad mini 6** — 8,3" es chico; puede que
+   convenga un layout más grande para el baterista.
+
+### Si en algún momento hace falta la app nativa en los equipos del baterista
+La única salida sana es el **Apple Developer Program pago (99 USD/año)**, que
+habilita **TestFlight**: se distribuye por mail, sin cables, y los builds duran un
+año. Solo vale la pena si el baterista necesita algo que el navegador no puede
+hacer — hoy, nada.
+
+---
+
+## 12.2 · Pendientes por dispositivo
+
+### iPad Pro 12,9" (Pato) — candidato a master en escenario
+- [x] **`AVAudioSession` en el plugin Swift** — ya está aplicado en el código
+      (categoría `.playback`, buffer de 5 ms, manejo de interrupciones).
+- [ ] **Recompilar en Xcode** — es lo único que falta, y es el próximo paso de la
+      sesión (§0). El `index.html` nuevo ya está copiado en
+      `ios/App/App/public/`, así que no hace falta `npx cap copy ios`; solo abrir
+      `ios/App/App.xcworkspace`, elegir el iPad y ⌘R. Hasta que no se compile, el
+      fix de `AVAudioSession` no tiene ningún efecto en el iPad.
+- [ ] Probar el circuito de audio completo: adaptador USB-C con DAC + cable Y + DI4000.
+      Debería comportarse igual que el Samsung, pero hay que confirmarlo.
+- [ ] Verificar la reproducción de WAV: decodificado en RAM, un tema de 5 min ocupa
+      ~105 MB. Con 4 GB y una canción por vez debería andar; si la app se cierra al
+      cambiar de tema, es esto.
+- [ ] Decidir **quién es el master en vivo**: el Samsung (ya probado) o el iPad
+      (pantalla mucho mejor para letras). Probar los dos en un ensayo.
+- [ ] Recordar el gotcha del Apple ID gratis: el *trust* del perfil se resetea seguido
+      (Ajustes → General → VPN y gestión de dispositivos → tocar el perfil → Trust).
+
+### iPhone 12 (baterista) — seguidor
+- [ ] Probar la vista de seguidor en Safari.
+- [ ] **No necesita adaptador de audio** mientras sea solo pantalla. Si algún día
+      tuviera que sacar audio, es **Lightning**, no USB-C: adaptador distinto.
+
+### iPad mini 6 (baterista) — seguidor
+- [ ] Probar la vista de seguidor en Safari.
+- [ ] Evaluar el tamaño del metrónomo visual y de la letra en 8,3".
+- [ ] USB-C, por si alguna vez necesita audio.
+
+### Todos los iOS
+- [ ] Ojo con la carga: en los equipos sin jack, el puerto único queda ocupado por el
+      audio. Para shows largos, hub USB-C con audio + power delivery (no aplica al
+      iPhone 12, que no saca audio).
+
+---
+
+## 12.3 · Orden sugerido
+
+1. **Recompilar el iPad** con el código actual —ahí entra el fix de
+   `AVAudioSession`, que ya está escrito— y probar el reproductor.
+2. **Decidir el master** entre Samsung e iPad, con un ensayo real.
+3. **Vista de seguidor como PWA**: ahora sí tiene sentido, porque el sync entre
+   integrantes ya funciona (§2) y hay algo a qué seguir.
+
+
+---
+---
+
+# 13 · Canciones analizadas desde el audio (17 ago 2026)
+
+Dos temas nuevos, procesados con el mismo método: separación de voz con **Demucs**
+y transcripción con **Whisper large-v3** sobre la voz aislada, con marcas por
+palabra. Sobre el mix crudo la transcripción sale inservible; con la voz aislada
+queda legible. El tempo NO se estimó con el detector automático de librosa —que en
+una de las dos se equivocó— sino probando una rejilla de clicks contra los golpes
+del instrumental y quedándose con el mejor puntaje.
+
+| | La nueva sangre | Caminé sin mirar atrás |
+|---|---|---|
+| Archivo | `CARNE 2026.mp3` | `camine sin mirar atras 18 julio.mp3` |
+| Tempo | **135,00** BPM | **125,00** BPM |
+| Puntaje vs vecinos | 1,138 contra 0,10-0,15 | 1,388 contra 0,098-0,128 |
+| Primer golpe | 0,090 s | 0,084 s |
+| Compás | 4/4 (1,7778 s) | 4/4 (1,92 s) |
+| Tonalidad | Sol# menor (0,788) | Sol menor (0,896) |
+| Suena hasta | 3:35,7 | 4:22,4 |
+| Silencio de cola | **62,4 s** | 14,3 s |
+| Entra la voz | 0:24,5 | 0:46,2 (compás 25 justo) |
+| Líneas / secciones | 24 / 9 | 45 / 10 |
+| SQL | `insert_la_nueva_sangre.sql` | `insert_camine_sin_mirar_atras.sql` |
+
+Tres cosas aprendidas que sirven para las próximas:
+
+**El detector de tempo automático se equivoca.** En La nueva sangre dio 136 y el
+verdadero es 135. La rejilla de clicks no deja lugar a dudas: el candidato correcto
+saca diez veces el puntaje de sus vecinos.
+
+**Cuidado con la mitad del tempo.** En Caminé, el candidato más fuerte en bruto fue
+62,5 BPM, que es la mitad de 125, porque el golpe fuerte cae cada dos tiempos. El
+click va al valor musical (125), no al que puntúa más alto.
+
+**Que la rejilla cierre es la mejor validación.** En Caminé las 10 secciones encajan
+sin huecos y la última termina a 0,7 s del final real del audio. Cuando eso pasa, el
+tempo está bien.
+
+**Ninguno de los dos MP3 sirve como pista de escenario**: son mix estéreo normales
+(correlación L/R de 0,68 y 0,435), sin click detectable y sin la separación de
+canales. Hay que bouncear la versión de escenario. Los tiempos de la letra no se
+pierden: si el bounce arranca en otro punto se corrige con el offset.
+
+Los `.md` con la letra en tabla y las líneas dudosas marcadas están en
+`LA_NUEVA_SANGRE_letra.md` y `CAMINE_SIN_MIRAR_ATRAS_letra.md`.
+
+### Receta, si hace falta repetirla
+
+```bash
+pip install --break-system-packages faster-whisper librosa demucs
+pip install --break-system-packages torch --index-url https://download.pytorch.org/whl/cpu
+python3 -m demucs --two-stems=vocals -n htdemucs -o sep tema.wav
+```
+Después Whisper large-v3 sobre `sep/htdemucs/tema/vocals.wav`, en int8, con
+`vad_filter=False` (el VAD borra el canto), `condition_on_previous_text=False` y
+**sin** `initial_prompt` — el prompt se filtra a la salida como si fuera letra.
+Para los tramos que salen mal, transcribir ventanas cortas de a 20-30 s.
+
+Truco para saber si un tramo tiene voz de verdad o es filtración de un
+instrumento: medir *voicedness* con `librosa.pyin`. Canto real da 0,3-0,6 con
+dispersión de altura de 200-300 cents; la filtración da 0,12 con 1200 cents.
+
 ---
 
 # ══════════ ARCHIVO HISTÓRICO ══════════

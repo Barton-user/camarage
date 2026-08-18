@@ -24,15 +24,21 @@
   <meta name="theme-color" content="#000000" />
   <title>CAMARAGE · Live Sync</title>
 
-  <!-- Tailwind COMPILADO E INLINE (antes venia de cdn.tailwindcss.com).
-       Sin esto, sin internet la app se quedaba sin layout: todo apilado en
-       una columna. En un escenario eso es fatal, asi que ahora viaja adentro
-       del archivo. Regenerar con:
-         npx tailwindcss -c tailwind.config.js -i tw-input.css -o tw.css --minify
-       y volver a pegar el resultado aca. -->
-  <style>
-*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.container{width:100%}@media (min-width:640px){.container{max-width:640px}}@media (min-width:768px){.container{max-width:768px}}@media (min-width:1024px){.container{max-width:1024px}}@media (min-width:1280px){.container{max-width:1280px}}@media (min-width:1536px){.container{max-width:1536px}}.pointer-events-none{pointer-events:none}.visible{visibility:visible}.invisible{visibility:hidden}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.inset-6{inset:1.5rem}.inset-y-0{top:0;bottom:0}.bottom-0{bottom:0}.bottom-3{bottom:.75rem}.left-0{left:0}.left-1\/2{left:50%}.left-3{left:.75rem}.right-0{right:0}.right-2{right:.5rem}.right-3{right:.75rem}.top-0{top:0}.top-1{top:.25rem}.top-1\/2{top:50%}.top-20{top:5rem}.top-3{top:.75rem}.z-20{z-index:20}.z-40{z-index:40}.z-50{z-index:50}.col-span-2{grid-column:span 2/span 2}.col-span-3{grid-column:span 3/span 3}.col-span-4{grid-column:span 4/span 4}.col-span-5{grid-column:span 5/span 5}.mx-2{margin-left:.5rem;margin-right:.5rem}.mx-3{margin-left:.75rem;margin-right:.75rem}.mx-4{margin-left:1rem;margin-right:1rem}.my-3{margin-top:.75rem;margin-bottom:.75rem}.my-5{margin-top:1.25rem;margin-bottom:1.25rem}.my-6{margin-top:1.5rem;margin-bottom:1.5rem}.mb-0\.5{margin-bottom:.125rem}.mb-1{margin-bottom:.25rem}.mb-1\.5{margin-bottom:.375rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.ml-1{margin-left:.25rem}.ml-2{margin-left:.5rem}.mr-auto{margin-right:auto}.mt-0\.5{margin-top:.125rem}.mt-1{margin-top:.25rem}.mt-1\.5{margin-top:.375rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.mt-8{margin-top:2rem}.block{display:block}.flex{display:flex}.\!grid{display:grid!important}.grid{display:grid}.hidden{display:none}.h-1{height:.25rem}.h-1\.5{height:.375rem}.h-1\/2{height:50%}.h-10{height:2.5rem}.h-12{height:3rem}.h-14{height:3.5rem}.h-16{height:4rem}.h-2{height:.5rem}.h-2\.5{height:.625rem}.h-3{height:.75rem}.h-6{height:1.5rem}.h-72{height:18rem}.h-9{height:2.25rem}.h-\[3px\]{height:3px}.h-full{height:100%}.max-h-28{max-height:7rem}.max-h-44{max-height:11rem}.max-h-\[80vw\]{max-height:80vw}.max-h-\[92vh\]{max-height:92vh}.min-h-screen{min-height:100vh}.w-1{width:.25rem}.w-1\.5{width:.375rem}.w-10{width:2.5rem}.w-16{width:4rem}.w-2{width:.5rem}.w-2\.5{width:.625rem}.w-20{width:5rem}.w-3{width:.75rem}.w-6{width:1.5rem}.w-72{width:18rem}.w-9{width:2.25rem}.w-full{width:100%}.w-px{width:1px}.min-w-0{min-width:0}.max-w-\[140px\]{max-width:140px}.max-w-\[80vw\]{max-width:80vw}.max-w-md{max-width:28rem}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.origin-bottom{transform-origin:bottom}.-translate-x-1\/2{--tw-translate-x:-50%}.-translate-x-1\/2,.-translate-y-full{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.-translate-y-full{--tw-translate-y:-100%}.transform{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-pointer{cursor:pointer}.select-none{-webkit-user-select:none;-moz-user-select:none;user-select:none}.list-none{list-style-type:none}.grid-cols-12{grid-template-columns:repeat(12,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.grid-cols-9{grid-template-columns:repeat(9,minmax(0,1fr))}.flex-col{flex-direction:column}.place-items-center{place-items:center}.items-start{align-items:flex-start}.items-end{align-items:flex-end}.items-center{align-items:center}.items-baseline{align-items:baseline}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-0\.5{gap:.125rem}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}.space-y-0\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.125rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.125rem*var(--tw-space-y-reverse))}.space-y-1>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.25rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.25rem*var(--tw-space-y-reverse))}.space-y-1\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.375rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.375rem*var(--tw-space-y-reverse))}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-md{border-radius:.375rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-2{border-width:2px}.border-b{border-bottom-width:1px}.border-t{border-top-width:1px}.border-dashed{border-style:dashed}.border-\[rgba\(239\2c 68\2c 68\2c 0\.35\)\]{border-color:rgba(239,68,68,.35)}.border-\[rgba\(34\2c 197\2c 94\2c 0\.45\)\]{border-color:rgba(34,197,94,.45)}.border-\[rgba\(34\2c 211\2c 238\2c 0\.35\)\]{border-color:rgba(34,211,238,.35)}.border-\[var\(--border-soft\)\]{border-color:var(--border-soft)}.border-cyan-400\/60{border-color:rgba(34,211,238,.6)}.border-neutral-700{--tw-border-opacity:1;border-color:rgb(64 64 64/var(--tw-border-opacity,1))}.border-neutral-800{--tw-border-opacity:1;border-color:rgb(38 38 38/var(--tw-border-opacity,1))}.border-neutral-900{--tw-border-opacity:1;border-color:rgb(23 23 23/var(--tw-border-opacity,1))}.bg-\[\#050505\]\/95{background-color:rgba(5,5,5,.95)}.bg-\[\#0a0a0a\]{--tw-bg-opacity:1;background-color:rgb(10 10 10/var(--tw-bg-opacity,1))}.bg-\[rgba\(239\2c 68\2c 68\2c 0\.08\)\]{background-color:rgba(239,68,68,.08)}.bg-\[rgba\(34\2c 197\2c 94\2c 0\.12\)\]{background-color:rgba(34,197,94,.12)}.bg-\[var\(--bg-card\)\]{background-color:var(--bg-card)}.bg-black{--tw-bg-opacity:1;background-color:rgb(0 0 0/var(--tw-bg-opacity,1))}.bg-black\/70{background-color:rgba(0,0,0,.7)}.bg-neutral-600{--tw-bg-opacity:1;background-color:rgb(82 82 82/var(--tw-bg-opacity,1))}.bg-neutral-700{--tw-bg-opacity:1;background-color:rgb(64 64 64/var(--tw-bg-opacity,1))}.bg-neutral-900{--tw-bg-opacity:1;background-color:rgb(23 23 23/var(--tw-bg-opacity,1))}.bg-neutral-950{--tw-bg-opacity:1;background-color:rgb(10 10 10/var(--tw-bg-opacity,1))}.p-1{padding:.25rem}.p-2{padding:.5rem}.p-2\.5{padding:.625rem}.p-3{padding:.75rem}.p-4{padding:1rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.pb-2{padding-bottom:.5rem}.pb-20{padding-bottom:5rem}.pb-3{padding-bottom:.75rem}.pb-4{padding-bottom:1rem}.pt-2{padding-top:.5rem}.pt-3{padding-top:.75rem}.pt-4{padding-top:1rem}.text-left{text-align:left}.text-center{text-align:center}.text-right{text-align:right}.align-top{vertical-align:top}.text-2xl{font-size:1.5rem;line-height:2rem}.text-4xl{font-size:2.25rem;line-height:2.5rem}.text-5xl{font-size:3rem;line-height:1}.text-7xl{font-size:4.5rem;line-height:1}.text-8xl{font-size:6rem;line-height:1}.text-9xl{font-size:8rem;line-height:1}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[160px\]{font-size:160px}.text-\[8px\]{font-size:8px}.text-\[9px\]{font-size:9px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xl{font-size:1.25rem;line-height:1.75rem}.text-xs{font-size:.75rem;line-height:1rem}.font-black{font-weight:900}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-normal{font-weight:400}.uppercase{text-transform:uppercase}.italic{font-style:italic}.leading-none{line-height:1}.leading-snug{line-height:1.375}.leading-tight{line-height:1.25}.tracking-\[0\.18em\]{letter-spacing:.18em}.tracking-\[0\.22em\]{letter-spacing:.22em}.tracking-\[0\.2em\]{letter-spacing:.2em}.tracking-\[0\.3em\]{letter-spacing:.3em}.tracking-wider{letter-spacing:.05em}.tracking-widest{letter-spacing:.1em}.text-cyan-400{--tw-text-opacity:1;color:rgb(34 211 238/var(--tw-text-opacity,1))}.text-neutral-200{--tw-text-opacity:1;color:rgb(229 229 229/var(--tw-text-opacity,1))}.text-neutral-300{--tw-text-opacity:1;color:rgb(212 212 212/var(--tw-text-opacity,1))}.text-neutral-400{--tw-text-opacity:1;color:rgb(163 163 163/var(--tw-text-opacity,1))}.text-neutral-500{--tw-text-opacity:1;color:rgb(115 115 115/var(--tw-text-opacity,1))}.text-neutral-600{--tw-text-opacity:1;color:rgb(82 82 82/var(--tw-text-opacity,1))}.text-neutral-700{--tw-text-opacity:1;color:rgb(64 64 64/var(--tw-text-opacity,1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.shadow-\[0_0_30px_-10px_rgba\(34\2c 197\2c 94\2c 0\.6\)\]{--tw-shadow:0 0 30px -10px rgba(34,197,94,.6);--tw-shadow-colored:0 0 30px -10px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.outline{outline-style:solid}.ring{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.blur{--tw-blur:blur(8px)}.blur,.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.backdrop-blur{--tw-backdrop-blur:blur(8px)}.backdrop-blur,.backdrop-filter{-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-transform{transition-property:transform;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.duration-700{transition-duration:.7s}.ease-in-out{transition-timing-function:cubic-bezier(.4,0,.2,1)}.ease-out{transition-timing-function:cubic-bezier(0,0,.2,1)}.will-change-transform{will-change:transform}.hover\:bg-neutral-900:hover{--tw-bg-opacity:1;background-color:rgb(23 23 23/var(--tw-bg-opacity,1))}.hover\:text-neutral-300:hover{--tw-text-opacity:1;color:rgb(212 212 212/var(--tw-text-opacity,1))}.hover\:text-white:hover{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.active\:bg-\[rgba\(239\2c 68\2c 68\2c 0\.18\)\]:active{background-color:rgba(239,68,68,.18)}.active\:bg-\[rgba\(34\2c 197\2c 94\2c 0\.22\)\]:active{background-color:rgba(34,197,94,.22)}.active\:bg-neutral-800:active{--tw-bg-opacity:1;background-color:rgb(38 38 38/var(--tw-bg-opacity,1))}.active\:bg-neutral-900:active{--tw-bg-opacity:1;background-color:rgb(23 23 23/var(--tw-bg-opacity,1))}@media (min-width:640px){.sm\:items-center{align-items:center}.sm\:text-3xl{font-size:1.875rem;line-height:2.25rem}.sm\:text-6xl{font-size:3.75rem;line-height:1}.sm\:text-base{font-size:1rem;line-height:1.5rem}}@media (min-width:768px){.md\:text-4xl{font-size:2.25rem;line-height:2.5rem}}
-  </style>
+  <!-- ==================== TAILWIND INLINE ====================
+       CSS compilado de Tailwind, embebido para que la app NO dependa de
+       ningún CDN: sin internet, con el CDN se quedaba sin una sola regla de
+       estilo y todo aparecía apilado en una columna.
+
+       ⚠ NO editar a mano. Si agregás clases nuevas de Tailwind en el HTML,
+       hay que REGENERAR este bloque o esas clases no van a existir:
+
+           bash build.sh
+
+       (ya pasó una vez: col-span-6 no existía y el botón PLAY quedó angosto)
+       ========================================================== -->
+  <!--TW_START-->
+  <style>*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.19 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:ui-sans-serif,system-ui,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.container{width:100%}@media (min-width:640px){.container{max-width:640px}}@media (min-width:768px){.container{max-width:768px}}@media (min-width:1024px){.container{max-width:1024px}}@media (min-width:1280px){.container{max-width:1280px}}@media (min-width:1536px){.container{max-width:1536px}}.pointer-events-none{pointer-events:none}.\!visible{visibility:visible!important}.visible{visibility:visible}.invisible{visibility:hidden}.static{position:static}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.sticky{position:sticky}.inset-0{inset:0}.inset-6{inset:1.5rem}.inset-y-0{top:0;bottom:0}.bottom-0{bottom:0}.bottom-3{bottom:.75rem}.left-0{left:0}.left-1{left:.25rem}.left-1\/2{left:50%}.left-3{left:.75rem}.right-0{right:0}.right-2{right:.5rem}.right-3{right:.75rem}.top-0{top:0}.top-1{top:.25rem}.top-1\/2{top:50%}.top-20{top:5rem}.top-3{top:.75rem}.z-20{z-index:20}.z-40{z-index:40}.z-50{z-index:50}.col-span-2{grid-column:span 2/span 2}.col-span-3{grid-column:span 3/span 3}.col-span-4{grid-column:span 4/span 4}.col-span-5{grid-column:span 5/span 5}.col-span-6{grid-column:span 6/span 6}.mx-2{margin-left:.5rem;margin-right:.5rem}.mx-3{margin-left:.75rem;margin-right:.75rem}.mx-4{margin-left:1rem;margin-right:1rem}.my-3{margin-top:.75rem;margin-bottom:.75rem}.my-5{margin-top:1.25rem;margin-bottom:1.25rem}.my-6{margin-top:1.5rem;margin-bottom:1.5rem}.mb-0{margin-bottom:0}.mb-0\.5{margin-bottom:.125rem}.mb-1{margin-bottom:.25rem}.mb-2{margin-bottom:.5rem}.mb-3{margin-bottom:.75rem}.ml-1{margin-left:.25rem}.ml-2{margin-left:.5rem}.mr-1{margin-right:.25rem}.mr-1\.5{margin-right:.375rem}.mr-auto{margin-right:auto}.mt-0{margin-top:0}.mt-0\.5{margin-top:.125rem}.mt-1{margin-top:.25rem}.mt-1\.5{margin-top:.375rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.mt-8{margin-top:2rem}.block{display:block}.flex{display:flex}.table{display:table}.\!grid{display:grid!important}.grid{display:grid}.hidden{display:none}.h-1{height:.25rem}.h-1\.5{height:.375rem}.h-1\/2{height:50%}.h-10{height:2.5rem}.h-12{height:3rem}.h-14{height:3.5rem}.h-16{height:4rem}.h-2{height:.5rem}.h-2\.5{height:.625rem}.h-3{height:.75rem}.h-6{height:1.5rem}.h-72{height:18rem}.h-9{height:2.25rem}.h-\[3px\]{height:3px}.h-full{height:100%}.max-h-28{max-height:7rem}.max-h-44{max-height:11rem}.max-h-\[80vw\]{max-height:80vw}.max-h-\[92vh\]{max-height:92vh}.min-h-screen{min-height:100vh}.w-1{width:.25rem}.w-1\.5{width:.375rem}.w-10{width:2.5rem}.w-16{width:4rem}.w-2{width:.5rem}.w-2\.5{width:.625rem}.w-20{width:5rem}.w-3{width:.75rem}.w-6{width:1.5rem}.w-72{width:18rem}.w-9{width:2.25rem}.w-full{width:100%}.w-px{width:1px}.min-w-0{min-width:0}.max-w-\[140px\]{max-width:140px}.max-w-\[80vw\]{max-width:80vw}.max-w-md{max-width:28rem}.flex-1{flex:1 1 0%}.flex-shrink-0{flex-shrink:0}.origin-bottom{transform-origin:bottom}.-translate-x-1{--tw-translate-x:-0.25rem}.-translate-x-1,.-translate-x-1\/2{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.-translate-x-1\/2{--tw-translate-x:-50%}.-translate-y-full{--tw-translate-y:-100%}.-translate-y-full,.transform{transform:translate(var(--tw-translate-x),var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.cursor-pointer{cursor:pointer}.select-none{-webkit-user-select:none;-moz-user-select:none;user-select:none}.resize{resize:both}.list-none{list-style-type:none}.grid-cols-12{grid-template-columns:repeat(12,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.grid-cols-9{grid-template-columns:repeat(9,minmax(0,1fr))}.flex-col{flex-direction:column}.place-items-center{place-items:center}.items-start{align-items:flex-start}.items-end{align-items:flex-end}.items-center{align-items:center}.items-baseline{align-items:baseline}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-0{gap:0}.gap-0\.5{gap:.125rem}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.space-y-0>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0px*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0px*var(--tw-space-y-reverse))}.space-y-0\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.125rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.125rem*var(--tw-space-y-reverse))}.space-y-1>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.25rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.25rem*var(--tw-space-y-reverse))}.space-y-1\.5>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.375rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.375rem*var(--tw-space-y-reverse))}.space-y-2>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.5rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.5rem*var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-md{border-radius:.375rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-2{border-width:2px}.border-b{border-bottom-width:1px}.border-t{border-top-width:1px}.border-dashed{border-style:dashed}.border-\[rgba\(239\2c 68\2c 68\2c 0\.35\)\]{border-color:rgba(239,68,68,.35)}.border-\[rgba\(34\2c 197\2c 94\2c 0\.45\)\]{border-color:rgba(34,197,94,.45)}.border-\[rgba\(34\2c 211\2c 238\2c 0\.35\)\]{border-color:rgba(34,211,238,.35)}.border-\[var\(--border-soft\)\]{border-color:var(--border-soft)}.border-cyan-400{--tw-border-opacity:1;border-color:rgb(34 211 238/var(--tw-border-opacity,1))}.border-cyan-400\/60{border-color:rgba(34,211,238,.6)}.border-neutral-700{--tw-border-opacity:1;border-color:rgb(64 64 64/var(--tw-border-opacity,1))}.border-neutral-800{--tw-border-opacity:1;border-color:rgb(38 38 38/var(--tw-border-opacity,1))}.border-neutral-900{--tw-border-opacity:1;border-color:rgb(23 23 23/var(--tw-border-opacity,1))}.bg-\[\#050505\]\/95{background-color:rgba(5,5,5,.95)}.bg-\[\#0a0a0a\]{--tw-bg-opacity:1;background-color:rgb(10 10 10/var(--tw-bg-opacity,1))}.bg-\[rgba\(239\2c 68\2c 68\2c 0\.08\)\]{background-color:rgba(239,68,68,.08)}.bg-\[rgba\(34\2c 197\2c 94\2c 0\.12\)\]{background-color:rgba(34,197,94,.12)}.bg-\[var\(--bg-card\)\]{background-color:var(--bg-card)}.bg-black{--tw-bg-opacity:1;background-color:rgb(0 0 0/var(--tw-bg-opacity,1))}.bg-black\/40{background-color:rgba(0,0,0,.4)}.bg-black\/70{background-color:rgba(0,0,0,.7)}.bg-neutral-600{--tw-bg-opacity:1;background-color:rgb(82 82 82/var(--tw-bg-opacity,1))}.bg-neutral-700{--tw-bg-opacity:1;background-color:rgb(64 64 64/var(--tw-bg-opacity,1))}.bg-neutral-900{--tw-bg-opacity:1;background-color:rgb(23 23 23/var(--tw-bg-opacity,1))}.bg-neutral-950{--tw-bg-opacity:1;background-color:rgb(10 10 10/var(--tw-bg-opacity,1))}.p-1{padding:.25rem}.p-2{padding:.5rem}.p-2\.5{padding:.625rem}.p-3{padding:.75rem}.p-4{padding:1rem}.px-1{padding-left:.25rem;padding-right:.25rem}.px-1\.5{padding-left:.375rem;padding-right:.375rem}.px-2{padding-left:.5rem;padding-right:.5rem}.px-2\.5{padding-left:.625rem;padding-right:.625rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-0{padding-top:0;padding-bottom:0}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.pb-1{padding-bottom:.25rem}.pb-1\.5{padding-bottom:.375rem}.pb-2{padding-bottom:.5rem}.pb-20{padding-bottom:5rem}.pb-3{padding-bottom:.75rem}.pb-4{padding-bottom:1rem}.pt-2{padding-top:.5rem}.pt-3{padding-top:.75rem}.pt-4{padding-top:1rem}.text-left{text-align:left}.text-center{text-align:center}.text-right{text-align:right}.align-top{vertical-align:top}.text-2xl{font-size:1.5rem;line-height:2rem}.text-4xl{font-size:2.25rem;line-height:2.5rem}.text-5xl{font-size:3rem;line-height:1}.text-7xl{font-size:4.5rem;line-height:1}.text-8xl{font-size:6rem;line-height:1}.text-9xl{font-size:8rem;line-height:1}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[160px\]{font-size:160px}.text-\[8px\]{font-size:8px}.text-\[9px\]{font-size:9px}.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xl{font-size:1.25rem;line-height:1.75rem}.text-xs{font-size:.75rem;line-height:1rem}.font-black{font-weight:900}.font-bold{font-weight:700}.font-extrabold{font-weight:800}.font-normal{font-weight:400}.uppercase{text-transform:uppercase}.italic{font-style:italic}.leading-none{line-height:1}.leading-snug{line-height:1.375}.leading-tight{line-height:1.25}.tracking-\[0\.14em\]{letter-spacing:.14em}.tracking-\[0\.16em\]{letter-spacing:.16em}.tracking-\[0\.22em\]{letter-spacing:.22em}.tracking-\[0\.2em\]{letter-spacing:.2em}.tracking-\[0\.3em\]{letter-spacing:.3em}.tracking-wide{letter-spacing:.025em}.tracking-wider{letter-spacing:.05em}.tracking-widest{letter-spacing:.1em}.text-cyan-400{--tw-text-opacity:1;color:rgb(34 211 238/var(--tw-text-opacity,1))}.text-neutral-200{--tw-text-opacity:1;color:rgb(229 229 229/var(--tw-text-opacity,1))}.text-neutral-300{--tw-text-opacity:1;color:rgb(212 212 212/var(--tw-text-opacity,1))}.text-neutral-400{--tw-text-opacity:1;color:rgb(163 163 163/var(--tw-text-opacity,1))}.text-neutral-500{--tw-text-opacity:1;color:rgb(115 115 115/var(--tw-text-opacity,1))}.text-neutral-600{--tw-text-opacity:1;color:rgb(82 82 82/var(--tw-text-opacity,1))}.text-neutral-700{--tw-text-opacity:1;color:rgb(64 64 64/var(--tw-text-opacity,1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.opacity-60{opacity:.6}.shadow-\[0_0_30px_-10px_rgba\(34\2c 197\2c 94\2c 0\.6\)\]{--tw-shadow:0 0 30px -10px rgba(34,197,94,.6);--tw-shadow-colored:0 0 30px -10px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.outline{outline-style:solid}.ring{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.blur{--tw-blur:blur(8px)}.blur,.grayscale{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.grayscale{--tw-grayscale:grayscale(100%)}.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.backdrop-blur{--tw-backdrop-blur:blur(8px)}.backdrop-blur,.backdrop-filter{-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.transition-transform{transition-property:transform;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.duration-700{transition-duration:.7s}.ease-in-out{transition-timing-function:cubic-bezier(.4,0,.2,1)}.ease-out{transition-timing-function:cubic-bezier(0,0,.2,1)}.will-change-transform{will-change:transform}.hover\:bg-neutral-900:hover{--tw-bg-opacity:1;background-color:rgb(23 23 23/var(--tw-bg-opacity,1))}.hover\:text-neutral-300:hover{--tw-text-opacity:1;color:rgb(212 212 212/var(--tw-text-opacity,1))}.hover\:text-white:hover{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.active\:bg-\[rgba\(239\2c 68\2c 68\2c 0\.18\)\]:active{background-color:rgba(239,68,68,.18)}.active\:bg-\[rgba\(34\2c 197\2c 94\2c 0\.22\)\]:active{background-color:rgba(34,197,94,.22)}.active\:bg-neutral-800:active{--tw-bg-opacity:1;background-color:rgb(38 38 38/var(--tw-bg-opacity,1))}.active\:bg-neutral-900:active{--tw-bg-opacity:1;background-color:rgb(23 23 23/var(--tw-bg-opacity,1))}@media (min-width:640px){.sm\:items-center{align-items:center}.sm\:text-3xl{font-size:1.875rem;line-height:2.25rem}.sm\:text-6xl{font-size:3.75rem;line-height:1}.sm\:text-base{font-size:1rem;line-height:1.5rem}}@media (min-width:768px){.md\:text-4xl{font-size:2.25rem;line-height:2.5rem}}</style>
+  <!--TW_END-->
   <!-- Supabase JS SDK INLINE (antes venia de jsdelivr). Mismo motivo: sin
        internet no cargaba y el login/sync quedaban rotos al abrir la app. -->
   <script>
@@ -117,6 +123,17 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     .btn-stage { transition: transform .05s ease, background .2s ease; }
     .btn-stage:active { transform: scale(.96); }
+
+    /* Controles bloqueados cuando el dispositivo es SEGUIDOR: el transporte lo
+       maneja el maestro. Se ven apagados y no responden ni al toque ni al
+       :active, así que queda claro que no es que la app no ande. */
+    .ctrl-bloqueado {
+      opacity: .35 !important;
+      filter: grayscale(1) !important;
+      pointer-events: none !important;
+      box-shadow: none !important;
+    }
+    .ctrl-bloqueado:active { transform: none !important; }
 
     /* Lyric/chord scrollers */
     .scroll-mask {
@@ -215,11 +232,17 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     <!-- HEADER GLOBAL -->
     <header class="px-4 pt-4 pb-2 flex items-center justify-between border-b border-[var(--border-soft)]">
-      <button id="openSetlist" class="flex items-center gap-2 text-left">
-        <span id="bleLed" class="led" style="color: var(--accent-green); background: var(--accent-green);"></span>
-        <div>
-          <p class="mono text-[10px] uppercase tracking-[0.18em] text-neutral-500" id="bleStatusText">BLE · Ableton</p>
-          <p class="text-xs font-bold" id="setlistName">Setlist · Vivo Niceto</p>
+      <button id="openSetlist" class="flex items-center gap-2 text-left min-w-0">
+        <span id="bleLed" class="led flex-shrink-0" style="color: var(--accent-green); background: var(--accent-green);"></span>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span id="modeBadge" class="mono text-[9px] font-black uppercase tracking-[0.14em]">LOGIC MANDA</span>
+            <span id="syncBadge" class="hidden-screen mono text-[9px] font-bold"></span>
+          </div>
+          <!-- El estado de BLE solo importa en modo 1; en modo 2 se oculta -->
+          <p class="mono text-[9px] uppercase tracking-[0.16em] text-neutral-600 truncate" id="bleStatusWrap">
+            <span id="bleStatusText">BLE · Ableton</span>
+          </p>
         </div>
       </button>
 
@@ -246,7 +269,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     <!-- STAGE BAR · controles rápidos para vivo (letra, brillo, bloqueo) -->
     <div id="stageBar" class="flex items-center gap-1.5 px-4 py-1.5 border-b border-[var(--border-soft)]">
-      <span class="mono text-[9px] uppercase tracking-[0.18em] text-neutral-600 mr-auto">Escenario</span>
+      <span id="stageInfo" class="mono text-[10px] tracking-wide text-neutral-500 mr-auto truncate"></span>
       <button id="btnFontDown" class="stagebar-btn btn-stage" aria-label="Letra más chica">A−</button>
       <button id="btnFontUp" class="stagebar-btn btn-stage" aria-label="Letra más grande">A+</button>
       <button id="btnBright" class="stagebar-btn btn-stage" aria-label="Brillo escenario" title="Brillo máximo">
@@ -257,24 +280,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       </button>
     </div>
 
-    <!-- TRACK BAR · pista de audio de la canción (solo visible en Modo Pistas) -->
-    <div id="trackBar" class="hidden-screen px-4 py-2 border-b border-[var(--border-soft)]" style="background:#070707;">
-      <div class="flex items-center gap-2.5">
-        <span id="trk_dot" class="w-2 h-2 rounded-full flex-shrink-0" style="background:#3f3f46;"></span>
-        <div class="min-w-0 flex-1">
-          <p id="trk_name" class="mono text-[10px] truncate text-neutral-500">sin pista</p>
-        </div>
-        <span id="trk_time" class="mono text-[11px] font-bold text-white flex-shrink-0">00:00</span>
-        <span class="mono text-[10px] text-neutral-600 flex-shrink-0">/</span>
-        <span id="trk_dur" class="mono text-[10px] text-neutral-500 flex-shrink-0">00:00</span>
-        <button id="trk_loadBtn" class="stagebar-btn btn-stage flex-shrink-0" title="Cargar pista de audio">↥</button>
-      </div>
-      <!-- Barra de posición: tocar para saltar -->
-      <div id="trk_scrub" class="mt-1.5 h-2 rounded-full bg-neutral-900 relative overflow-hidden cursor-pointer">
+    <!-- TRACK BAR · reducida a la barra de posición. El tiempo, la sección y la
+         tonalidad viven en el stageInfo de arriba, para no gastar una franja entera.
+         Tocar la barra salta a esa posición. -->
+    <div id="trackBar" class="hidden-screen px-4 pb-1.5" style="background:#070707;">
+      <div id="trk_scrub" class="h-2.5 rounded-full bg-neutral-900 relative overflow-hidden cursor-pointer">
         <div id="trk_prog" class="absolute inset-y-0 left-0 rounded-full" style="width:0%; background:var(--accent-cyan);"></div>
         <div id="trk_countin" class="hidden-screen absolute inset-0 flex items-center justify-center mono text-[9px] font-black tracking-widest"
              style="background:var(--accent-yellow); color:#000;">CUENTA</div>
       </div>
+      <!-- Ocultos: el JS los sigue escribiendo pero ya no ocupan pantalla -->
+      <span id="trk_dot" class="hidden-screen"></span>
+      <span id="trk_name" class="hidden-screen"></span>
+      <span id="trk_time" class="hidden-screen"></span>
+      <span id="trk_dur" class="hidden-screen"></span>
+      <button id="trk_loadBtn" class="hidden-screen"></button>
       <input type="file" id="trk_file" accept="audio/*" class="hidden-screen"/>
     </div>
 
@@ -425,14 +445,20 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
         <!-- PISTAS DE AUDIO · reproductor de backing tracks -->
         <div data-acc="Pistas de audio" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
-          <div class="flex items-center justify-between mb-2">
-            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Pistas de audio</p>
-            <button id="ms_tracksToggle" class="mono text-[10px] px-2.5 py-1 rounded-full bg-neutral-900 text-neutral-400">○ off</button>
+          <p class="mono text-[10px] uppercase tracking-widest text-neutral-500 mb-2">¿Quién maneja el tiempo?</p>
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            <button id="ms_mode_logic" class="ms_modeBtn rounded-xl border border-neutral-800 bg-neutral-950 p-2.5 text-left">
+              <span class="block text-[11px] font-black">MODO 1</span>
+              <span class="block text-[10px] text-neutral-400 leading-snug">Logic manda</span>
+              <span class="block mono text-[9px] text-neutral-600 mt-1 leading-snug">El audio sale de la Mac. La app sigue el MIDI.</span>
+            </button>
+            <button id="ms_mode_device" class="ms_modeBtn rounded-xl border border-neutral-800 bg-neutral-950 p-2.5 text-left">
+              <span class="block text-[11px] font-black">MODO 2</span>
+              <span class="block text-[10px] text-neutral-400 leading-snug">Yo mando</span>
+              <span class="block mono text-[9px] text-neutral-600 mt-1 leading-snug">Este equipo reproduce y es el reloj maestro.</span>
+            </button>
           </div>
-          <p class="text-[10px] text-neutral-500 mb-3">
-            El iPad reproduce la pista y pasa a ser el reloj maestro: letras, metrónomo y
-            cifrado siguen al audio, sin depender de Logic.
-          </p>
+          <p id="ms_modeHint" class="text-[10px] text-neutral-500 mb-3 leading-snug"></p>
 
           <div class="rounded-lg border border-neutral-800 bg-black/40 p-2.5 mb-3">
             <p class="mono text-[9px] uppercase tracking-widest text-neutral-600 mb-1">Salida</p>
@@ -480,6 +506,36 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             Hacé esto con buen WiFi antes de salir. Una vez bajadas, el show entero
             funciona sin internet.
           </p>
+        </div>
+
+        <!-- SYNC entre integrantes -->
+        <div data-acc="Sync entre integrantes" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Sync entre integrantes</p>
+            <span id="ms_syncEstado" class="mono text-[10px] text-neutral-500">apagado</span>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5 mb-2">
+            <button id="ms_sync_off"      class="mono text-[9px] leading-tight py-2 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-400">apagado</button>
+            <button id="ms_sync_master"   class="mono text-[9px] leading-tight py-2 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-400">yo reparto<br/>el tiempo</button>
+            <button id="ms_sync_follower" class="mono text-[9px] leading-tight py-2 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-400">sigo a<br/>otro equipo</button>
+          </div>
+          <p class="text-[10px] text-neutral-500 leading-snug">
+            El maestro manda una baliza cada 2 segundos; cada seguidor corre su propio
+            reloj y solo se corrige con eso. Entre baliza y baliza la red no participa:
+            si se corta, la letra sigue avanzando bien.
+          </p>
+          <p class="text-[10px] text-neutral-600 mt-1.5 leading-snug">
+            El número <span class="mono">±ms</span> es la precisión medida contra el reloj
+            del maestro. Verde por debajo de 20 ms.
+          </p>
+        </div>
+
+        <!-- Versión del build -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Versión</p>
+            <span id="ms_build" class="mono text-[10px] text-neutral-400">—</span>
+          </div>
         </div>
 
         <!-- Calibración de latencia del click -->
@@ -531,8 +587,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       </div>
     </div>
 
-    <!-- BARRA DE COMPÁS GLOBAL -->
-    <div class="px-4 pt-2">
+    <!-- BARRA DE COMPÁS GLOBAL · solo tiene sentido para el baterista.
+         En la vista del cantante competía por atención con la letra sin aportar. -->
+    <div id="beatStrip" class="hidden-screen px-4 pt-2">
       <div class="h-[3px] w-full bg-neutral-900 rounded-full overflow-hidden">
         <div id="globalBarProgress" class="h-full rounded-full"
              style="width:0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-yellow));"></div>
@@ -558,16 +615,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
       <!-- ============ VISTA · CANTANTE ============ -->
       <div id="viewSinger" class="view absolute inset-0 flex flex-col">
-        <div class="px-4 pt-3 flex items-center justify-between">
-          <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">
-            Key <span class="text-white font-bold">Am</span> · 4/4 · PC#03
-          </p>
-          <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500" id="singerSectionLabel">
-            Section · <span class="text-white" id="singerSectionTag">Intro</span>
-          </p>
-        </div>
+        <!-- La línea "Key Am · 4/4 · PC#03" estaba HARDCODEADA: mostraba los datos de
+             la canción de demo sin importar qué estuviera cargado. Ahora esa info es
+             dinámica y vive en el stageInfo de la barra de arriba. singerSectionTag
+             se conserva oculto porque el JS lo escribe. -->
+        <span id="singerSectionTag" class="hidden-screen">Intro</span>
 
-        <div class="flex-1 mx-3 my-3 rounded-2xl overflow-hidden relative"
+        <div class="flex-1 mx-2 mt-1 mb-2 rounded-2xl overflow-hidden relative"
              style="background: radial-gradient(120% 80% at 50% 0%, #0d0d10 0%, #000 70%);
                     border: 1px solid var(--border-soft);">
           <div class="absolute top-3 right-3 mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
@@ -581,10 +635,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <!-- Transporte cantante -->
         <div class="px-4 pb-4 grid grid-cols-12 gap-2">
           <button id="metroBtn"
-                  class="btn-stage col-span-3 h-16 rounded-2xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col items-center justify-center active:bg-neutral-900">
+                  class="btn-stage col-span-2 h-16 rounded-2xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col items-center justify-center active:bg-neutral-900">
             <div class="flex items-center gap-2">
               <span id="metroDot" class="w-3 h-3 rounded-full bg-neutral-600"></span>
-              <span class="mono text-[10px] uppercase tracking-[0.2em] text-neutral-400">Click</span>
+              <span class="mono text-[9px] uppercase tracking-widest text-neutral-400">Click</span>
             </div>
             <span id="metroLabel" class="text-sm font-extrabold text-neutral-300">OFF</span>
           </button>
@@ -596,7 +650,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <span id="stopLabel">STOP</span>
           </button>
           <button id="playBtn"
-                  class="btn-stage col-span-5 h-16 rounded-2xl flex items-center justify-center gap-2 font-black uppercase
+                  class="btn-stage col-span-6 h-16 rounded-2xl flex items-center justify-center gap-2 font-black uppercase text-lg
                          border border-[rgba(34,197,94,0.45)] shadow-[0_0_30px_-10px_rgba(34,197,94,0.6)]
                          bg-[rgba(34,197,94,0.12)] active:bg-[rgba(34,197,94,0.22)]"
                   style="color: var(--accent-green);">
@@ -950,7 +1004,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     <!-- ============================================================
          BOTTOM NAV
          ============================================================ -->
-    <nav class="fixed bottom-0 left-0 right-0 grid grid-cols-4 border-t border-[var(--border-soft)] bg-[#050505]/95 backdrop-blur">
+    <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 grid grid-cols-4 border-t border-[var(--border-soft)] bg-[#050505]/95 backdrop-blur">
       <button data-view="viewSinger" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M5 8a7 7 0 0114 0v8a7 7 0 01-14 0V8z"/></svg>
         <span class="text-[10px] mono uppercase tracking-wider">Cantante</span>
@@ -1046,8 +1100,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* =====================================================================
    * ESTADO GLOBAL Y CLOCK CENTRAL
    * =================================================================== */
+  /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
+     reales, así se puede saber qué versión tiene cada teléfono sin consultar
+     dumpsys. Se muestra en el modal de ⚙. */
+  const APP_BUILD = '20260817-1931';
+
   const state = {
     role: 'singer',
+    /* MODO DE OPERACIÓN — decisión consciente, no implícita.
+       'logic'  = modo 1: Logic maneja el audio y manda el MIDI; la app sigue.
+       'device' = modo 2: este equipo reproduce la pista y ES el reloj maestro.
+       Tener dos maestros a la vez es el error clásico, así que es excluyente. */
+    mode: localStorage.getItem('camarage_mode') || 'logic',
     bpm: 112,
     isPlaying: false,
     metroOn: false,
@@ -1063,11 +1127,29 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
   function currentSong(){ return setlist.songs[setlist.currentSongIdx]; }
 
+  /* Escritura null-safe: al rediseñar la vista se sacaron elementos de pantalla y
+     un getElementById nulo tiraba todo el arranque de la app. */
+  function setTxt(id, val){ const e = document.getElementById(id); if (e) e.textContent = val; }
+
+  /* Offset de la canción actual: corrige un desfase constante entre el archivo de
+     audio y los tiempos de letras / acordes / eventos MIDI. Se usa para el
+     CONTENIDO, nunca para el transporte (el reloj de la barra sigue siendo la
+     posición real dentro del archivo). */
+  function songOffset(){
+    const s = currentSong();
+    return (s && typeof s.offset === 'number') ? s.offset : 0;
+  }
+
   function elapsedSec(){
-    // MODO PISTAS: cuando el iPad reproduce el audio, el reloj maestro ES el audio.
+    // SEGUIDOR: el reloj viene de las balizas del maestro (ver módulo SYNC).
+    if (typeof SYNC !== 'undefined' && SYNC && SYNC.isFollowing()){
+      const p = SYNC.positionSec();
+      if (p !== null) return p + songOffset();
+    }
+    // MODO 2: cuando este equipo reproduce el audio, el reloj maestro ES el audio.
     // audioCtx.currentTime es sample-accurate y no driftea nunca respecto de la pista,
     // así que letras, cifrado y metrónomo quedan clavados al backing track.
-    if (typeof TRACKS !== 'undefined' && TRACKS && TRACKS.isMaster()) return TRACKS.positionSec();
+    if (typeof TRACKS !== 'undefined' && TRACKS && TRACKS.isMaster()) return TRACKS.positionSec() + songOffset();
     if (!state.isPlaying) return state.pausedElapsed / 1000;
     // Modo MIDI Clock: la posición está anclada al conteo real de ticks (24/beat).
     // Esto elimina drift completamente — visuales avanzan EXACTAMENTE al ritmo del DAW.
@@ -1196,6 +1278,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   function switchView(id){
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden-screen'));
     document.getElementById(id).classList.remove('hidden-screen');
+    // Los puntitos de beat y el contador de compás son información de baterista.
+    // En la vista del cantante competían por atención con la letra.
+    const bs = document.getElementById('beatStrip');
+    if (bs) bs.classList.toggle('hidden-screen', id !== 'viewDrummer');
     document.querySelectorAll('.nav-btn').forEach(b => {
       const active = b.dataset.view === id;
       b.classList.toggle('text-white', active);
@@ -1250,6 +1336,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     lockOverlay.classList.toggle('on', on);
     const lb = document.getElementById('btnLock');
     if (lb){ lb.classList.toggle('on', on); lb.style.background = on ? 'var(--accent-cyan)' : ''; }
+    // Con la pantalla bloqueada la nav de roles es espacio muerto: se esconde y
+    // esos píxeles pasan a la letra.
+    const nav = document.getElementById('bottomNav');
+    if (nav) nav.classList.toggle('hidden-screen', on);
+    const shell = document.getElementById('screenApp');
+    if (shell) shell.classList.toggle('pb-20', !on);
   }
   document.getElementById('btnLock').addEventListener('click', () => setLocked(true));
   // Mantener apretado 1s sobre el overlay para desbloquear
@@ -1283,9 +1375,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     state.bpm = song.bpm;
 
     // Header global
-    document.getElementById('globalSongTitle').textContent = song.title;
-    document.getElementById('globalBpm').textContent = song.bpm;
-    document.getElementById('setlistName').textContent = setlist.name;
+    setTxt('globalSongTitle', song.title);
+    setTxt('globalBpm', song.bpm);
+    setTxt('setlistName', setlist.name);   // el header ya no lo muestra; queda null-safe
 
     // Singer
     renderSingerLyrics(song);
@@ -1297,6 +1389,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     setStop();
     // Modo Pistas: traer de IndexedDB el audio de esta canción y dejarlo listo
     if (typeof TRACKS !== 'undefined' && TRACKS && TRACKS.isEnabled()) TRACKS.loadForCurrentSong();
+    try { updateStageInfo(); } catch(e){}
+    // Los seguidores tienen que enterarse del cambio de canción ya, no en 2 segundos
+    try { if (typeof SYNC !== 'undefined' && SYNC) SYNC.avisarCambio(); } catch(e){}
     // Refrescar indicadores de posición en la cola
     updateSetlistNavUI();
     // Reset del estado de auto-advance: cada canción nueva empieza limpia
@@ -1319,6 +1414,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   const CC_NAV_CHANNEL = 0; // canal 1 (0-indexed)
 
   function nextSong(){
+    // El seguidor no elige la canción: la elige el maestro y la propaga.
+    if (esSeguidor()) return;
     if (setlist.currentSongIdx >= setlist.songs.length - 1){
       logMidi('✗ Ya estás en la última canción', [], 'var(--accent-yellow)');
       return;
@@ -1329,6 +1426,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     logMidi(`⏭ Próxima · ${setlist.songs[newIdx].title}`, [], 'var(--accent-cyan)');
   }
   function prevSong(){
+    if (esSeguidor()) return;
     if (setlist.currentSongIdx <= 0){
       logMidi('✗ Ya estás en la primera canción', [], 'var(--accent-yellow)');
       return;
@@ -1715,6 +1813,42 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
   }
 
+  /* ---------- STAGE INFO ----------
+   * Una sola línea con lo único que se mira de reojo cantando: cuánto FALTA del
+   * tema, en qué sección estás y la tonalidad. Reemplaza tres franjas que antes
+   * ocupaban lugar: el nombre del archivo, la línea "Key · 4/4 · PC#" (que además
+   * estaba hardcodeada) y el contador de compás.
+   * El tiempo restante va primero y en blanco porque es el dato más accionable:
+   * te dice si tenés tiempo de hablar antes del próximo tema.                */
+  function fmtMMSS(sec){
+    if (!isFinite(sec) || sec < 0) sec = 0;
+    return Math.floor(sec/60) + ':' + String(Math.floor(sec%60)).padStart(2,'0');
+  }
+  function updateStageInfo(){
+    const el = document.getElementById('stageInfo');
+    if (!el) return;
+    const song = currentSong();
+    const partes = [];
+
+    const hayPista = (typeof TRACKS !== 'undefined' && TRACKS && TRACKS.hasTrack());
+    if (state.mode === 'device' && hayPista){
+      const dur = TRACKS.durationSec();
+      const pos = TRACKS.positionSec();
+      const falta = Math.max(0, dur - pos);
+      partes.push(`<span class="text-white font-bold">−${fmtMMSS(falta)}</span>`);
+    } else if (state.mode === 'device' && song && song.audioPath){
+      partes.push('<span style="color:var(--accent-yellow)">sin pista lista</span>');
+    }
+
+    const secTag = document.getElementById('singerSectionTag');
+    const sec = secTag ? (secTag.textContent || '').trim() : '';
+    if (sec && sec !== '—') partes.push(`<span class="text-neutral-300 uppercase">${sec}</span>`);
+    if (song && song.key) partes.push(`<span class="text-neutral-500">${song.key}</span>`);
+    if (song && song.offset) partes.push(`<span style="color:var(--accent-purple)">ofs ${song.offset > 0 ? '+' : ''}${song.offset}s</span>`);
+
+    el.innerHTML = partes.join('<span class="text-neutral-700"> · </span>');
+  }
+
   let lastGlobalBeat = -1;
   const globalDots = document.querySelectorAll('#globalBeatDots [data-beat]');
   onTick((sec) => {
@@ -1734,6 +1868,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     if (beatIdx !== lastGlobalBeat){
       lastGlobalBeat = beatIdx;
+      updateStageInfo();
       globalDots.forEach(d => { d.style.background = ''; d.classList.remove('beat-pulse'); });
       const dot = globalDots[beatInBar];
       const accent = beatInBar===0;
@@ -1808,11 +1943,24 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       midiList: [],        // eventos MIDI que ESTE dispositivo dispara
       midiIdx: 0,          // próximo evento a agendar
       midiTimers: [],      // timers pendientes, para poder cancelarlos al pausar
+      loadingSince: 0,     // para el watchdog que destraba "cargando…"
+      lastError: null,     // último error de carga, para mostrarlo en vez de mentir
     };
 
     /* ---------- IndexedDB (guardar los audios en el dispositivo) ---------- */
+    /* Toda operación con IndexedDB va con timeout y CERRANDO la conexión.
+       Sin el close() las conexiones se acumulan y en el WebView de Android
+       terminan bloqueando el open() siguiente: la promesa no resuelve nunca y la
+       barra queda colgada en "cargando…" para siempre. Ese era el bug. */
+    const DB_TIMEOUT = 6000;
+    function conTimeout(promesa, ms, queCosa){
+      return Promise.race([
+        promesa,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout en ' + queCosa)), ms)),
+      ]);
+    }
     function openDB(){
-      return new Promise((resolve, reject) => {
+      return conTimeout(new Promise((resolve, reject) => {
         const rq = indexedDB.open(DB_NAME, DB_VER);
         rq.onupgradeneeded = () => {
           const db = rq.result;
@@ -1820,34 +1968,43 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         };
         rq.onsuccess = () => resolve(rq.result);
         rq.onerror   = () => reject(rq.error);
-      });
+        rq.onblocked = () => reject(new Error('IndexedDB bloqueada por otra conexión'));
+      }), DB_TIMEOUT, 'abrir IndexedDB');
     }
     async function dbPut(key, val){
       const db = await openDB();
-      return new Promise((res, rej) => {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put(val, key);
-        tx.oncomplete = () => res(true);
-        tx.onerror    = () => rej(tx.error);
-      });
+      try {
+        return await conTimeout(new Promise((res, rej) => {
+          const tx = db.transaction(STORE, 'readwrite');
+          tx.objectStore(STORE).put(val, key);
+          tx.oncomplete = () => res(true);
+          tx.onerror    = () => rej(tx.error);
+          tx.onabort    = () => rej(tx.error || new Error('transacción abortada'));
+        }), DB_TIMEOUT, 'guardar en IndexedDB');
+      } finally { try { db.close(); } catch(e){} }
     }
     async function dbGet(key){
       const db = await openDB();
-      return new Promise((res, rej) => {
-        const tx = db.transaction(STORE, 'readonly');
-        const rq = tx.objectStore(STORE).get(key);
-        rq.onsuccess = () => res(rq.result || null);
-        rq.onerror   = () => rej(rq.error);
-      });
+      try {
+        return await conTimeout(new Promise((res, rej) => {
+          const tx = db.transaction(STORE, 'readonly');
+          const rq = tx.objectStore(STORE).get(key);
+          rq.onsuccess = () => res(rq.result || null);
+          rq.onerror   = () => rej(rq.error);
+          tx.onabort   = () => rej(tx.error || new Error('transacción abortada'));
+        }), DB_TIMEOUT, 'leer IndexedDB');
+      } finally { try { db.close(); } catch(e){} }
     }
     async function dbDel(key){
       const db = await openDB();
-      return new Promise((res, rej) => {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).delete(key);
-        tx.oncomplete = () => res(true);
-        tx.onerror    = () => rej(tx.error);
-      });
+      try {
+        return await conTimeout(new Promise((res, rej) => {
+          const tx = db.transaction(STORE, 'readwrite');
+          tx.objectStore(STORE).delete(key);
+          tx.oncomplete = () => res(true);
+          tx.onerror    = () => rej(tx.error);
+        }), DB_TIMEOUT, 'borrar de IndexedDB');
+      } finally { try { db.close(); } catch(e){} }
     }
 
     /* Clave estable por canción: el id de Supabase si existe, si no el título. */
@@ -1956,12 +2113,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       // Primer evento que todavía no pasó, desde la posición actual
       const pos = positionSec();
       st.midiIdx = 0;
-      while (st.midiIdx < st.midiList.length && st.midiList[st.midiIdx].t < pos) st.midiIdx++;
+      const posC = pos + songOffset();
+      while (st.midiIdx < st.midiList.length && st.midiList[st.midiIdx].t < posC) st.midiIdx++;
     }
 
     function scheduleMidi(){
       if (!st.playing || !st.midiList.length) return;
-      const pos = positionSec();
+      // Los eventos vienen del .mid, que comparte el cero con las letras: mismo offset.
+      const pos = positionSec() + songOffset();
       const horizonte = pos + 0.25;
       while (st.midiIdx < st.midiList.length && st.midiList[st.midiIdx].t <= horizonte){
         const ev = st.midiList[st.midiIdx++];
@@ -2056,6 +2215,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       const target = Math.max(0, Math.min(sec, durationSec()));
       if (st.playing){ play(target); }
       else { st.pausedAt = target; state.pausedElapsed = target * 1000; renderBar(); }
+      try { if (typeof SYNC !== 'undefined' && SYNC) SYNC.avisarCambio(); } catch(e){}
     }
     function stopSource(){
       if (st.source){
@@ -2137,7 +2297,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       try {
         const { data, error } = await client.storage.from(AUDIO_BUCKET).createSignedUrl(path, 3600);
         if (error || !data || !data.signedUrl) throw error || new Error('sin URL firmada');
-        const res = await fetch(data.signedUrl);
+        // AbortController: una red que acepta la conexión y después no responde
+        // dejaría el fetch colgado indefinidamente.
+        const ac = new AbortController();
+        const corte = setTimeout(() => ac.abort(), 45000);
+        let res;
+        try { res = await fetch(data.signedUrl, { signal: ac.signal }); }
+        finally { clearTimeout(corte); }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const total = parseInt(res.headers.get('content-length') || '0', 10);
         if (!res.body || !total){
@@ -2191,10 +2357,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       stop();
       const song = currentSong();
       const key = songKeyOf(song);
-      st.buffer = null; st.fileName = null; st.songKey = key; st.dlPct = 0;
+      st.buffer = null; st.fileName = null; st.songKey = key; st.dlPct = 0; st.lastError = null;
       renderBar(); renderSettings();
       if (!st.enabled || !key) return;
-      st.loading = true; renderBar();
+      st.loading = true; st.loadingSince = Date.now(); renderBar();
       try {
         let rec = await dbGet(key);
         const stale = rec && rec.blob && rec.source === 'remote'
@@ -2211,6 +2377,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           } catch(e){
             // Sin internet o sesión vencida: si hay una copia vieja, se usa igual.
             console.warn('[TRACKS] descarga falló', e);
+            st.lastError = e.message || String(e);
             logMidi('✗ No se pudo bajar la pista: ' + (e.message || e), [], 'var(--accent-yellow)');
           } finally {
             st.downloading = false; st.dlPct = 0;
@@ -2225,7 +2392,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       } catch(e){
         console.error('[TRACKS] loadForSong', e);
       } finally {
-        st.loading = false; renderBar(); renderSettings();
+        st.loading = false; st.loadingSince = 0; renderBar(); renderSettings();
       }
     }
 
@@ -2272,10 +2439,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
                                     : has ? (st.playing ? 'var(--accent-green)' : 'var(--accent-cyan)')
                                     : '#3f3f46';
       if (name){
+        const song = currentSong();
         name.textContent = st.downloading ? `⇩ descargando… ${st.dlPct||0}%`
                          : st.loading     ? 'cargando…'
                          : has            ? st.fileName
-                         : 'sin pista — tocá ↥ para cargar';
+                         : st.lastError   ? '✗ ' + st.lastError
+                         : (song && song.audioPath) ? 'pista en la nube — sincronizá para bajarla'
+                         : 'sin pista para esta canción';
         name.classList.toggle('text-neutral-500', !has);
       }
       // Durante la descarga, la barra de posición muestra el avance del bajado
@@ -2328,6 +2498,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       else loadForCurrentSong();
       renderBar(); renderSettings();
     }
+    function mostrarError(msg){ st.lastError = msg; renderBar(); }
     /* El fader Click del mixer también manda sobre el click de Modo Pistas. */
     function setClickVol(v){ if (st.clickBus) st.clickBus.gain.value = v; }
     function setVol(v){
@@ -2384,6 +2555,17 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       });
       // Refresco de la barra a 10fps (el reloj fino ya lo maneja onTick)
       setInterval(renderBar, 100);
+      /* WATCHDOG · si la carga queda trabada más de 20s, destrabar y avisar.
+         Antes la barra decía "cargando…" para siempre y no había forma de saber
+         que algo había fallado. Preferimos un error visible a una mentira. */
+      setInterval(() => {
+        if ((st.loading || st.downloading) && st.loadingSince && Date.now() - st.loadingSince > 20000){
+          st.loading = false; st.downloading = false; st.loadingSince = 0;
+          if (!st.lastError) st.lastError = 'la carga se colgó';
+          try { logMidi('✗ Carga de pista destrabada por timeout', [], 'var(--accent-red)'); } catch(e){}
+          renderBar(); renderSettings();
+        }
+      }, 2000);
       renderBar(); renderSettings();
       if (st.enabled) loadForCurrentSong();
     }
@@ -2396,9 +2578,365 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       positionSec, durationSec, inCountIn,
       play, pause, stop, seek,
       loadForCurrentSong, loadFromFile, clearCurrent, downloadAll, ensureCached,
-      setEnabled, setVol, setCountIn, setClickVol,
+      setEnabled, setVol, setCountIn, setClickVol, mostrarError,
       _state: st,
     };
+  })();
+
+  /* =====================================================================
+   * MODO DE OPERACIÓN · quién maneja el tiempo
+   * ---------------------------------------------------------------------
+   * Antes esto estaba implícito en un interruptor de "Pistas de audio", y era
+   * fácil terminar con dos maestros a la vez — el error clásico. Ahora es una
+   * decisión explícita y excluyente.
+   * =================================================================== */
+  function setMode(m){
+    if (m !== 'logic' && m !== 'device') return;
+    state.mode = m;
+    localStorage.setItem('camarage_mode', m);
+    if (m === 'device'){
+      state.midiClockDriven = false;          // el clock entrante deja de mandar
+      if (TRACKS) TRACKS.setEnabled(true);
+    } else {
+      if (TRACKS) TRACKS.setEnabled(false);   // apaga la reproducción propia
+    }
+    renderMode();
+    try { renderSetlistEditor(); } catch(e){}
+  }
+  function renderMode(){
+    const esDisp = state.mode === 'device';
+    const pintar = (id, on) => {
+      const e = document.getElementById(id); if (!e) return;
+      e.style.borderColor = on ? 'var(--accent-green)' : '';
+      e.style.background  = on ? 'rgba(34,197,94,0.10)' : '';
+      e.style.color       = on ? '#fff' : '';
+    };
+    pintar('ms_mode_logic', !esDisp);
+    pintar('ms_mode_device', esDisp);
+    const hint = document.getElementById('ms_modeHint');
+    if (hint) hint.textContent = esDisp
+      ? 'Este equipo reproduce el archivo y reparte el tiempo. El archivo pasa intacto; el metrónomo de la app es opcional.'
+      : 'Logic maneja el audio y manda clock, Program Change y SPP por BLE. Este equipo solo sigue.';
+    // La barra de pista y el estado de BLE solo tienen sentido en su modo
+    const tb = document.getElementById('trackBar');
+    if (tb) tb.classList.toggle('hidden-screen', !esDisp);
+    const bs = document.getElementById('bleStatusWrap');
+    if (bs) bs.classList.toggle('hidden-screen', esDisp);
+    const mb = document.getElementById('modeBadge');
+    if (mb){
+      mb.textContent = esDisp ? 'YO MANDO' : 'LOGIC MANDA';
+      mb.style.color = esDisp ? 'var(--accent-green)' : 'var(--accent-cyan)';
+    }
+    renderBloqueoSeguidor();
+  }
+
+  /* ---------------------------------------------------------------------
+   * Bloqueo del transporte en los SEGUIDORES
+   * ---------------------------------------------------------------------
+   * Si este equipo sigue a un maestro, el transporte no es suyo. Dejar los
+   * botones activos es una trampa: el músico toca PLAY, no pasa nada útil, y
+   * a los 2 segundos la baliza del maestro lo devuelve a donde estaba. Peor
+   * todavía en escenario, porque parece que la app se colgó.
+   *
+   * Se bloquean también ANTERIOR/SIGUIENTE: la canción también la elige el
+   * maestro y la propaga, así que cambiarla acá volvería atrás sola.
+   *
+   * El metrónomo NO se bloquea: es audio local de este equipo y no toca el
+   * tiempo de nadie. Sirve si el músico quiere su propio click de ensayo.
+   * ------------------------------------------------------------------- */
+  const CTRL_DE_MAESTRO = ['playBtn', 'stopBtn', 'singerPrevBtn', 'singerNextBtn',
+                           'drumPlayBtn', 'drumStopBtn', 'drumPrevBtn', 'drumNextBtn'];
+  function esSeguidor(){
+    return typeof SYNC !== 'undefined' && SYNC && SYNC.role && SYNC.role() === 'follower';
+  }
+  function renderBloqueoSeguidor(){
+    const bloquear = esSeguidor();
+    CTRL_DE_MAESTRO.forEach(id => {
+      const e = document.getElementById(id);
+      if (e) e.classList.toggle('ctrl-bloqueado', bloquear);
+    });
+    // La barra de la pista deja de aceptar toques, pero SIGUE VISIBLE: el
+    // seguidor tiene que poder ver en qué parte del tema va.
+    const scrub = document.getElementById('trk_scrub');
+    if (scrub){
+      scrub.style.pointerEvents = bloquear ? 'none' : '';
+      scrub.style.cursor = bloquear ? 'default' : 'pointer';
+    }
+  }
+
+  /* =====================================================================
+   * SYNC · balizas entre integrantes  (Supabase Realtime)
+   * ---------------------------------------------------------------------
+   * Un dispositivo es MAESTRO y reparte el tiempo; los demás son SEGUIDORES y
+   * solo miran la pantalla. La clave del diseño está en NO transmitir la
+   * posición continuamente: el jitter de la red arruinaría el resultado.
+   *
+   * En su lugar:
+   *   1. Cada seguidor calcula el DESFASE entre su reloj y el del maestro con un
+   *      intercambio de cuatro marcas de tiempo, estilo NTP. Se queda con la
+   *      muestra de ida-y-vuelta más bajo, que es la menos contaminada por colas.
+   *   2. El maestro manda una baliza cada 2 s: "estoy en la posición P, y eso fue
+   *      en el instante T de mi reloj".
+   *   3. El seguidor corre SU PROPIO reloj a 60fps a partir de eso. Entre baliza
+   *      y baliza la red no participa: si se cae 30 segundos, sigue igual de bien.
+   *
+   * Precisión esperada: ±5-15 ms en WiFi, ±20-50 ms con datos móviles — por debajo
+   * de la latencia que agrega la propia pantalla del dispositivo.
+   * =================================================================== */
+  var SYNC = (function(){
+    const LS_ROLE = 'camarage_sync_role';
+    const BEACON_MS = 2000;      // cada cuánto manda el maestro
+    const PING_MS   = 8000;      // cada cuánto se recalibra el reloj
+    const MUESTRAS  = 8;         // cuántas muestras de RTT se guardan
+
+    const s = {
+      role: localStorage.getItem(LS_ROLE) || 'off',   // 'off' | 'master' | 'follower'
+      canal: null,
+      conectado: false,
+      // --- reloj ---
+      desfase: 0,        // ms: relojMaestro ≈ relojLocal + desfase
+      rtt: null,         // ms del mejor ida-y-vuelta
+      muestras: [],
+      calibrado: false,
+      // --- última baliza recibida ---
+      baliza: null,      // { songKey, pos, tMaster, playing, bpm }
+      ultimaBaliza: 0,   // Date.now() local de la última recibida
+      timerBeacon: null,
+      timerPing: null,
+      pendientes: new Map(),
+    };
+
+    const ahora = () => Date.now();
+
+    function bandId(){
+      try { return localStorage.getItem(SUPABASE_BAND_KEY) || 'sin-banda'; } catch(e){ return 'sin-banda'; }
+    }
+    function songKeyActual(){
+      const c = currentSong();
+      return c ? String(c.id || c.title) : null;
+    }
+
+    /* ---------- Conexión ---------- */
+    function conectar(){
+      const client = (typeof initSupabaseClient === 'function') ? initSupabaseClient() : null;
+      if (!client || !client.channel) { logSync('sin Supabase Realtime'); return false; }
+      desconectar();
+      const nombre = 'camarage:' + bandId();
+      s.canal = client.channel(nombre, { config: { broadcast: { self: false } } });
+
+      s.canal.on('broadcast', { event: 'beacon' }, ({ payload }) => {
+        if (s.role !== 'follower') return;
+        s.baliza = payload;
+        s.ultimaBaliza = ahora();
+        // Si el maestro cambió de canción, seguirlo
+        try {
+          const k = songKeyActual();
+          if (payload.songKey && k && payload.songKey !== k){
+            const idx = setlist.songs.findIndex(x => String(x.id || x.title) === payload.songKey);
+            if (idx >= 0) loadSong(idx);
+          }
+        } catch(e){}
+        if (payload.bpm) state.bpm = payload.bpm;
+        state.isPlaying = !!payload.playing;
+        if (payload.playing) startClock();
+        updateTransportUI();
+      });
+
+      // Handshake de reloj: el seguidor pregunta, el maestro contesta
+      s.canal.on('broadcast', { event: 'ping' }, ({ payload }) => {
+        if (s.role !== 'master') return;
+        const t1 = ahora();
+        s.canal.send({ type:'broadcast', event:'pong',
+                       payload:{ id: payload.id, t0: payload.t0, t1, t2: ahora() } });
+      });
+      s.canal.on('broadcast', { event: 'pong' }, ({ payload }) => {
+        if (s.role !== 'follower') return;
+        if (!s.pendientes.has(payload.id)) return;
+        s.pendientes.delete(payload.id);
+        const t3 = ahora();
+        const rtt = (t3 - payload.t0) - (payload.t2 - payload.t1);
+        const desfase = ((payload.t1 - payload.t0) + (payload.t2 - t3)) / 2;
+        s.muestras.push({ rtt, desfase });
+        if (s.muestras.length > MUESTRAS) s.muestras.shift();
+        // NTP: quedarse con la muestra de RTT más bajo, la menos encolada
+        const mejor = s.muestras.reduce((a, b) => (b.rtt < a.rtt ? b : a));
+        s.desfase = mejor.desfase;
+        s.rtt = mejor.rtt;
+        s.calibrado = true;
+        renderSync();
+      });
+
+      s.canal.subscribe(estado => {
+        s.conectado = (estado === 'SUBSCRIBED');
+        renderSync();
+        if (s.conectado){
+          if (s.role === 'master') arrancarBalizas();
+          if (s.role === 'follower'){ arrancarPings(); pingAhora(); }
+        }
+      });
+      return true;
+    }
+    function desconectar(){
+      pararTimers();
+      if (s.canal){ try { s.canal.unsubscribe(); } catch(e){} }
+      s.canal = null; s.conectado = false;
+      renderSync();
+    }
+    function pararTimers(){
+      if (s.timerBeacon) clearInterval(s.timerBeacon);
+      if (s.timerPing) clearInterval(s.timerPing);
+      s.timerBeacon = s.timerPing = null;
+    }
+
+    /* ---------- Maestro: mandar balizas ---------- */
+    function armarBaliza(){
+      const pos = (TRACKS && TRACKS.isMaster()) ? TRACKS.positionSec() : (state.pausedElapsed/1000);
+      return {
+        songKey: songKeyActual(),
+        pos,
+        tMaster: ahora(),
+        playing: !!state.isPlaying,
+        bpm: state.bpm,
+      };
+    }
+    function mandarBaliza(){
+      if (s.role !== 'master' || !s.canal || !s.conectado) return;
+      s.canal.send({ type:'broadcast', event:'beacon', payload: armarBaliza() });
+    }
+    function arrancarBalizas(){
+      if (s.timerBeacon) clearInterval(s.timerBeacon);
+      s.timerBeacon = setInterval(mandarBaliza, BEACON_MS);
+      mandarBaliza();
+    }
+
+    /* ---------- Seguidor: calibrar el reloj ---------- */
+    let _pid = 0;
+    function pingAhora(){
+      if (s.role !== 'follower' || !s.canal || !s.conectado) return;
+      const id = 'p' + (++_pid);
+      s.pendientes.set(id, true);
+      setTimeout(() => s.pendientes.delete(id), 5000);   // no acumular pings perdidos
+      s.canal.send({ type:'broadcast', event:'ping', payload:{ id, t0: ahora() } });
+    }
+    function arrancarPings(){
+      if (s.timerPing) clearInterval(s.timerPing);
+      s.timerPing = setInterval(pingAhora, PING_MS);
+      // Ráfaga inicial: varias muestras seguidas para calibrar rápido
+      let n = 0;
+      const rafaga = setInterval(() => { pingAhora(); if (++n >= 5) clearInterval(rafaga); }, 400);
+    }
+
+    /* ---------- Posición calculada localmente ---------- */
+    function positionSec(){
+      if (s.role !== 'follower' || !s.baliza) return null;
+      if (!s.baliza.playing) return s.baliza.pos;
+      // El reloj local corre solo; la red no participa entre balizas
+      const maestroAhora = ahora() + s.desfase;
+      const p = s.baliza.pos + (maestroAhora - s.baliza.tMaster) / 1000;
+      return p < 0 ? 0 : p;
+    }
+    function isFollowing(){ return s.role === 'follower' && !!s.baliza; }
+    /* Confianza real, no el peor caso.
+       RTT/2 es la cota superior teórica, pero medido resulta muy pesimista: con un
+       RTT de 170 ms el desvío real era de 9 ms. Reportar 85 ms pintaría de rojo una
+       red que anda bien.
+       En su lugar miramos la DISPERSIÓN de las estimaciones de desfase entre las
+       muestras más limpias (RTT dentro de 1,5× del mínimo): si todas coinciden, la
+       medición es confiable, sin importar cuán lenta sea la red. */
+    function errorMs(){
+      if (!s.muestras.length) return null;
+      const minRtt = Math.min.apply(null, s.muestras.map(m => m.rtt));
+      const limpias = s.muestras.filter(m => m.rtt <= minRtt * 1.5);
+      const usar = limpias.length >= 2 ? limpias : s.muestras;
+      if (usar.length < 2) return Math.round(minRtt / 2);
+      const ds = usar.map(m => m.desfase);
+      const dispersion = (Math.max.apply(null, ds) - Math.min.apply(null, ds)) / 2;
+      // Nunca menos de 2 ms: prometer más precisión que eso sería mentir
+      return Math.max(2, Math.min(Math.round(dispersion), Math.round(minRtt / 2)));
+    }
+    function frescura(){ return s.ultimaBaliza ? ahora() - s.ultimaBaliza : Infinity; }
+    /* Balizas cada 2 s: si pasaron 3 sin llegar ninguna, la red está caída.
+       El seguidor sigue tocando bien con su reloj, pero tiene que enterarse. */
+    const BALIZA_VIEJA_MS = BEACON_MS * 3;
+    function balizaVieja(){ return s.role === 'follower' && !!s.baliza && frescura() > BALIZA_VIEJA_MS; }
+
+    /* ---------- UI ---------- */
+    function logSync(t){ try { logMidi('◈ Sync · ' + t, [], 'var(--accent-purple)'); } catch(e){} }
+    function renderSync(){
+      const $ = id => document.getElementById(id);
+      [['ms_sync_off','off'],['ms_sync_master','master'],['ms_sync_follower','follower']].forEach(([id, r]) => {
+        const e = $(id); if (!e) return;
+        const on = s.role === r;
+        e.style.borderColor = on ? 'var(--accent-purple)' : '';
+        e.style.background  = on ? 'rgba(168,85,247,0.12)' : '';
+        e.style.color       = on ? '#fff' : '';
+      });
+      const est = $('ms_syncEstado');
+      if (est){
+        if (s.role === 'off'){ est.textContent = 'apagado'; est.style.color = ''; }
+        else if (!s.conectado){ est.textContent = 'conectando…'; est.style.color = 'var(--accent-yellow)'; }
+        else if (s.role === 'master'){ est.textContent = '● repartiendo el tiempo'; est.style.color = 'var(--accent-green)'; }
+        else if (!s.calibrado){ est.textContent = 'calibrando reloj…'; est.style.color = 'var(--accent-yellow)'; }
+        else if (balizaVieja()){
+          // El reloj local sigue corriendo igual de bien, pero hace rato que no
+          // llega una baliza. Hay que decirlo, no mostrar "sincronizado" y mentir.
+          est.textContent = `⚠ sin señal hace ${Math.round(frescura()/1000)} s · reloj propio`;
+          est.style.color = 'var(--accent-red)';
+        }
+        else {
+          const e = errorMs();
+          est.textContent = `● sincronizado · ±${e} ms`;
+          est.style.color = e <= 20 ? 'var(--accent-green)' : e <= 60 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+        }
+      }
+      const badge = $('syncBadge');
+      if (badge){
+        const visible = s.role !== 'off';
+        badge.classList.toggle('hidden-screen', !visible);
+        if (visible){
+          const e = errorMs();
+          const viejo = balizaVieja();
+          badge.textContent = s.role === 'master' ? '◈ MAESTRO'
+                            : viejo ? '◈ SIN SEÑAL'
+                            : (s.calibrado ? `◈ ±${e}ms` : '◈ …');
+          badge.style.color = s.role === 'master' ? 'var(--accent-green)'
+                            : viejo ? 'var(--accent-red)'
+                            : (e !== null && e <= 20) ? 'var(--accent-green)'
+                            : (e !== null && e <= 60) ? 'var(--accent-yellow)' : 'var(--accent-red)';
+        }
+      }
+      // El transporte se bloquea/desbloquea junto con el rol
+      try { renderBloqueoSeguidor(); } catch(err){}
+    }
+
+    function setRole(r){
+      s.role = r;
+      localStorage.setItem(LS_ROLE, r);
+      s.baliza = null; s.muestras = []; s.calibrado = false; s.rtt = null; s.desfase = 0;
+      if (r === 'off') desconectar();
+      else conectar();
+      renderSync();
+      logSync('rol = ' + r);
+    }
+
+    /* Eventos de transporte: mandar baliza YA, sin esperar los 2 s. */
+    function avisarCambio(){ if (s.role === 'master') mandarBaliza(); }
+
+    function bind(){
+      const $ = id => document.getElementById(id);
+      if ($('ms_sync_off'))      $('ms_sync_off').addEventListener('click', () => setRole('off'));
+      if ($('ms_sync_master'))   $('ms_sync_master').addEventListener('click', () => setRole('master'));
+      if ($('ms_sync_follower')) $('ms_sync_follower').addEventListener('click', () => setRole('follower'));
+      setInterval(renderSync, 1000);
+      renderSync();
+      // Reconectar solo si quedó un rol guardado
+      if (s.role !== 'off') setTimeout(() => conectar(), 1500);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+    else bind();
+
+    return { positionSec, isFollowing, errorMs, frescura, balizaVieja, setRole, avisarCambio,
+             role: () => s.role, estaConectado: () => s.conectado, _s: s };
   })();
 
   /* =====================================================================
@@ -2480,6 +3018,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   }
 
   function setPlay(){
+    // Un seguidor no maneja el transporte: lo manda el maestro. Los botones ya
+    // están grises, pero esto lo blinda también contra teclado y otros caminos.
+    if (esSeguidor()) return;
     // MODO PISTAS: el botón maneja el audio, y el audio arrastra a todo lo demás.
     if (TRACKS && TRACKS.isEnabled() && TRACKS.hasTrack()){
       if (TRACKS.isPlaying()){
@@ -2489,6 +3030,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         TRACKS.play();
       }
       updateTransportUI();
+      try { if (typeof SYNC !== 'undefined' && SYNC) SYNC.avisarCambio(); } catch(e){}
       return;
     }
     // Modo MIDI: misma protección al pausar
@@ -2510,6 +3052,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
      internas (cargar otra canción, Stop entrante por MIDI) pasan de largo —
      si no, loadSong() se quedaría esperando un segundo toque que nunca llega. */
   function setStop(fromUser){
+    // Igual que setPlay: el seguidor no corta nada. Ojo que loadSong() llama a
+    // setStop() internamente sin fromUser, y eso tiene que seguir funcionando
+    // cuando el maestro propaga un cambio de canción — por eso el guard mira
+    // solo el toque del músico.
+    if (fromUser === true && esSeguidor()) return;
     // Solo pide confirmación si hay algo sonando. Con la música parada, STOP es
     // inofensivo (resetea la posición) y no tiene sentido molestar.
     if (fromUser === true && state.isPlaying && needsConfirm('stop', ['stopBtn','drumStopBtn'])) return;
@@ -2533,6 +3080,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     document.getElementById('singerSectionTag').textContent = s.lyrics[0].section;
     document.getElementById('singerNextSection').textContent = (s.lyrics.find(l=>l.section!==s.lyrics[0].section)||{section:'—'}).section;
     updateTransportUI();
+    try { if (typeof SYNC !== 'undefined' && SYNC) SYNC.avisarCambio(); } catch(e){}
     // [BLE-MIDI] sendMidi([0xFC]);
   }
 
@@ -2822,6 +3370,23 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const txt = btn.textContent; btn.textContent = '✓ Guardado';
     setTimeout(()=>btn.textContent=txt, 1200);
   });
+
+  /* ---------- Cableado del selector de modo y del sello de versión ---------- */
+  (function bindModo(){
+    const wire = () => {
+      const l = document.getElementById('ms_mode_logic');
+      const d = document.getElementById('ms_mode_device');
+      if (l) l.addEventListener('click', () => setMode('logic'));
+      if (d) d.addEventListener('click', () => setMode('device'));
+      const b = document.getElementById('ms_build');
+      if (b) b.textContent = APP_BUILD === '__BUILD' + '_STAMP__' ? 'dev' : APP_BUILD;
+      // Aplicar el modo guardado al arrancar
+      setMode(state.mode);
+      try { updateStageInfo(); } catch(e){}
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+    else wire();
+  })();
 
   // Reiniciar el show: borra las marcas de "tocada" para arrancar una lista limpia
   const _resetShowBtn = document.getElementById('resetShowBtn');
@@ -4172,6 +4737,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           // canción encadena con la siguiente sin esperar el PLAY.
           duration: s.audio_duration_seconds ? parseFloat(s.audio_duration_seconds) : null,
           chainNext: !!s.chain_next,
+          // Corrección de desfase constante entre el archivo y los tiempos del contenido
+          offset: s.offset_seconds ? parseFloat(s.offset_seconds) : 0,
           // Eventos MIDI salientes, ordenados por tiempo (el scheduler asume orden)
           midiOut: ((meR && meR.data) || [])
             .filter(e => e.enabled !== false)
@@ -4224,7 +4791,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       // Refrescar UI
       renderSetlistEditor();
       loadSong(0);
-      document.getElementById('setlistName').textContent = setlist.name;
+      setTxt('setlistName', setlist.name);
       const cnt = setlist.songs.length;
       updateSyncStatus(`✓ ${cnt} canciones · ${new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`, 'var(--accent-green)');
       return true;
