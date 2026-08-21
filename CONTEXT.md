@@ -1,7 +1,17 @@
 # CAMARAGE · Contexto del proyecto
 
 > Documento para retomar el proyecto en otra conversación.
-> **Última actualización: 17 ago 2026, cierre del día.** Sesión larguísima:
+> **Última actualización: 21 ago 2026, cierre del día.** Sesión de UX/UI a lo
+> largo de todo el día (10 commits): rediseño completo de la vista del
+> baterista (disco gigante, latido de pantalla, letra de 5 renglones, fader
+> único de click), transporte unificado en UNA fila en las tres vistas, STOP
+> que mantiene la posición, drag-scrub sobre la letra, setlist editable y
+> persistente desde la app (+ crear setlist), pantalla de Ajustes reordenada,
+> y decisión de producto: publicar en Google Play (ver §4 · PRODUCTO).
+> Migración de offset corrida, las dos canciones nuevas cargadas (15 en la
+> base), y Gonzalo dado de alta como drummer. **Solo el Samsung A56 quedó
+> actualizado con el APK nuevo** — los tres iOS siguen con el build viejo.
+> [Actualización anterior: 17 ago 2026.] Sesión larguísima:
 > reproductor de pistas, audios en Supabase, MIDI saliente, UX de escenario,
 > offset por canción, modo marcar tiempos, selector de modo, sello de versión,
 > **sync entre integrantes andando en aparatos reales**, transporte bloqueado en
@@ -35,6 +45,17 @@
   estructura en compases (ver §13). Los SQL están escritos y **sin correr**.
 
 ## Lo primero que hay que hacer al retomar
+
+0. **Actualizar los 3 dispositivos iOS** (quedaron con el build del 17 ago;
+   el A56 ya tiene el del 21 ago, sello `20260821-1807`):
+   - iPad Pro 12,9" (Pato) y iPad mini 6 ("iPad de Paloma"): el `index.html`
+     nuevo ya está copiado en `camarage-android/ios/App/App/public/`, así que
+     NO hace falta `npx cap copy ios` — abrir `ios/App/App.xcworkspace`,
+     elegir cada iPad y ⌘R (enchufados por cable, uno por vez).
+   - iPhone 12 (baterista): mismo procedimiento si se justifica; si no,
+     esperar la vista de seguidor por PWA (abajo) y no compilarlo más.
+   - Recordar el gotcha del Apple ID gratis: el build caduca a los 7 días y
+     el *trust* del perfil se resetea (Ajustes → General → VPN y gestión).
 
 1. ✅ **`migration_offset.sql` CORRIDO** (21 ago). La verificación contra
    `information_schema.columns` devolvió 1: la columna `songs.offset_seconds`
@@ -420,6 +441,32 @@ arranca todavía, pero queda como pendiente firme con el análisis hecho:
 Primer paso sugerido cuando se retome: **prototipar el servidor local en el
 APK** (maestro sirve la vista de seguidor por wifi) — le sirve a la banda ya,
 con o sin Play Store.
+
+### 🎯 Menú de mejoras propuesto (21 ago 2026) — para elegir la próxima
+
+Ordenado por impacto, conversado con Pato al cierre de la sesión de UX:
+
+1. **Secciones en vivo** — loopear estribillo, saltear puente, estirar outro,
+   con salto cuantizado al próximo compás. `song_sections` ya existe y el
+   drag-scrub de hoy es media máquina hecha. El salto de calidad más grande;
+   con esto la app deja de tener comparación con Stage Traxx.
+2. **Tanda de recompilación**: vista según rol (~20 líneas) + eventos MIDI que
+   disparan desde el aparato del integrante. Van juntas para gastar UNA sola
+   vuelta de Xcode en los dos iPads + APK.
+3. **PWA de seguidor**: poner `/performer` al día + manifest + wake lock.
+   Libera a los iOS del baterista de Xcode y es el primer ladrillo del camino
+   a Google Play (§ PRODUCTO).
+4. **Golpes baratos de escenario** (una tarde, juntos): colores por sección en
+   la letra, notas por canción visibles en escenario (el campo existe, hoy
+   solo en la web), sacar el tuner falso del bajista, markdown en letras.
+5. **Modo ensayo** (idea nueva 21 ago): historial de tocadas, contador de
+   veces por canción, y "repetir desde el último scrub" con un toque para
+   ensayar la parte que salió mal.
+6. **Setlist con horario de show**: hora estimada de cada tema acumulando
+   duraciones, para el toque de queda del venue.
+7. **La deuda de datos** (§🔴 arriba): BPM reales de las 13 viejas, 12 audios
+   sin subir, bounces de escenario de las dos nuevas. Si hay ensayo cerca,
+   esto va primero.
 
 ### 🟠 Funciones
 1. **Vista según el rol del integrante.** Hoy `state.role` está fijo en
