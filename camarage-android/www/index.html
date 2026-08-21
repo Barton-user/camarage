@@ -147,8 +147,29 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     /* --- Modo escenario: stage bar, escala de letra, bloqueo --- */
     .stagebar-btn { width:36px; height:30px; border-radius:8px; border:1px solid #262626; background:var(--bg-card); color:#a3a3a3; font-weight:800; font-size:13px; display:grid; place-items:center; }
     .stagebar-btn.on { color:#000; }
-    #singerLyricsTrack .line-item { font-size: calc(2.25rem * var(--lyric-scale, 1)) !important; }
-    #bassChordTrack .line-item > p { font-size: calc(3.75rem * var(--lyric-scale, 1)) !important; }
+    /* Tamaño de letra RESPONSIVE: escala con la pantalla (vmin) entre un piso
+       de teléfono y un techo de iPad Pro. Antes era un tamaño FIJO (2.25rem) y
+       en los iPads la letra quedaba chica flotando en un lienzo enorme; las
+       clases sm:/md: del HTML estaban muertas por el !important de acá.
+       El multiplicador --lyric-scale (botones A−/A+) se conserva intacto. */
+    #singerLyricsTrack .line-item { font-size: calc(clamp(1.75rem, 6.5vmin, 4.25rem) * var(--lyric-scale, 1)) !important; }
+    #bassChordTrack .line-item > p { font-size: calc(clamp(2.75rem, 8.5vmin, 5.5rem) * var(--lyric-scale, 1)) !important; }
+    #bassChordTrack .lyric-hint { font-size: clamp(0.8rem, 2.2vmin, 1.15rem) !important; }
+    /* Escalado interno del disco del baterista (relativo al tamaño del disco).
+       En navegadores sin container queries quedan los tamaños de las clases. */
+    @supports (font-size: 1cqmin) {
+      #drumBeatBig { font-size: 40cqmin !important; }
+      #drumCenter p.mono { font-size: clamp(9px, 5cqmin, 18px) !important; }
+    }
+    /* El count-in de 160px fijos se comía pantallas bajas */
+    #drumCountdownNum { font-size: min(160px, 38vmin); }
+    /* Pantallas BAJAS (iPad mini apaisado, teléfonos apaisados): compactar el
+       chrome del baterista para devolverle altura al disco. */
+    @media (max-height: 850px) {
+      #drumBpm { font-size: 2.25rem; }
+      #viewDrummer .btn-stage.h-14 { height: 3rem; }
+      #viewDrummer .btn-stage.h-12 { height: 2.5rem; }
+    }
     #lockOverlay { position:fixed; inset:0; z-index:60; display:none; align-items:flex-end; justify-content:center; padding-bottom:96px; background:transparent; touch-action:none; }
     #lockOverlay.on { display:flex; }
     #lockPill { display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 22px; border-radius:16px; background:rgba(0,0,0,0.82); border:1px solid #262626; user-select:none; }
@@ -776,7 +797,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
           <!-- Disco principal -->
           <div class="absolute inset-0 grid place-items-center">
-            <div class="relative w-72 h-72 max-w-[80vw] max-h-[80vw]">
+            <!-- El disco se adapta al alto que REALMENTE queda: antes era 288px
+                 fijos y en el iPad mini (apaisado, poco alto) se desbordaba del
+                 contenedor y el selector de subdivisión pisaba el número.
+                 container-type permite que el número escale con el disco. -->
+            <div id="drumDisc" class="relative" style="height:86%; max-height:30rem; max-width:92%; aspect-ratio:1/1; container-type:size;">
               <!-- Aro fijo -->
               <div class="absolute inset-0 rounded-full border-2 border-neutral-800"></div>
               <!-- 4 sectores de beat -->
@@ -1103,7 +1128,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260817-1931';
+  const APP_BUILD = '20260821-1605';
 
   const state = {
     role: 'singer',

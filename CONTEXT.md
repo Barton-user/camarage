@@ -375,8 +375,8 @@ Login de la app: `keogan3d@gmail.com`.
 # 4 · Pendientes
 
 ### 🔴 Datos — es lo único que separa de un ensayo real
-- **Cargar los BPM de las 13 canciones.** Varias están en el default de 120 y el
-  click miente en todas ellas. Es lo más urgente porque afecta tocar.
+- ✅ **BPM cargados en todos los temas** (21 ago, lo hizo Pato en Supabase).
+  El click ya no miente.
 - **Subir los 12 audios que faltan** (uno solo está subido).
 - Cargar las tonalidades faltantes (Absorber, Algo de tiempo, Lo que digo…).
 - Cifrado: varias canciones tienen 0 acordes.
@@ -436,6 +436,45 @@ Login de la app: `keogan3d@gmail.com`.
 - **Verificar cómo se lee la letra en el mini de 8,3"** a la distancia real de la
   baterista. Si queda chica, layout propio.
 - Backup del proyecto de Logic y de los Controller Assignments.
+
+---
+
+## Cambios sesión 21 ago 2026 · UX de escenario (probada en los 3 tamaños)
+
+Se levantó `index.html` en Chromium a las medidas reales del iPad Pro 12,9"
+(1366×1024), el iPad mini 6 (1133×744) y el Samsung A56 (412×915), con capturas
+de las tres vistas. Tres arreglos, todos CSS/HTML sin JS nuevo, sello
+`20260821-1605`, copiados a `camarage-android/www/` y a `ios/App/App/public/`:
+
+1. **🔴 El disco del baterista se rompía en el iPad mini.** Era de 288px FIJOS
+   (`w-72 h-72`): en pantallas bajas se desbordaba del contenedor, el número del
+   beat quedaba recortado y el selector de subdivisión lo pisaba — y justo el
+   mini es la pantalla de la baterista. Ahora el disco mide `height:86%` de lo
+   que realmente queda (tope 30rem) y el número escala con el disco vía
+   container queries (`40cqmin`, con fallback a los tamaños viejos si el
+   navegador no soporta `cqmin`). De paso, en el iPad Pro el disco pasó de
+   288px flotando en un lienzo enorme a ~600px.
+2. **La letra del cantante y el cifrado del bajista eran de tamaño FIJO.**
+   `2.25rem`/`3.75rem` con `!important`, que además mataba las clases
+   responsive `sm:`/`md:` del HTML (estaban muertas). Ahora escalan con la
+   pantalla: `clamp(1.75rem, 6.5vmin, 4.25rem)` la letra y
+   `clamp(2.75rem, 8.5vmin, 5.5rem)` el cifrado. En los iPads la letra se lee
+   de lejos de verdad; en el Samsung queda casi igual que antes. Los botones
+   A−/A+ (`--lyric-scale`) siguen funcionando encima de esto.
+3. **El count-in de 160px fijos** ahora es `min(160px, 38vmin)`, y en pantallas
+   de menos de 850px de alto el chrome del baterista se compacta (BPM y botones
+   más chicos) para devolverle altura al disco.
+
+**Pendiente que apareció en la revisión (no se tocó):**
+- **El tuner del bajista es un MOCK** — la aguja se mueve sola, no mide nada.
+  En un escenario una aguja falsa es peor que no tener tuner. Decidir: o se
+  conecta a audio real (Web Audio puede), o se esconde detrás de un tag DEMO,
+  o se saca. También tiene un detalle visual: el "+0¢" pisa el "+50¢".
+- La tarjeta "Root actual" del bajista en iPad Pro es 2/3 del ancho para
+  mostrar una letra — le sobra muchísimo espacio. Candidata a rediseño cuando
+  se haga el layout propio de iPad.
+- Los APK y los iPads siguen con el HTML del 17 ago: estos arreglos entran
+  recién con la próxima tanda de recompilación (juntar con la vista por rol).
 
 ---
 
