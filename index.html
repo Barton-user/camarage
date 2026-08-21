@@ -172,6 +172,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       #viewDrummer .btn-stage.h-14 { height: 3rem; }
       #viewDrummer .btn-stage.h-12 { height: 2.5rem; }
     }
+    /* Filas compactas del panel de Ajustes: lista con separadores, sin aire muerto */
+    .acc-row { border-bottom: 1px solid #1c1c1c; }
+    .acc-row > summary { padding: 11px 4px; }
+    .acc-row[open] > summary .acc-chev { transform: rotate(180deg); }
+    .acc-row[open] > summary { color: #fff; }
+    .acc-row > *:not(summary) { margin-bottom: 12px; }
     #lockOverlay { position:fixed; inset:0; z-index:60; display:none; align-items:flex-end; justify-content:center; padding-bottom:96px; background:transparent; touch-action:none; }
     #lockOverlay.on { display:flex; }
     #lockPill { display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 22px; border-radius:16px; background:rgba(0,0,0,0.82); border:1px solid #262626; user-select:none; }
@@ -360,8 +366,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <!-- Header sticky con botón cerrar siempre accesible -->
         <div class="flex items-center justify-between p-4 border-b border-neutral-900 flex-shrink-0">
           <div>
-            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">MIDI / Bluetooth</p>
-            <h3 class="text-lg font-black">Conexión</h3>
+            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">CAMARAGE</p>
+            <h3 class="text-lg font-black">Ajustes</h3>
           </div>
           <button id="closeMidiSettings"
                   class="w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-neutral-300 text-2xl leading-none active:bg-neutral-800"
@@ -369,122 +375,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         </div>
         <!-- Cuerpo scrolleable -->
         <div class="flex-1 overflow-y-auto p-4 pt-3 no-scrollbar">
-
-        <!-- Estado de conexión (DAW + Instrumento) -->
-        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3 space-y-2">
-          <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Conexiones BLE</p>
-          <div id="ms_dawCard" class="rounded-lg border border-neutral-800 p-2.5 flex items-center justify-between gap-2">
-            <div class="min-w-0">
-              <p class="text-sm font-bold">Mac · DAW <span class="text-[10px] font-normal text-neutral-500">Logic / sync</span></p>
-              <p id="ms_dawName" class="mono text-[10px] text-neutral-500 truncate">no conectado</p>
-            </div>
-            <span id="ms_dawDot" class="mono text-[10px] px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 flex-shrink-0">○ off</span>
-          </div>
-          <div id="ms_instCard" class="rounded-lg border border-neutral-800 p-2.5 flex items-center justify-between gap-2">
-            <div class="min-w-0">
-              <p class="text-sm font-bold">Instrumento · WIDI <span class="text-[10px] font-normal text-neutral-500">→ rutea al Mac</span></p>
-              <p id="ms_instName" class="mono text-[10px] text-neutral-500 truncate">no conectado</p>
-            </div>
-            <span id="ms_instDot" class="mono text-[10px] px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 flex-shrink-0">○ off</span>
-          </div>
-        </div>
-
-        <!-- MIDI THROUGH · validación visual del router -->
-        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
-          <div class="flex items-center justify-between mb-1">
-            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">MIDI through · WIDI → Mac</p>
-            <span id="ms_thruCount" class="mono text-[10px] px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-500">0 msgs</span>
-          </div>
-          <p class="text-[10px] text-neutral-500 mb-1">Tocá el instrumento: si el ruteo anda, esto se mueve en vivo.</p>
-          <p id="ms_thruLast" class="mono text-xs font-bold" style="color: var(--accent-green);">—</p>
-        </div>
-
-        <!-- Filtro de canal MIDI -->
-        <div data-acc="Canal MIDI" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
-          <div class="flex items-center justify-between mb-2">
-            <div>
-              <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Canal MIDI</p>
-              <p class="text-xs text-neutral-400 mt-0.5">Filtrá para no procesar tráfico de otros canales</p>
-            </div>
-          </div>
-          <div class="grid grid-cols-9 gap-1" id="ms_channelGrid">
-            <!-- Generado por JS: ALL + 1..16 -->
-          </div>
-        </div>
-
-        <!-- Cues activos (read-only) -->
-        <div data-acc="Cues de la canción" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
-          <div class="flex items-center justify-between mb-2">
-            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Cues de la canción actual</p>
-            <p id="ms_cueCount" class="mono text-[10px] text-neutral-500">0</p>
-          </div>
-          <div id="ms_cueList" class="space-y-1 max-h-28 overflow-y-auto no-scrollbar"></div>
-          <p class="mono text-[9px] text-neutral-600 mt-2">Editá los cues desde Setlist → Editar canción</p>
-        </div>
-
-        <!-- Login Supabase — necesario para que RLS permita leer datos -->
-        <div data-acc="Cuenta" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
-          <div class="flex items-center justify-between mb-2">
-            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Cuenta</p>
-            <span id="ms_authStatus" class="mono text-[10px] text-neutral-500">verificando…</span>
-          </div>
-          <!-- Estado deslogueado: muestra form -->
-          <div id="ms_loginForm">
-            <input id="ms_loginEmail" type="email" placeholder="vos@ejemplo.com"
-                   class="input w-full text-xs mb-1" autocomplete="email" inputmode="email" />
-            <input id="ms_loginPass" type="password" placeholder="contraseña"
-                   class="input w-full text-xs mb-2" autocomplete="current-password" />
-            <button id="ms_loginBtn"
-                    class="w-full rounded-lg py-2 text-xs font-black uppercase tracking-wider"
-                    style="background: var(--accent-green); color: #000;">
-              Entrar
-            </button>
-            <p class="mono text-[9px] text-neutral-600 mt-2">
-              Usá el mismo mail y contraseña que en la web admin.
-              Una vez logueado, la sesión queda guardada (no la tenés que poner cada vez).
-            </p>
-          </div>
-          <!-- Estado logueado: muestra info + botón salir -->
-          <div id="ms_loggedIn" class="hidden-screen">
-            <p class="text-xs mb-2">Logueado como <b id="ms_userEmail" class="text-cyan-400">—</b></p>
-            <button id="ms_logoutBtn"
-                    class="w-full rounded-lg border border-[rgba(239,68,68,0.35)] py-2 text-xs font-bold"
-                    style="color: var(--accent-red);">
-              Cerrar sesión
-            </button>
-          </div>
-        </div>
-
-        <!-- Sincronización con Supabase — pre-configurada, auto al abrir la app -->
-        <div data-acc="Sync · Supabase" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
-          <div class="flex items-center justify-between mb-2">
-            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Sync · Supabase</p>
-            <span id="ms_syncStatus" class="mono text-[10px] text-neutral-500">—</span>
-          </div>
-          <button id="ms_syncNow" class="w-full rounded-lg py-3 text-sm font-black uppercase tracking-wider mb-2"
-                  style="background: var(--accent-cyan); color: #000;">↻ Sincronizar ahora</button>
-          <p class="mono text-[9px] text-neutral-600">
-            Sincroniza solo al abrir la app. Tocá acá si querés forzar pull manual.
-          </p>
-          <details class="mt-3">
-            <summary class="mono text-[9px] uppercase tracking-widest text-neutral-500 cursor-pointer hover:text-neutral-300">
-              Configuración avanzada (opcional)
-            </summary>
-            <div class="mt-2 space-y-1">
-              <input id="ms_supabaseUrl" type="text" placeholder="https://xxxx.supabase.co"
-                     class="input w-full text-xs mono" />
-              <input id="ms_supabaseKey" type="text" placeholder="anon key (eyJhbGc...)"
-                     class="input w-full text-xs mono" />
-              <button id="ms_saveSync" class="w-full rounded-lg border border-neutral-800 py-2 text-xs font-bold active:bg-neutral-900">
-                Guardar override
-              </button>
-              <p class="mono text-[9px] text-neutral-600">
-                Por default usa la base de datos pre-configurada de CAMARAGE.
-                Llenar solo si querés apuntar a otro proyecto Supabase.
-              </p>
-            </div>
-          </details>
-        </div>
 
         <!-- PISTAS DE AUDIO · reproductor de backing tracks -->
         <div data-acc="Pistas de audio" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
@@ -573,12 +463,142 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           </p>
         </div>
 
-        <!-- Versión del build -->
-        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
-          <div class="flex items-center justify-between">
-            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Versión</p>
-            <span id="ms_build" class="mono text-[10px] text-neutral-400">—</span>
+        <!-- Login Supabase — necesario para que RLS permita leer datos -->
+        <div data-acc="Cuenta" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Cuenta</p>
+            <span id="ms_authStatus" class="mono text-[10px] text-neutral-500">verificando…</span>
           </div>
+          <!-- Estado deslogueado: muestra form -->
+          <div id="ms_loginForm">
+            <input id="ms_loginEmail" type="email" placeholder="vos@ejemplo.com"
+                   class="input w-full text-xs mb-1" autocomplete="email" inputmode="email" />
+            <input id="ms_loginPass" type="password" placeholder="contraseña"
+                   class="input w-full text-xs mb-2" autocomplete="current-password" />
+            <button id="ms_loginBtn"
+                    class="w-full rounded-lg py-2 text-xs font-black uppercase tracking-wider"
+                    style="background: var(--accent-green); color: #000;">
+              Entrar
+            </button>
+            <p class="mono text-[9px] text-neutral-600 mt-2">
+              Usá el mismo mail y contraseña que en la web admin.
+              Una vez logueado, la sesión queda guardada (no la tenés que poner cada vez).
+            </p>
+          </div>
+          <!-- Estado logueado: muestra info + botón salir -->
+          <div id="ms_loggedIn" class="hidden-screen">
+            <p class="text-xs mb-2">Logueado como <b id="ms_userEmail" class="text-cyan-400">—</b></p>
+            <button id="ms_logoutBtn"
+                    class="w-full rounded-lg border border-[rgba(239,68,68,0.35)] py-2 text-xs font-bold"
+                    style="color: var(--accent-red);">
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+
+        <!-- Sincronización con Supabase — pre-configurada, auto al abrir la app -->
+        <div data-acc="Sync · Supabase" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Sync · Supabase</p>
+            <span id="ms_syncStatus" class="mono text-[10px] text-neutral-500">—</span>
+          </div>
+          <button id="ms_syncNow" class="w-full rounded-lg py-3 text-sm font-black uppercase tracking-wider mb-2"
+                  style="background: var(--accent-cyan); color: #000;">↻ Sincronizar ahora</button>
+          <p class="mono text-[9px] text-neutral-600">
+            Sincroniza solo al abrir la app. Tocá acá si querés forzar pull manual.
+          </p>
+          <details class="mt-3">
+            <summary class="mono text-[9px] uppercase tracking-widest text-neutral-500 cursor-pointer hover:text-neutral-300">
+              Configuración avanzada (opcional)
+            </summary>
+            <div class="mt-2 space-y-1">
+              <input id="ms_supabaseUrl" type="text" placeholder="https://xxxx.supabase.co"
+                     class="input w-full text-xs mono" />
+              <input id="ms_supabaseKey" type="text" placeholder="anon key (eyJhbGc...)"
+                     class="input w-full text-xs mono" />
+              <button id="ms_saveSync" class="w-full rounded-lg border border-neutral-800 py-2 text-xs font-bold active:bg-neutral-900">
+                Guardar override
+              </button>
+              <p class="mono text-[9px] text-neutral-600">
+                Por default usa la base de datos pre-configurada de CAMARAGE.
+                Llenar solo si querés apuntar a otro proyecto Supabase.
+              </p>
+            </div>
+          </details>
+        </div>
+
+        <!-- MIDI / Bluetooth · todo lo del modo 1 en una sola sección plegable.
+             Acá adentro viven también los botones que antes eran un footer fijo
+             de cuatro filas: eran ruido permanente para el modo 2 (21 ago). -->
+        <div data-acc="MIDI · Bluetooth (modo 1)" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+        <!-- Estado de conexión (DAW + Instrumento) -->
+        <div class="space-y-2 mb-3">
+          <div id="ms_dawCard" class="rounded-lg border border-neutral-800 p-2.5 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-sm font-bold">Mac · DAW <span class="text-[10px] font-normal text-neutral-500">Logic / sync</span></p>
+              <p id="ms_dawName" class="mono text-[10px] text-neutral-500 truncate">no conectado</p>
+            </div>
+            <span id="ms_dawDot" class="mono text-[10px] px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 flex-shrink-0">○ off</span>
+          </div>
+          <div id="ms_instCard" class="rounded-lg border border-neutral-800 p-2.5 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-sm font-bold">Instrumento · WIDI <span class="text-[10px] font-normal text-neutral-500">→ rutea al Mac</span></p>
+              <p id="ms_instName" class="mono text-[10px] text-neutral-500 truncate">no conectado</p>
+            </div>
+            <span id="ms_instDot" class="mono text-[10px] px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 flex-shrink-0">○ off</span>
+          </div>
+        </div>
+
+        <!-- MIDI THROUGH · validación visual del router -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-1">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">MIDI through · WIDI → Mac</p>
+            <span id="ms_thruCount" class="mono text-[10px] px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-500">0 msgs</span>
+          </div>
+          <p class="text-[10px] text-neutral-500 mb-1">Tocá el instrumento: si el ruteo anda, esto se mueve en vivo.</p>
+          <p id="ms_thruLast" class="mono text-xs font-bold" style="color: var(--accent-green);">—</p>
+        </div>
+
+        <div class="space-y-2">
+          <div class="grid grid-cols-2 gap-2">
+            <button id="ms_disconnectBtn"
+                    class="rounded-xl border border-[rgba(239,68,68,0.35)] py-2.5 text-sm font-bold active:bg-[rgba(239,68,68,0.18)]"
+                    style="color: var(--accent-red);">Desconectar</button>
+            <button id="ms_reconnectBtn"
+                    class="rounded-xl py-2.5 text-sm font-black uppercase tracking-wider"
+                    style="background: var(--accent-cyan); color: #000;">Conectar BLE (Mac)</button>
+          </div>
+          <button id="ms_instBtn"
+                  class="w-full rounded-xl border border-[rgba(34,211,238,0.35)] py-2.5 text-sm font-bold"
+                  style="color: var(--accent-cyan);">+ Conectar instrumento (WIDI) → rutea al Mac</button>
+          <button id="ms_topoBtn"
+                  class="w-full rounded-xl border border-neutral-700 py-2 text-xs font-bold"
+                  style="color: var(--accent-amber);">Topología: A</button>
+          <p id="ms_topoHint" class="mono text-[9px] text-neutral-600 leading-snug"></p>
+        </div>
+        </div>
+
+        <!-- Filtro de canal MIDI -->
+        <div data-acc="Canal MIDI" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Canal MIDI</p>
+              <p class="text-xs text-neutral-400 mt-0.5">Filtrá para no procesar tráfico de otros canales</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-9 gap-1" id="ms_channelGrid">
+            <!-- Generado por JS: ALL + 1..16 -->
+          </div>
+        </div>
+
+        <!-- Cues activos (read-only) -->
+        <div data-acc="Cues de la canción" class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Cues de la canción actual</p>
+            <p id="ms_cueCount" class="mono text-[10px] text-neutral-500">0</p>
+          </div>
+          <div id="ms_cueList" class="space-y-1 max-h-28 overflow-y-auto no-scrollbar"></div>
+          <p class="mono text-[9px] text-neutral-600 mt-2">Editá los cues desde Setlist → Editar canción</p>
         </div>
 
         <!-- Calibración de latencia del click -->
@@ -608,24 +628,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           </div>
         </div>
 
-        </div>
-        <!-- Footer sticky con acciones siempre visibles -->
-        <div class="p-3 border-t border-neutral-900 flex-shrink-0 bg-[var(--bg-card)] space-y-2">
-          <div class="grid grid-cols-2 gap-2">
-            <button id="ms_disconnectBtn"
-                    class="rounded-xl border border-[rgba(239,68,68,0.35)] py-2.5 text-sm font-bold active:bg-[rgba(239,68,68,0.18)]"
-                    style="color: var(--accent-red);">Desconectar</button>
-            <button id="ms_reconnectBtn"
-                    class="rounded-xl py-2.5 text-sm font-black uppercase tracking-wider"
-                    style="background: var(--accent-cyan); color: #000;">Conectar BLE (Mac)</button>
+        <!-- Versión del build -->
+        <div class="rounded-xl border border-neutral-800 bg-[#0a0a0a] p-3 mb-3">
+          <div class="flex items-center justify-between">
+            <p class="mono text-[10px] uppercase tracking-widest text-neutral-500">Versión</p>
+            <span id="ms_build" class="mono text-[10px] text-neutral-400">—</span>
           </div>
-          <button id="ms_instBtn"
-                  class="w-full rounded-xl border border-[rgba(34,211,238,0.35)] py-2.5 text-sm font-bold"
-                  style="color: var(--accent-cyan);">+ Conectar instrumento (WIDI) → rutea al Mac</button>
-          <button id="ms_topoBtn"
-                  class="w-full rounded-xl border border-neutral-700 py-2 text-xs font-bold"
-                  style="color: var(--accent-amber);">Topología: A</button>
-          <p id="ms_topoHint" class="mono text-[9px] text-neutral-600 leading-snug"></p>
+        </div>
+
         </div>
       </div>
     </div>
@@ -1168,7 +1178,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260821-1748';
+  const APP_BUILD = '20260821-1807';
 
   const state = {
     role: 'singer',
@@ -4879,11 +4889,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     document.querySelectorAll('#midiSettingsModal [data-acc]').forEach(sec => {
       if (sec.closest('details')) return;            // ya envuelto
       const det = document.createElement('details');
-      det.className = 'mb-3';
+      det.className = 'acc-row';
       const sum = document.createElement('summary');
-      sum.className = 'mono text-[11px] uppercase tracking-widest text-neutral-300 cursor-pointer select-none py-2.5 px-1 list-none';
-      sum.textContent = sec.getAttribute('data-acc') + '  ▾';
+      sum.className = 'mono text-[11px] uppercase tracking-widest text-neutral-300 cursor-pointer select-none list-none flex items-center justify-between';
+      sum.innerHTML = '<span>' + sec.getAttribute('data-acc') + '</span><span class="acc-chev text-neutral-600">▾</span>';
       sec.classList.remove('mb-3');                  // evitar doble margen
+      sec.classList.add('mt-2');
       sec.parentNode.insertBefore(det, sec);
       det.appendChild(sum);
       det.appendChild(sec);
