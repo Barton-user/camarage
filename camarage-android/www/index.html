@@ -183,11 +183,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     .blink { animation: softBlink 1s ease-in-out infinite; }
 
     @keyframes drumPulse {
-      0%   { transform: scale(.92); opacity: .6; }
-      40%  { transform: scale(1.05); opacity: 1; }
-      100% { transform: scale(.92); opacity: .6; }
+      0%   { transform: scale(.86); opacity: .5; }
+      40%  { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(.94); opacity: .75; }
     }
-    .drum-pulse { animation: drumPulse .18s ease-out; }
+    .drum-pulse { animation: drumPulse .22s ease-out; }
 
     @keyframes sweep { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
     .sweep { animation: sweep 1.2s linear infinite; }
@@ -231,14 +231,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
     input[type=range].range-click::-webkit-slider-runnable-track{ background:transparent; height:100%; }
     input[type=range].range-click::-webkit-slider-thumb{
-      -webkit-appearance:none; appearance:none; width:40px; height:40px; border-radius:9999px;
+      -webkit-appearance:none; appearance:none; width:32px; height:32px; border-radius:9999px;
       background:#0c0c0c; border:3px solid var(--accent-yellow);
       box-shadow:0 0 16px -2px rgba(250,204,21,.55);
-      margin-top:6px;
+      margin-top:3px;
     }
     input[type=range].range-click::-moz-range-track{ background:transparent; height:100%; }
     input[type=range].range-click::-moz-range-thumb{
-      width:40px; height:40px; border-radius:9999px;
+      width:32px; height:32px; border-radius:9999px;
       background:#0c0c0c; border:3px solid var(--accent-yellow);
       box-shadow:0 0 16px -2px rgba(250,204,21,.55);
     }
@@ -633,17 +633,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <div id="globalBarProgress" class="h-full rounded-full"
              style="width:0%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-yellow));"></div>
       </div>
-      <div class="flex items-center justify-between mt-2">
-        <div id="globalBeatDots" class="flex gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="1"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="2"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="3"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-neutral-700" data-beat="4"></span>
-        </div>
-        <div class="mono text-[10px] text-neutral-500">
-          BAR <span id="globalBar" class="text-white">001</span> · BEAT <span id="globalBeat" class="text-white">1</span>/4 ·
-          <span id="globalTime" class="text-white">00:00</span>
-        </div>
+      <!-- Los puntos y el texto BAR/BEAT/TIME se mudaron: el texto vive ahora en
+           el encabezado del baterista (mismos IDs, el JS no cambia) y los puntos
+           quedan ocultos — el disco ya muestra el beat mucho más grande. -->
+      <div id="globalBeatDots" class="hidden">
+        <span data-beat="1"></span><span data-beat="2"></span><span data-beat="3"></span><span data-beat="4"></span>
       </div>
     </div>
 
@@ -785,25 +779,25 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
       <!-- ============ VISTA · BATERISTA ============ -->
       <div id="viewDrummer" class="view absolute inset-0 hidden-screen flex flex-col">
-        <!-- Top: BPM gigante + sección -->
-        <div class="px-4 pt-3 flex items-center justify-between">
-          <div>
-            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Tempo</p>
-            <div class="flex items-baseline gap-1">
-              <span id="drumBpm" class="mono text-5xl font-black" style="color: var(--accent-orange);">112</span>
-              <span class="mono text-xs text-neutral-500">BPM</span>
-            </div>
+        <!-- Encabezado compacto: BPM · BAR/BEAT/TIME (antes era un renglón
+             aparte arriba) · sección. Sin las etiquetas TEMPO/SECCIÓN. -->
+        <div class="px-4 pt-2 flex items-center justify-between gap-2">
+          <div class="flex items-baseline gap-1 flex-shrink-0">
+            <span id="drumBpm" class="mono text-4xl font-black leading-none" style="color: var(--accent-orange);">112</span>
+            <span class="mono text-[10px] text-neutral-500">BPM</span>
           </div>
-          <div class="text-right">
-            <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">Sección</p>
-            <p id="drumSectionTag" class="text-lg font-black">Intro</p>
-            <p class="mono text-[10px] text-neutral-500">next · <span id="drumNextSection" class="text-neutral-300">Verse 1</span> en <span id="drumNextIn" class="text-white">8</span> bars</p>
+          <div class="mono text-[10px] text-neutral-500 text-center flex-shrink-0">
+            BAR <span id="globalBar" class="text-white">001</span> · <span id="globalBeat" class="text-white">1</span>/4 · <span id="globalTime" class="text-white">00:00</span>
+          </div>
+          <div class="text-right min-w-0">
+            <p id="drumSectionTag" class="text-lg font-black leading-tight truncate">Intro</p>
+            <p class="mono text-[10px] text-neutral-500 truncate">next · <span id="drumNextSection" class="text-neutral-300">Verse 1</span> en <span id="drumNextIn" class="text-white">8</span> bars</p>
           </div>
         </div>
 
         <!-- Claqueta visual gigante -->
-        <div class="flex-1 relative mx-3 my-3 rounded-2xl overflow-hidden border border-[var(--border-soft)]"
-             style="background: radial-gradient(120% 80% at 50% 50%, #0d0d10 0%, #000 70%);">
+        <div class="flex-1 relative mx-2 rounded-2xl overflow-hidden border border-[var(--border-soft)]"
+             style="background: radial-gradient(120% 80% at 50% 50%, #0d0d10 0%, #000 70%); margin-top:6px; margin-bottom:6px;">
 
           <!-- Conteo regresivo overlay -->
           <div id="drumCountdown" class="absolute inset-0 hidden items-center justify-center bg-black/70 z-20">
@@ -819,7 +813,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
                  fijos y en el iPad mini (apaisado, poco alto) se desbordaba del
                  contenedor y el selector de subdivisión pisaba el número.
                  container-type permite que el número escale con el disco. -->
-            <div id="drumDisc" class="relative" style="height:86%; max-height:30rem; max-width:92%; aspect-ratio:1/1; container-type:size;">
+            <div id="drumDisc" class="relative" style="height:min(94%, 88vw); max-height:38rem; aspect-ratio:1/1; container-type:size;">
               <!-- Aro fijo -->
               <div class="absolute inset-0 rounded-full border-2 border-neutral-800"></div>
               <!-- 4 sectores de beat -->
@@ -830,9 +824,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
               </svg>
               <!-- Manija giratoria (cada bar 360°) -->
               <div class="absolute inset-0" id="drumHandWrap">
-                <div class="absolute left-1/2 top-1/2 w-1 h-1/2 -translate-x-1/2 -translate-y-full origin-bottom"
+                <div class="absolute left-1/2 top-1/2 h-1/2 -translate-x-1/2 -translate-y-full origin-bottom"
                      id="drumHand"
-                     style="background: linear-gradient(180deg, transparent, var(--accent-orange));"></div>
+                     style="width:7px; border-radius:4px; background: linear-gradient(180deg, transparent 15%, var(--accent-orange)); box-shadow: 0 0 16px rgba(251,146,60,.65);"></div>
               </div>
               <!-- Centro: beat actual gigante -->
               <div class="absolute inset-6 rounded-full grid place-items-center"
@@ -857,8 +851,51 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           </div>
         </div>
 
-        <!-- ===== Panel inferior · Transporte + Mini Mixer ===== -->
-        <div class="px-3 pb-3 space-y-2">
+        <!-- ===== Panel inferior · setlist, fader del click y transporte al fondo,
+             pegado a la bottom nav (pedido de Pato, 21 ago) ===== -->
+        <div class="px-3 space-y-2" style="padding-bottom:8px;">
+
+          <!-- Setlist nav (prev / next con trigger a Logic) -->
+          <div class="grid grid-cols-12 gap-2">
+            <button id="drumPrevBtn"
+                    class="btn-stage setlist-nav-btn col-span-5 h-12 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex items-center gap-2 px-2">
+              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏮</span>
+              <div class="flex flex-col items-start min-w-0 flex-1">
+                <span class="mono text-[8px] uppercase tracking-widest text-neutral-500">Anterior</span>
+                <span id="drumPrevLabel" class="text-[10px] font-bold text-neutral-300 truncate w-full text-left">—</span>
+              </div>
+            </button>
+            <div class="col-span-2 flex items-center justify-center">
+              <span id="drumSetlistPos" class="mono text-[10px] text-neutral-500">1 / 1</span>
+            </div>
+            <button id="drumNextBtn"
+                    class="btn-stage setlist-nav-btn col-span-5 h-12 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex items-center gap-2 px-2">
+              <div class="flex flex-col items-end min-w-0 flex-1">
+                <span class="mono text-[8px] uppercase tracking-widest text-neutral-500">Próxima</span>
+                <span id="drumNextLabel" class="text-[10px] font-bold text-neutral-300 truncate w-full text-right">—</span>
+              </div>
+              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏭</span>
+            </button>
+          </div>
+
+          <!-- Fader del click, versión chata: una sola fila (pedido de Pato,
+               21 ago — la versión alta comía espacio del disco). Mantiene
+               .mixer-channel / .mix-val / .mix-meter para que el JS no cambie. -->
+          <div class="rounded-xl border border-neutral-800 bg-[var(--bg-card)] px-3" style="padding-top:2px; padding-bottom:2px;">
+            <div class="mixer-channel flex items-center gap-3" data-channel="click">
+              <span class="uppercase tracking-[0.14em] font-bold text-neutral-400 text-[10px] flex-shrink-0">Click</span>
+              <div class="relative flex-1" style="height:38px;">
+                <div style="position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:8px;"
+                     class="rounded-full bg-neutral-900 overflow-hidden">
+                  <div class="mix-meter h-full rounded-full"
+                       style="width:75%; background: linear-gradient(90deg, rgba(250,204,21,.35), var(--accent-yellow));"></div>
+                </div>
+                <input type="range" min="0" max="100" value="75" class="range-click w-full"
+                       style="position:absolute; inset:0; height:100%;" aria-label="Volumen click"/>
+              </div>
+              <span class="mono font-black text-lg leading-none flex-shrink-0" style="color: var(--accent-yellow); min-width:2.1em; text-align:right;"><span class="mix-val">75</span></span>
+            </div>
+          </div>
 
           <!-- Fila de transporte (Click + Stop + Play) -->
           <div class="grid grid-cols-12 gap-2">
@@ -885,58 +922,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
               <svg id="drumPlayIcon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               <span id="drumPlayLabel">PLAY</span>
             </button>
-          </div>
-
-          <!-- Setlist nav (prev / next con trigger a Logic) -->
-          <div class="grid grid-cols-12 gap-2">
-            <button id="drumPrevBtn"
-                    class="btn-stage setlist-nav-btn col-span-5 h-12 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex items-center gap-2 px-2">
-              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏮</span>
-              <div class="flex flex-col items-start min-w-0 flex-1">
-                <span class="mono text-[8px] uppercase tracking-widest text-neutral-500">Anterior</span>
-                <span id="drumPrevLabel" class="text-[10px] font-bold text-neutral-300 truncate w-full text-left">—</span>
-              </div>
-            </button>
-            <div class="col-span-2 flex items-center justify-center">
-              <span id="drumSetlistPos" class="mono text-[10px] text-neutral-500">1 / 1</span>
-            </div>
-            <button id="drumNextBtn"
-                    class="btn-stage setlist-nav-btn col-span-5 h-12 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex items-center gap-2 px-2">
-              <div class="flex flex-col items-end min-w-0 flex-1">
-                <span class="mono text-[8px] uppercase tracking-widest text-neutral-500">Próxima</span>
-                <span id="drumNextLabel" class="text-[10px] font-bold text-neutral-300 truncate w-full text-right">—</span>
-              </div>
-              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏭</span>
-            </button>
-          </div>
-
-          <!-- Fader único: volumen del click.
-               Los sliders SEQS y BANDA se sacaron (21 ago): eran controles MIDI
-               remotos hacia buses de Logic que nunca se configuraron — en el
-               modo 2 no tienen a quién hablarle y en escenario eran controles
-               falsos. El JS del mixer itera .mixer-channel, así que con dejar
-               solo este bloque alcanza; el CC entrante para seqs/band ya hace
-               null-check del slider. -->
-          <div class="rounded-xl border border-neutral-800 bg-[var(--bg-card)] p-3">
-            <div class="mixer-channel" data-channel="click">
-              <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full" style="background: var(--accent-yellow);"></span>
-                  <span class="uppercase tracking-[0.22em] font-bold text-neutral-300 text-xs">Volumen del click</span>
-                </div>
-                <span class="mono font-black text-2xl leading-none" style="color: var(--accent-yellow);"><span class="mix-val">75</span></span>
-              </div>
-              <div class="relative" style="height:52px;">
-                <!-- Riel con relleno (mix-meter = la parte "llena" del fader) -->
-                <div style="position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:12px;"
-                     class="rounded-full bg-neutral-900 overflow-hidden">
-                  <div class="mix-meter h-full rounded-full"
-                       style="width:75%; background: linear-gradient(90deg, rgba(250,204,21,.35), var(--accent-yellow));"></div>
-                </div>
-                <input type="range" min="0" max="100" value="75" class="range-click w-full"
-                       style="position:absolute; inset:0; height:100%;" aria-label="Volumen click"/>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -1121,7 +1106,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260821-1623';
+  const APP_BUILD = '20260821-1653';
 
   const state = {
     role: 'singer',
@@ -1300,6 +1285,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     // En la vista del cantante competían por atención con la letra.
     const bs = document.getElementById('beatStrip');
     if (bs) bs.classList.toggle('hidden-screen', id !== 'viewDrummer');
+    // La stage bar (A−/A+, brillo, bloqueo) es para las vistas con letra/cifrado.
+    // En la del baterista solo comía altura del disco (pedido de Pato, 21 ago).
+    const sb = document.getElementById('stageBar');
+    if (sb) sb.classList.toggle('hidden-screen', id === 'viewDrummer');
     document.querySelectorAll('.nav-btn').forEach(b => {
       const active = b.dataset.view === id;
       b.classList.toggle('text-white', active);
@@ -1687,9 +1676,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     for (let i=0;i<4;i++){
       const angle = (i/4) * 360 - 90; // empieza arriba
       const dot = document.createElement('div');
-      dot.className = 'absolute w-3 h-3 rounded-full bg-neutral-700';
-      dot.style.left = `calc(50% + ${Math.cos(angle*Math.PI/180)*46}% - 6px)`;
-      dot.style.top  = `calc(50% + ${Math.sin(angle*Math.PI/180)*46}% - 6px)`;
+      dot.className = 'absolute rounded-full bg-neutral-700';
+      dot.style.width = '18px'; dot.style.height = '18px';
+      dot.style.left = `calc(50% + ${Math.cos(angle*Math.PI/180)*46}% - 9px)`;
+      dot.style.top  = `calc(50% + ${Math.sin(angle*Math.PI/180)*46}% - 9px)`;
       dot.dataset.beat = i;
       drumPerim.appendChild(dot);
     }
