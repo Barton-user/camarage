@@ -1129,7 +1129,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260821-1731';
+  const APP_BUILD = '20260821-1740';
 
   const state = {
     role: 'singer',
@@ -1774,36 +1774,105 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     drumLyricsTrack.style.transform = `translateY(${current + delta}px)`;
   }
 
-  /* ----- Drag sobre la letra con el transporte en STOP (pedido 21 ago) -----
-     Parado, se puede arrastrar la letra (o el cifrado) para leer lo que viene.
-     Al volver a reproducir, el primer cambio de línea re-centra solo, porque
-     scrollXxxToLine calcula el delta desde la posición ACTUAL del track. */
-  function makeLyricsDraggable(trackEl){
+  /* ----- Drag sobre la letra con el transporte en STOP: SCRUB (21 ago) -----
+     Parado, se arrastra la letra (o el cifrado). Mientras se arrastra, la línea
+     que pasa por el centro se marca en blanco. Al soltar, esa línea queda
+     centrada Y el transporte queda posicionado en su tiempo: el próximo PLAY
+     arranca desde ahí (audio en modo pistas vía TRACKS.seek, reloj local en
+     modo click/MIDI vía pausedElapsed). */
+  function centerLine(trackEl, idx){
+    const lines = trackEl.querySelectorAll('.line-item');
+    lines.forEach((el,i) => {
+      el.classList.remove('active','past','future');
+      el.classList.add(i<idx?'past':i===idx?'active':'future');
+    });
+    const active = lines[idx]; if (!active) return;
+    const vp = trackEl.parentElement;
+    const vpRect = vp.getBoundingClientRect();
+    const lineRect = active.getBoundingClientRect();
+    const current = getTranslateY(trackEl);
+    trackEl.style.transform = `translateY(${current + (vpRect.top + vpRect.height/2) - (lineRect.top + lineRect.height/2)}px)`;
+  }
+  function nearestLineIdx(trackEl){
+    const vp = trackEl.parentElement;
+    const r = vp.getBoundingClientRect();
+    const cy = r.top + r.height/2;
+    let best = -1, bd = Infinity;
+    trackEl.querySelectorAll('.line-item').forEach((el,i) => {
+      const lr = el.getBoundingClientRect();
+      const d = Math.abs((lr.top + lr.height/2) - cy);
+      if (d < bd){ bd = d; best = i; }
+    });
+    return best;
+  }
+  /* Posiciona el transporte (parado) en un segundo de CONTENIDO de la canción.
+     En modo pistas el audio vive corrido por song.offset: se descuenta. */
+  function scrubToSongSec(t){
+    const song = currentSong();
+    const off = (song && typeof song.offset === 'number') ? song.offset : 0;
+    const target = Math.max(0, t);
+    if (typeof TRACKS !== 'undefined' && TRACKS && TRACKS.isEnabled() && TRACKS.hasTrack()){
+      TRACKS.seek(Math.max(0, target - off));
+    } else {
+      state.pausedElapsed = target * 1000;
+    }
+  }
+  function makeLyricsDraggable(trackEl, opts){
     if (!trackEl) return;
     const vp = trackEl.parentElement;
-    let dragY = null, startT = 0, pid = null;
+    let dragY = null, startT = 0, lastIdx = -1;
     vp.style.touchAction = 'none';
     vp.addEventListener('pointerdown', (e) => {
       if (state.isPlaying) return;
-      dragY = e.clientY; startT = getTranslateY(trackEl); pid = e.pointerId;
+      dragY = e.clientY; startT = getTranslateY(trackEl); lastIdx = -1;
       trackEl.style.transition = 'none';
-      try { vp.setPointerCapture(pid); } catch(err){}
+      try { vp.setPointerCapture(e.pointerId); } catch(err){}
     });
     vp.addEventListener('pointermove', (e) => {
       if (dragY === null) return;
       trackEl.style.transform = `translateY(${startT + (e.clientY - dragY)}px)`;
+      // Resaltar en vivo la línea que pasa por el centro
+      const idx = nearestLineIdx(trackEl);
+      if (idx >= 0 && idx !== lastIdx){
+        lastIdx = idx;
+        trackEl.querySelectorAll('.line-item').forEach((el,i) => {
+          el.classList.remove('active','past','future');
+          el.classList.add(i<idx?'past':i===idx?'active':'future');
+        });
+      }
     });
     const fin = () => {
       if (dragY === null) return;
       dragY = null;
       trackEl.style.transition = '';
+      const idx = nearestLineIdx(trackEl);
+      if (idx < 0) return;
+      centerLine(trackEl, idx);                     // snap: la blanca queda al medio
+      const song = currentSong();
+      if (!song) return;
+      const times = opts && opts.getTimes ? opts.getTimes(song) : null;
+      if (times && times[idx] != null) scrubToSongSec(times[idx]);
+      if (opts && opts.onCommit) opts.onCommit(idx);
     };
     vp.addEventListener('pointerup', fin);
     vp.addEventListener('pointercancel', fin);
   }
-  makeLyricsDraggable(singerLyricsTrack);
-  makeLyricsDraggable(bassChordTrack);
-  makeLyricsDraggable(drumLyricsTrack);
+  makeLyricsDraggable(singerLyricsTrack, {
+    getTimes: song => (song.lyrics||[]).map(l => l.t),
+    onCommit: idx => { singerLineIdx = idx; },
+  });
+  makeLyricsDraggable(bassChordTrack, {
+    getTimes: song => {
+      const bpb = parseInt((song.timeSig||'4/4').split('/')[0],10) || 4;
+      const spb = 60 / (song.bpm || 120);
+      return (song.chords||[]).map(c => c.bar * bpb * spb);
+    },
+    onCommit: idx => { bassChordIdx = idx; },
+  });
+  makeLyricsDraggable(drumLyricsTrack, {
+    getTimes: song => (song.lyrics||[]).map(l => l.t),
+    onCommit: idx => { lastDrumLyric = idx; },
+  });
 
   let lastDrumBeat = -1, lastDrumSubBeat = -1, lastDrumLyric = -2;
   onTick((sec) => {
