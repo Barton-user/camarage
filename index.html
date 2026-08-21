@@ -224,6 +224,24 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:9999px;
       background: var(--accent-cyan); border: 2px solid #000;
     }
+    /* Fader grande del click (baterista): riel transparente sobre el riel con
+       relleno de abajo, perilla de 40px para dedos de baterista en vivo. */
+    input[type=range].range-click{
+      -webkit-appearance:none; appearance:none; background:transparent; margin:0; padding:0;
+    }
+    input[type=range].range-click::-webkit-slider-runnable-track{ background:transparent; height:100%; }
+    input[type=range].range-click::-webkit-slider-thumb{
+      -webkit-appearance:none; appearance:none; width:40px; height:40px; border-radius:9999px;
+      background:#0c0c0c; border:3px solid var(--accent-yellow);
+      box-shadow:0 0 16px -2px rgba(250,204,21,.55);
+      margin-top:6px;
+    }
+    input[type=range].range-click::-moz-range-track{ background:transparent; height:100%; }
+    input[type=range].range-click::-moz-range-thumb{
+      width:40px; height:40px; border-radius:9999px;
+      background:#0c0c0c; border:3px solid var(--accent-yellow);
+      box-shadow:0 0 16px -2px rgba(250,204,21,.55);
+    }
   </style>
 </head>
 
@@ -892,57 +910,32 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             </button>
           </div>
 
-          <!-- Mini mixer (CLICK / SEQS / BANDA) -->
+          <!-- Fader único: volumen del click.
+               Los sliders SEQS y BANDA se sacaron (21 ago): eran controles MIDI
+               remotos hacia buses de Logic que nunca se configuraron — en el
+               modo 2 no tienen a quién hablarle y en escenario eran controles
+               falsos. El JS del mixer itera .mixer-channel, así que con dejar
+               solo este bloque alcanza; el CC entrante para seqs/band ya hace
+               null-check del slider. -->
           <div class="rounded-xl border border-neutral-800 bg-[var(--bg-card)] p-3">
-            <div class="flex items-center justify-between mb-2">
-              <p class="mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">In-ear mix</p>
-              <p class="mono text-[9px] text-neutral-600">→ MIDI CC al DAW</p>
-            </div>
-            <div class="grid grid-cols-3 gap-3">
-
-              <div class="mixer-channel" data-channel="click">
-                <div class="flex items-center justify-between text-xs mb-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent-yellow);"></span>
-                    <span class="mono uppercase tracking-wider text-neutral-300 font-bold text-[10px]">Click</span>
-                  </div>
-                  <span class="mono text-neutral-400 text-[10px]"><span class="mix-val">75</span></span>
+            <div class="mixer-channel" data-channel="click">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full" style="background: var(--accent-yellow);"></span>
+                  <span class="uppercase tracking-[0.22em] font-bold text-neutral-300 text-xs">Volumen del click</span>
                 </div>
-                <input type="range" min="0" max="100" value="75" class="range-stage w-full" aria-label="Volumen click"/>
-                <!-- Mini level meter -->
-                <div class="mt-1.5 h-1 bg-neutral-900 rounded-full overflow-hidden">
-                  <div class="mix-meter h-full rounded-full" style="width:75%; background: var(--accent-yellow);"></div>
-                </div>
+                <span class="mono font-black text-2xl leading-none" style="color: var(--accent-yellow);"><span class="mix-val">75</span></span>
               </div>
-
-              <div class="mixer-channel" data-channel="seqs">
-                <div class="flex items-center justify-between text-xs mb-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent-cyan);"></span>
-                    <span class="mono uppercase tracking-wider text-neutral-300 font-bold text-[10px]">Seqs</span>
-                  </div>
-                  <span class="mono text-neutral-400 text-[10px]"><span class="mix-val">85</span></span>
+              <div class="relative" style="height:52px;">
+                <!-- Riel con relleno (mix-meter = la parte "llena" del fader) -->
+                <div style="position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:12px;"
+                     class="rounded-full bg-neutral-900 overflow-hidden">
+                  <div class="mix-meter h-full rounded-full"
+                       style="width:75%; background: linear-gradient(90deg, rgba(250,204,21,.35), var(--accent-yellow));"></div>
                 </div>
-                <input type="range" min="0" max="100" value="85" class="range-stage w-full" aria-label="Volumen secuencias"/>
-                <div class="mt-1.5 h-1 bg-neutral-900 rounded-full overflow-hidden">
-                  <div class="mix-meter h-full rounded-full" style="width:85%; background: var(--accent-cyan);"></div>
-                </div>
+                <input type="range" min="0" max="100" value="75" class="range-click w-full"
+                       style="position:absolute; inset:0; height:100%;" aria-label="Volumen click"/>
               </div>
-
-              <div class="mixer-channel" data-channel="band">
-                <div class="flex items-center justify-between text-xs mb-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full" style="background: var(--accent-purple);"></span>
-                    <span class="mono uppercase tracking-wider text-neutral-300 font-bold text-[10px]">Banda</span>
-                  </div>
-                  <span class="mono text-neutral-400 text-[10px]"><span class="mix-val">60</span></span>
-                </div>
-                <input type="range" min="0" max="100" value="60" class="range-stage w-full" aria-label="Volumen banda"/>
-                <div class="mt-1.5 h-1 bg-neutral-900 rounded-full overflow-hidden">
-                  <div class="mix-meter h-full rounded-full" style="width:60%; background: var(--accent-purple);"></div>
-                </div>
-              </div>
-
             </div>
           </div>
         </div>
@@ -1128,7 +1121,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260821-1605';
+  const APP_BUILD = '20260821-1623';
 
   const state = {
     role: 'singer',

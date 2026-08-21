@@ -465,6 +465,17 @@ de las tres vistas. Tres arreglos, todos CSS/HTML sin JS nuevo, sello
    de menos de 850px de alto el chrome del baterista se compacta (BPM y botones
    más chicos) para devolverle altura al disco.
 
+4. **El mini-mixer del baterista quedó reducido a un solo fader** (pedido de
+   Pato, misma sesión, sello `20260821-1623`): se sacaron los sliders SEQS y
+   BANDA — eran controles MIDI remotos (CC7 canal 2 y 3) hacia buses de Logic
+   que nunca se configuraron; en el modo 2 no tienen a quién hablarle y en
+   escenario eran controles falsos. Queda solo **Volumen del click**, grande:
+   perilla de 40px, riel con relleno amarillo, valor en 2xl. El JS no se tocó
+   (itera `.mixer-channel` y el CC entrante hace null-check), y el click sigue
+   mandando CC7 canal 1 al DAW cuando hay conexión, útil en modo 1. Si algún
+   día se configuran los buses en Logic, los sliders viejos están en el
+   historial de git (commit dd8520b y anteriores).
+
 **Pendiente que apareció en la revisión (no se tocó):**
 - **El tuner del bajista es un MOCK** — la aguja se mueve sola, no mide nada.
   En un escenario una aguja falsa es peor que no tener tuner. Decidir: o se
