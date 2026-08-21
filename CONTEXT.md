@@ -388,6 +388,39 @@ Login de la app: `keogan3d@gmail.com`.
   pasó Pato no tienen click ni la separación de canales, y arrastran silencio al
   final.
 
+### 🟣 PRODUCTO — camino a publicarla (decisión de Pato, 21 ago 2026)
+
+Pato evaluó la competencia (Stage Traxx y las demás del análisis en
+`IDEAS_STAGE_TRAXX.md`) y considera que CAMARAGE ya está mejor que lo que se
+ofrece. **La intención es publicarla en Google Play como app paga.** No se
+arranca todavía, pero queda como pendiente firme con el análisis hecho:
+
+1. **Arquitectura local-first** (el paso técnico que valida todo lo demás):
+   - Todo el dato vive en el celu (IndexedDB ya guarda los audios; el catálogo
+     pasa de Supabase a almacenamiento local).
+   - El celu maestro levanta un **servidor HTTP+WebSocket en la red wifi local**
+     (plugin nativo de Capacitor): los integrantes abren el navegador y ven su
+     vista de seguidor — sin cuentas, sin internet, sin builds de Xcode.
+     Resuelve también el pendiente de "sync sin internet" (funciones #6).
+   - La web admin servida por el mismo celu: la compu en el mismo wifi edita
+     con teclado.
+   - Export/import de backup (zip con JSON + audios) — imprescindible.
+   - Supabase queda como opción de backup/sync en la nube (posible plan pago).
+   - Escala con costo cero de servidores: cada banda es su propia isla.
+2. **Multi-tenant / autoservicio**: crear banda desde la app, alta de miembros
+   sin SQL manual (pantalla de Miembros), sacar credenciales y defaults
+   hardcodeados del HTML, términos y política de privacidad.
+3. **Trámite de Google Play**: cuenta de desarrollador (US$25 una vez), AAB
+   firmado con keystore de release (NO el debug), target SDK al día, Data
+   Safety, política de privacidad publicada, y **closed testing con ~12
+   testers durante 14 días** (obligatorio para cuentas personales nuevas)
+   antes de producción. Cobro por Google Play Billing (~15% de comisión).
+   iOS aparte: Apple Developer US$99/año + App Store Review.
+
+Primer paso sugerido cuando se retome: **prototipar el servidor local en el
+APK** (maestro sirve la vista de seguidor por wifi) — le sirve a la banda ya,
+con o sin Play Store.
+
 ### 🟠 Funciones
 1. **Vista según el rol del integrante.** Hoy `state.role` está fijo en
    `'singer'` y cada uno elige su vista a mano en la barra de abajo. Leyendo el rol
