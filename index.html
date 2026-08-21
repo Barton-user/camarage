@@ -769,6 +769,45 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <div id="bassChordTrack" class="text-center px-6 transition-transform duration-700 ease-out will-change-transform"></div>
           </div>
         </div>
+
+        <!-- Transporte del bajista: misma fila única que cantante y baterista
+             (pedido de Pato 21 ago). -->
+        <span id="bassSetlistPos" class="hidden">1 / 1</span>
+        <div class="px-3 pb-3 grid grid-cols-12 gap-2" style="padding-top:6px;">
+          <button id="bassPrevBtn"
+                  class="btn-stage setlist-nav-btn col-span-2 h-16 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex flex-col items-center justify-center px-1">
+            <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏮</span>
+            <span id="bassPrevLabel" class="mono text-[8px] text-neutral-500 truncate w-full text-center mt-1">—</span>
+          </button>
+          <button id="bassMetroBtn"
+                  class="btn-stage col-span-2 h-16 rounded-xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col items-center justify-center active:bg-neutral-900">
+            <div class="flex items-center gap-1.5">
+              <span id="bassMetroDot" class="w-2.5 h-2.5 rounded-full bg-neutral-600"></span>
+              <span class="mono text-[9px] uppercase tracking-widest text-neutral-400">Click</span>
+            </div>
+            <span id="bassMetroLabel" class="text-xs font-extrabold text-neutral-300">OFF</span>
+          </button>
+          <button id="bassStopBtn"
+                  class="btn-stage col-span-3 h-16 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
+                         border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.08)] active:bg-[rgba(239,68,68,0.18)]"
+                  style="color: var(--accent-red);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            STOP
+          </button>
+          <button id="bassPlayBtn"
+                  class="btn-stage col-span-3 h-16 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
+                         border border-[rgba(34,197,94,0.45)] shadow-[0_0_30px_-10px_rgba(34,197,94,0.6)]
+                         bg-[rgba(34,197,94,0.12)] active:bg-[rgba(34,197,94,0.22)]"
+                  style="color: var(--accent-green);">
+            <svg id="bassPlayIcon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <span id="bassPlayLabel">PLAY</span>
+          </button>
+          <button id="bassNextBtn"
+                  class="btn-stage setlist-nav-btn col-span-2 h-16 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex flex-col items-center justify-center px-1">
+            <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏭</span>
+            <span id="bassNextLabel" class="mono text-[8px] text-neutral-500 truncate w-full text-center mt-1">—</span>
+          </button>
+        </div>
       </div>
 
       <!-- ============ VISTA · BATERISTA ============ -->
@@ -1129,7 +1168,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260821-1740';
+  const APP_BUILD = '20260821-1748';
 
   const state = {
     role: 'singer',
@@ -2846,7 +2885,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
    * tiempo de nadie. Sirve si el músico quiere su propio click de ensayo.
    * ------------------------------------------------------------------- */
   const CTRL_DE_MAESTRO = ['playBtn', 'stopBtn', 'singerPrevBtn', 'singerNextBtn',
-                           'drumPlayBtn', 'drumStopBtn', 'drumPrevBtn', 'drumNextBtn'];
+                           'drumPlayBtn', 'drumStopBtn', 'drumPrevBtn', 'drumNextBtn',
+                           'bassPlayBtn', 'bassStopBtn', 'bassPrevBtn', 'bassNextBtn'];
   function esSeguidor(){
     return typeof SYNC !== 'undefined' && SYNC && SYNC.role && SYNC.role() === 'follower';
   }
@@ -3158,18 +3198,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const ic  = playing
       ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'
       : '<path d="M8 5v14l11-7z"/>';
-    ['playLabel','drumPlayLabel'].forEach(id => { const e=document.getElementById(id); if (e) e.textContent = lbl; });
-    ['playIcon','drumPlayIcon'].forEach(id  => { const e=document.getElementById(id); if (e) e.innerHTML = ic;  });
-    ['playBtn','drumPlayBtn'].forEach(id    => { const e=document.getElementById(id); if (e) e.classList.toggle('blink', playing); });
+    ['playLabel','drumPlayLabel','bassPlayLabel'].forEach(id => { const e=document.getElementById(id); if (e) e.textContent = lbl; });
+    ['playIcon','drumPlayIcon','bassPlayIcon'].forEach(id  => { const e=document.getElementById(id); if (e) e.innerHTML = ic;  });
+    ['playBtn','drumPlayBtn','bassPlayBtn'].forEach(id    => { const e=document.getElementById(id); if (e) e.classList.toggle('blink', playing); });
   }
   function updateMetroUI(){
     const on = state.metroOn;
-    ['metroDot','drumMetroDot'].forEach(id => {
+    ['metroDot','drumMetroDot','bassMetroDot'].forEach(id => {
       const e=document.getElementById(id); if (!e) return;
       e.style.background = on ? 'var(--accent-yellow)' : '';
       e.style.boxShadow  = on ? '0 0 10px var(--accent-yellow)' : '';
     });
-    ['metroLabel','drumMetroLabel'].forEach(id => {
+    ['metroLabel','drumMetroLabel','bassMetroLabel'].forEach(id => {
       const e=document.getElementById(id); if (!e) return;
       e.textContent = on ? 'ON' : 'OFF';
       e.style.color = on ? 'var(--accent-yellow)' : '';
@@ -3225,7 +3265,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     // MODO PISTAS: el botón maneja el audio, y el audio arrastra a todo lo demás.
     if (TRACKS && TRACKS.isEnabled() && TRACKS.hasTrack()){
       if (TRACKS.isPlaying()){
-        if (needsConfirm('pause', ['playBtn','drumPlayBtn'])) return;
+        if (needsConfirm('pause', ['playBtn','drumPlayBtn','bassPlayBtn'])) return;
         TRACKS.pause();
       } else {
         TRACKS.play();
@@ -3235,7 +3275,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       return;
     }
     // Modo MIDI: misma protección al pausar
-    if (state.isPlaying && needsConfirm('pause', ['playBtn','drumPlayBtn'])) return;
+    if (state.isPlaying && needsConfirm('pause', ['playBtn','drumPlayBtn','bassPlayBtn'])) return;
     if (state.isPlaying){
       state.pausedElapsed += performance.now() - state.startedAt;
       state.isPlaying = false;
@@ -3260,7 +3300,26 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     if (fromUser === true && esSeguidor()) return;
     // Solo pide confirmación si hay algo sonando. Con la música parada, STOP es
     // inofensivo (resetea la posición) y no tiene sentido molestar.
-    if (fromUser === true && state.isPlaying && needsConfirm('stop', ['stopBtn','drumStopBtn'])) return;
+    if (fromUser === true && state.isPlaying && needsConfirm('stop', ['stopBtn','drumStopBtn','bassStopBtn'])) return;
+    // STOP en vivo (pedido 21 ago): frena pero SE QUEDA donde está, así el scrub
+    // o la posición actual no se pierden. Apretar STOP de nuevo con la música ya
+    // parada sí rebobina al principio (cae al reset completo de abajo).
+    if (fromUser === true){
+      const pistasSonando = TRACKS && TRACKS.isEnabled() && TRACKS.hasTrack() && TRACKS.isPlaying();
+      if (pistasSonando || state.isPlaying){
+        if (pistasSonando){
+          TRACKS.pause();          // guarda pausedAt y alinea pausedElapsed
+        } else {
+          state.pausedElapsed += performance.now() - state.startedAt;
+          state.isPlaying = false;
+          stopClock();
+          sendMidi(0xFC);          // Stop al DAW
+          updateTransportUI();
+        }
+        try { if (typeof SYNC !== 'undefined' && SYNC) SYNC.avisarCambio(); } catch(e){}
+        return;
+      }
+    }
     if (TRACKS && TRACKS.isEnabled()) TRACKS.stop();
     state.isPlaying = false;
     state.pausedElapsed = 0;
@@ -3302,9 +3361,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   document.getElementById('drumPlayBtn').addEventListener('click', setPlay);
   document.getElementById('drumStopBtn').addEventListener('click', () => setStop(true));
   document.getElementById('drumMetroBtn').addEventListener('click', toggleMetronome);
+  document.getElementById('bassPlayBtn').addEventListener('click', setPlay);
+  document.getElementById('bassStopBtn').addEventListener('click', () => setStop(true));
+  document.getElementById('bassMetroBtn').addEventListener('click', toggleMetronome);
 
-  // Wiring de los botones de SETLIST NAV (cantante + baterista)
-  ['singer','drum'].forEach(role => {
+  // Wiring de los botones de SETLIST NAV (cantante + bajista + baterista)
+  ['singer','bass','drum'].forEach(role => {
     const p = document.getElementById(`${role}PrevBtn`);
     const n = document.getElementById(`${role}NextBtn`);
     if (p) p.addEventListener('click', prevSong);
