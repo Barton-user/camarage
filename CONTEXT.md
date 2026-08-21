@@ -36,15 +36,22 @@
 
 ## Lo primero que hay que hacer al retomar
 
-1. **Correr `migration_offset.sql`.** Sigue sin correr. Sin esto la web tira
-   error al guardar una canción y el offset no existe.
-2. **Correr `insert_la_nueva_sangre.sql`** y **`insert_camine_sin_mirar_atras.sql`**.
+1. ✅ **`migration_offset.sql` CORRIDO** (21 ago). La verificación contra
+   `information_schema.columns` devolvió 1: la columna `songs.offset_seconds`
+   existe. Ya se puede guardar una canción desde la web sin que tire error.
+2. ✅ **Las dos canciones nuevas CARGADAS** (21 ago): corrieron
+   `insert_la_nueva_sangre.sql` y `insert_camine_sin_mirar_atras.sql`. Con eso la
+   base pasa a 15 canciones. Queda pendiente, aparte: escuchar las líneas de
+   letra marcadas como dudosas, poner el `program_change` de cada tema (depende
+   del patch de los pedales) y bouncear las pistas de escenario.
 3. **Commitear.** Hay mucho sin commitear: `index.html` (y sus copias de Android
    e iOS), `page.tsx`, `CONTEXT.md`, los tres `.swift`, más los archivos nuevos
    (`build.sh`, los dos APK, los SQL de canciones y de altas de usuario).
    Si git se queja de `index.lock`: `rm -f .git/index.lock` y de nuevo.
-4. **Borrar la carpeta `_to_delete/`**, que tiene locks de git huérfanos que el
-   puente de Cowork no pudo borrar.
+   Al 21 ago `git status` marca `CONTEXT.md`, `web/app/setlists/page.tsx` y
+   `web/app/setlists/[id]/page.tsx` (edición en línea de setlists, conteo de
+   canciones y aviso antes de borrar).
+4. ✅ **`_to_delete/` ya no está** — ese punto queda cerrado.
 
 ## Alta de integrantes — cómo funciona de verdad
 
@@ -90,11 +97,25 @@ Ojo con un detalle: la contraseña mínima por la API de Supabase es de **6
 caracteres**. Desde el dashboard, `1234` se rechaza. Por SQL directo entra, pero
 mejor no.
 
-**En curso al cerrar el día:** Pato le mandó el link a Gonzalo
-(`vecchie.gonzalo@gmail.com`, baterista) y quedó esperando que entre para correr
-`agregar_gonzalo.sql`. **Revisar que el rol del script sea el instrumento
-correcto** — quedó la duda de si el baterista es Gonzalo o Paloma, porque el iPad
-mini se llama "iPad de Paloma".
+**✅ HECHO el 17 ago:** Gonzalo entró solo con el código al mail, y Pato corrió el
+SQL de membresía. Estado verificado en la base:
+
+| banda | email | rol | activo |
+|---|---|---|---|
+| Cámara Gesell | keogan3d@gmail.com | `owner` | true |
+| Cámara Gesell | vecchie.gonzalo@gmail.com | `drummer` | true |
+
+O sea que **el camino funciona de punta a punta** y ya está probado con una
+persona real: el integrante se crea la cuenta solo, y el dueño corre un SQL de
+cuatro líneas. Para el próximo integrante, mismo procedimiento con
+`agregar_integrante.sql`.
+
+Detalle menor: el `display_name` de Pato está en NULL. Si alguna vez la app lo
+muestra, conviene ponerlo:
+```sql
+update band_members set display_name = 'Pato'
+ where user_id = (select id from auth.users where email = 'keogan3d@gmail.com');
+```
 
 ## Dos cosas que quedaron ofrecidas y sin hacer
 
@@ -361,8 +382,8 @@ Login de la app: `keogan3d@gmail.com`.
 - Cifrado: varias canciones tienen 0 acordes.
 - **Volver a subir "Cuando despierte"**: se subió antes de que existiera la columna
   de duración, así que no la tiene.
-- **Correr los SQL de las dos canciones nuevas** (§13) y escuchar las líneas
-  marcadas como dudosas.
+- ✅ Los SQL de las dos canciones nuevas (§13) ya corrieron el 21 ago. Falta
+  **escuchar las líneas marcadas como dudosas** y ponerles `program_change`.
 - **Bouncear las pistas de escenario** de las dos canciones nuevas: los mix que
   pasó Pato no tienen click ni la separación de canales, y arrastran silencio al
   final.
@@ -371,7 +392,12 @@ Login de la app: `keogan3d@gmail.com`.
 1. **Vista según el rol del integrante.** Hoy `state.role` está fijo en
    `'singer'` y cada uno elige su vista a mano en la barra de abajo. Leyendo el rol
    de `band_members` al entrar, cada uno abre la suya. Es la puerta de entrada al
-   punto siguiente.
+   punto siguiente. Son unas 20 líneas, pero **entra recién con una vuelta de
+   recompilación** (los dos iPads en Xcode + APK del Samsung), así que conviene
+   juntarlo con otros cambios y hacer una sola tanda. Pato lo dejó pendiente a
+   propósito el 17 ago por ese motivo.
+   Mientras tanto, Gonzalo abre la app y toca el ícono de batería en la barra de
+   abajo — funciona igual, solo que no es automático.
 2. **Que los eventos MIDI con destino de un integrante disparen desde SU
    dispositivo** (el pedal está a sus pies, no al lado del maestro). Depende del
    punto 1: hasta que el rol no venga de la base, el sistema no distingue quién es
