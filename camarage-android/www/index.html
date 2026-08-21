@@ -188,6 +188,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       100% { transform: scale(.94); opacity: .75; }
     }
     .drum-pulse { animation: drumPulse .22s ease-out; }
+    @keyframes drumFlashKf { 0% { opacity: .95; } 100% { opacity: 0; } }
+    #drumFlash.go { animation: drumFlashKf .16s ease-out; }
 
     @keyframes sweep { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
     .sweep { animation: sweep 1.2s linear infinite; }
@@ -779,6 +781,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
       <!-- ============ VISTA · BATERISTA ============ -->
       <div id="viewDrummer" class="view absolute inset-0 hidden-screen flex flex-col">
+        <!-- Latido de pantalla: destello blanco en el 1 de cada compás (linterna).
+             Vive dentro de viewDrummer, así no aparece en las otras vistas. -->
+        <div id="drumFlash" style="position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:30;"></div>
         <!-- Encabezado compacto: BPM · BAR/BEAT/TIME (antes era un renglón
              aparte arriba) · sección. Sin las etiquetas TEMPO/SECCIÓN. -->
         <div class="px-4 pt-2 flex items-center justify-between gap-2">
@@ -848,6 +853,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <button data-sub="1" class="sub-btn px-3 py-1 rounded-full text-xs font-bold" style="background: var(--accent-orange); color: #000;">♩</button>
             <button data-sub="2" class="sub-btn px-3 py-1 rounded-full text-xs font-bold text-neutral-400">♫</button>
             <button data-sub="4" class="sub-btn px-3 py-1 rounded-full text-xs font-bold text-neutral-400">♬</button>
+            <span class="w-px bg-neutral-700" style="margin:2px 0;"></span>
+            <button id="drumFlashBtn" class="px-3 py-1 rounded-full text-xs font-bold" title="Latido de pantalla en el 1">⚡</button>
           </div>
         </div>
 
@@ -1106,7 +1113,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260821-1653';
+  const APP_BUILD = '20260821-1706';
 
   const state = {
     role: 'singer',
@@ -1700,6 +1707,29 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     });
   });
 
+  // Toggle del latido de pantalla (persistido). Prendido por defecto.
+  const LS_DRUMFLASH = 'camarage_drum_flash';
+  state.drumFlashOn = localStorage.getItem(LS_DRUMFLASH) !== '0';
+  const drumFlashBtn = document.getElementById('drumFlashBtn');
+  function pintarFlashBtn(){
+    if (!drumFlashBtn) return;
+    if (state.drumFlashOn){
+      drumFlashBtn.style.background = 'var(--accent-yellow)';
+      drumFlashBtn.style.color = '#000';
+      drumFlashBtn.classList.remove('text-neutral-400');
+    } else {
+      drumFlashBtn.style.background = '';
+      drumFlashBtn.style.color = '';
+      drumFlashBtn.classList.add('text-neutral-400');
+    }
+  }
+  pintarFlashBtn();
+  if (drumFlashBtn) drumFlashBtn.addEventListener('click', () => {
+    state.drumFlashOn = !state.drumFlashOn;
+    localStorage.setItem(LS_DRUMFLASH, state.drumFlashOn ? '1' : '0');
+    pintarFlashBtn();
+  });
+
   let lastDrumBeat = -1, lastDrumSubBeat = -1;
   onTick((sec) => {
     const beatsPerSec = state.bpm / 60;
@@ -1721,6 +1751,11 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       drumCenter.classList.remove('drum-pulse');
       void drumCenter.offsetWidth;
       drumCenter.classList.add('drum-pulse');
+      // Latido de pantalla: destello tipo linterna en el 1 de cada compás
+      if (accent && state.drumFlashOn){
+        const fl = document.getElementById('drumFlash');
+        if (fl){ fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go'); }
+      }
       // marcar perímetro
       drumPerim.querySelectorAll('[data-beat]').forEach((d,i) => {
         const on = i===beatInBar;
