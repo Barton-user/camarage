@@ -168,6 +168,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     @media (max-height: 850px) {
       #drumBpm { font-size: 2.25rem; }
       #viewDrummer .btn-stage.h-14 { height: 3rem; }
+      #viewDrummer .btn-stage.h-16 { height: 3.25rem; }
       #viewDrummer .btn-stage.h-12 { height: 2.5rem; }
     }
     #lockOverlay { position:fixed; inset:0; z-index:60; display:none; align-items:flex-end; justify-content:center; padding-bottom:96px; background:transparent; touch-action:none; }
@@ -858,32 +859,19 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           </div>
         </div>
 
-        <!-- ===== Panel inferior · setlist, fader del click y transporte al fondo,
-             pegado a la bottom nav (pedido de Pato, 21 ago) ===== -->
-        <div class="px-3 space-y-2" style="padding-bottom:8px;">
+        <!-- Letra compacta: línea actual + la que viene. Escala con vmin, así
+             en el A56 queda chica y en el iPad crece sola (pedido de Pato, 21 ago). -->
+        <div id="drumLyricsBox" class="mx-2 rounded-xl border border-neutral-800 bg-[var(--bg-card)] px-3 text-center overflow-hidden"
+             style="padding-top:4px; padding-bottom:4px;">
+          <p id="drumLyricNow" class="font-extrabold text-neutral-100 truncate"
+             style="font-size: clamp(1rem, 3.4vmin, 1.7rem); line-height:1.3;">—</p>
+          <p id="drumLyricNext" class="text-neutral-500 truncate"
+             style="font-size: clamp(0.8rem, 2.5vmin, 1.25rem); line-height:1.25;">—</p>
+        </div>
 
-          <!-- Setlist nav (prev / next con trigger a Logic) -->
-          <div class="grid grid-cols-12 gap-2">
-            <button id="drumPrevBtn"
-                    class="btn-stage setlist-nav-btn col-span-5 h-12 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex items-center gap-2 px-2">
-              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏮</span>
-              <div class="flex flex-col items-start min-w-0 flex-1">
-                <span class="mono text-[8px] uppercase tracking-widest text-neutral-500">Anterior</span>
-                <span id="drumPrevLabel" class="text-[10px] font-bold text-neutral-300 truncate w-full text-left">—</span>
-              </div>
-            </button>
-            <div class="col-span-2 flex items-center justify-center">
-              <span id="drumSetlistPos" class="mono text-[10px] text-neutral-500">1 / 1</span>
-            </div>
-            <button id="drumNextBtn"
-                    class="btn-stage setlist-nav-btn col-span-5 h-12 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex items-center gap-2 px-2">
-              <div class="flex flex-col items-end min-w-0 flex-1">
-                <span class="mono text-[8px] uppercase tracking-widest text-neutral-500">Próxima</span>
-                <span id="drumNextLabel" class="text-[10px] font-bold text-neutral-300 truncate w-full text-right">—</span>
-              </div>
-              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏭</span>
-            </button>
-          </div>
+        <!-- ===== Panel inferior · fader del click y transporte al fondo,
+             todo en una fila, pegado a la bottom nav (pedido de Pato, 21 ago) ===== -->
+        <div class="px-3 space-y-2" style="padding-top:6px; padding-bottom:8px;">
 
           <!-- Fader del click, versión chata: una sola fila (pedido de Pato,
                21 ago — la versión alta comía espacio del disco). Mantiene
@@ -904,10 +892,18 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             </div>
           </div>
 
-          <!-- Fila de transporte (Click + Stop + Play) -->
+          <!-- Fila única de transporte: anterior · click · stop · play · próxima.
+               Un solo renglón un 20% más alto (h-16), pedido de Pato 21 ago.
+               drumSetlistPos queda oculto pero vivo: el JS lo escribe. -->
+          <span id="drumSetlistPos" class="hidden">1 / 1</span>
           <div class="grid grid-cols-12 gap-2">
+            <button id="drumPrevBtn"
+                    class="btn-stage setlist-nav-btn col-span-2 h-16 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex flex-col items-center justify-center px-1">
+              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏮</span>
+              <span id="drumPrevLabel" class="mono text-[8px] text-neutral-500 truncate w-full text-center mt-1">—</span>
+            </button>
             <button id="drumMetroBtn"
-                    class="btn-stage col-span-3 h-14 rounded-xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col items-center justify-center active:bg-neutral-900">
+                    class="btn-stage col-span-2 h-16 rounded-xl border border-neutral-800 bg-[var(--bg-card)] flex flex-col items-center justify-center active:bg-neutral-900">
               <div class="flex items-center gap-1.5">
                 <span id="drumMetroDot" class="w-2.5 h-2.5 rounded-full bg-neutral-600"></span>
                 <span class="mono text-[9px] uppercase tracking-widest text-neutral-400">Click</span>
@@ -915,19 +911,24 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
               <span id="drumMetroLabel" class="text-xs font-extrabold text-neutral-300">OFF</span>
             </button>
             <button id="drumStopBtn"
-                    class="btn-stage col-span-4 h-14 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
+                    class="btn-stage col-span-3 h-16 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
                            border border-[rgba(239,68,68,0.35)] bg-[rgba(239,68,68,0.08)] active:bg-[rgba(239,68,68,0.18)]"
                     style="color: var(--accent-red);">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
               STOP
             </button>
             <button id="drumPlayBtn"
-                    class="btn-stage col-span-5 h-14 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
+                    class="btn-stage col-span-3 h-16 rounded-xl flex items-center justify-center gap-2 font-black uppercase text-sm
                            border border-[rgba(34,197,94,0.45)] shadow-[0_0_30px_-10px_rgba(34,197,94,0.6)]
                            bg-[rgba(34,197,94,0.12)] active:bg-[rgba(34,197,94,0.22)]"
                     style="color: var(--accent-green);">
               <svg id="drumPlayIcon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               <span id="drumPlayLabel">PLAY</span>
+            </button>
+            <button id="drumNextBtn"
+                    class="btn-stage setlist-nav-btn col-span-2 h-16 rounded-xl border border-neutral-800 bg-[var(--bg-card)] active:bg-neutral-900 flex flex-col items-center justify-center px-1">
+              <span class="text-xl leading-none" style="color: var(--accent-cyan);">⏭</span>
+              <span id="drumNextLabel" class="mono text-[8px] text-neutral-500 truncate w-full text-center mt-1">—</span>
             </button>
           </div>
         </div>
@@ -1113,7 +1114,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   /* Sello de compilación. Lo reemplaza el script de build con la fecha y hora
      reales, así se puede saber qué versión tiene cada teléfono sin consultar
      dumpsys. Se muestra en el modal de ⚙. */
-  const APP_BUILD = '20260821-1706';
+  const APP_BUILD = '20260821-1716';
 
   const state = {
     role: 'singer',
@@ -1730,7 +1731,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     pintarFlashBtn();
   });
 
-  let lastDrumBeat = -1, lastDrumSubBeat = -1;
+  let lastDrumBeat = -1, lastDrumSubBeat = -1, lastDrumLyric = -2;
   onTick((sec) => {
     const beatsPerSec = state.bpm / 60;
     const totalBeats = sec * beatsPerSec;
@@ -1776,6 +1777,30 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 
     // Próxima sección preview
     const song = currentSong();
+
+    // Letra compacta: línea actual + la que viene (misma lógica que el cantante:
+    // el t más alto que sea <= sec, sin asumir orden perfecto)
+    if (song && song.lyrics && song.lyrics.length){
+      let li = -1, bt = -1;
+      for (let i=0;i<song.lyrics.length;i++){
+        const t = song.lyrics[i].t;
+        if (t <= sec && t > bt){ bt = t; li = i; }
+      }
+      if (li !== lastDrumLyric){
+        lastDrumLyric = li;
+        const now = document.getElementById('drumLyricNow');
+        const nxt = document.getElementById('drumLyricNext');
+        if (now && nxt){
+          if (li < 0){
+            now.textContent = '—';
+            nxt.textContent = song.lyrics[0] ? song.lyrics[0].text : '—';
+          } else {
+            now.textContent = song.lyrics[li].text;
+            nxt.textContent = song.lyrics[li+1] ? song.lyrics[li+1].text : '— fin —';
+          }
+        }
+      }
+    }
     let curSec = song.chords[0].section, secStartBar = 0;
     for (const c of song.chords){ if (c.bar <= Math.floor(totalBeats/4)){ curSec = c.section; secStartBar = c.bar; } }
     document.getElementById('drumSectionTag').textContent = curSec;
@@ -3117,6 +3142,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     drumPerim.querySelectorAll('[data-beat]').forEach(d => { d.style.background='#262626'; d.style.boxShadow=''; });
     drumBeatBig.textContent = '1';
     drumHand.parentElement.style.transform = 'rotate(0deg)';
+    lastDrumLyric = -2;
+    const dlNow = document.getElementById('drumLyricNow');
+    const dlNext = document.getElementById('drumLyricNext');
+    const dlSong = currentSong();
+    if (dlNow) dlNow.textContent = '—';
+    if (dlNext) dlNext.textContent = (dlSong && dlSong.lyrics && dlSong.lyrics[0]) ? dlSong.lyrics[0].text : '—';
     // Re-render scroll posiciones
     const s = currentSong();
     scrollSingerToLine(0);
