@@ -44,20 +44,26 @@ export default function WaveformLyricsEditor({
   audioUrl,
   lyrics,
   offsetSeconds = 0,
+  endSeconds = null,
   onChangeTime,
   onChangeText,
   onInsertAt,
   onRemove,
+  onChangeEnd,
 }: {
   audioUrl: string;
   lyrics: Lyric[];
   offsetSeconds?: number;
+  /** Fin marcado de la canción, en segundos DEL ARCHIVO (audio_end_seconds). null = archivo entero. */
+  endSeconds?: number | null;
   /** Guarda el nuevo start_time_seconds (tiempo de contenido, ya con offset). */
   onChangeTime: (lyricId: string, newStartSeconds: number) => void;
   onChangeText: (lyricId: string, text: string) => void;
   /** Inserta una línea nueva en ese tiempo de contenido. */
   onInsertAt: (startSeconds: number) => void;
   onRemove: (lyricId: string) => void;
+  /** Guarda el fin marcado (segundos de archivo) o null para usar el archivo entero. */
+  onChangeEnd?: (sec: number | null) => void;
 }) {
   const offset = Number(offsetSeconds) || 0;
 
@@ -86,6 +92,8 @@ export default function WaveformLyricsEditor({
   const [selId, setSelId] = useState<string | null>(null);
   const [dragT, setDragT] = useState<{ id: string; t: number } | null>(null);
   const dragTRef = useRef<{ id: string; t: number } | null>(null);
+  const [dragEnd, setDragEnd] = useState<number | null>(null);   // bandera FIN mientras se arrastra
+  const dragEndRef = useRef<number | null>(null);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
 
   const fitPps = duration > 0 ? Math.max(1, (containerW - 2) / duration) : 100;
@@ -280,6 +288,57 @@ export default function WaveformLyricsEditor({
     commitTime(l.id, lyricT(l) + delta);
   }, [commitTime, lyricT]);
 
+  /* ---------- fin marcado ("acá termina el tema") ---------- */
+  const endT = dragEnd ?? (endSeconds != null && endSeconds > 0 ? Number(endSeconds) : null);
+
+  const commitEnd = useCallback((t: number | null) => {
+    if (!onChangeEnd) return;
+    if (t == null) { onChangeEnd(null); flash("✓ fin: archivo entero"); return; }
+    const v = Math.max(1, Math.min(duration || t, Math.round(t * 100) / 100));
+    onChangeEnd(v);
+    flash("✓ fin guardado — la app corta ahí");
+  }, [onChangeEnd, duration, flash]);
+
+  /** Busca dónde arranca el silencio de cola: último pico > 2% + un respiro. */
+  const detectEnd = useCallback(() => {
+    if (!peaks || !duration) return;
+    let last = -1;
+    for (let i = peaks.length - 1; i >= 0; i--) {
+      if (peaks[i] > 0.02) { last = i; break; }
+    }
+    if (last < 0) return;
+    const t = Math.min(duration, (last + 1) * BUCKET_SECONDS + 0.35);
+    if (t >= duration - 0.6) { flash("no hay silencio de cola para recortar"); return; }
+    commitEnd(t);
+  }, [peaks, duration, commitEnd, flash]);
+
+  const startDragEnd = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      const t = Math.max(1, Math.min(duration, (ev.clientX - rect.left) / pps));
+      dragEndRef.current = t;
+      setDragEnd(t);
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      const t = dragEndRef.current;
+      dragEndRef.current = null;
+      setDragEnd(null);
+      if (t != null) commitEnd(t);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  }, [duration, pps, commitEnd]);
+
   /* ---------- interacción con la onda ---------- */
   const timeFromEvent = useCallback((e: { clientX: number }) => {
     const wrap = wrapRef.current;
@@ -417,6 +476,31 @@ export default function WaveformLyricsEditor({
                 className="btn text-xs" title="Inserta una línea nueva donde está el cursor de reproducción">
           + Línea en el cursor
         </button>
+        {onChangeEnd && (
+          <>
+            <button onClick={() => commitEnd(posRef.current)}
+                    disabled={loadState !== "ready"}
+                    className="btn text-xs"
+                    style={{ borderColor: "rgba(248,113,113,0.5)", color: "#f87171" }}
+                    title="Marca el fin de la canción donde está el cursor: la app corta ahí y pasa a la siguiente">
+              ⚑ Fin al cursor
+            </button>
+            <button onClick={detectEnd}
+                    disabled={loadState !== "ready"}
+                    className="btn text-xs"
+                    title="Detecta dónde arranca el silencio de cola y marca el fin ahí">
+              ⚑ Detectar cola
+            </button>
+            {endT != null && (
+              <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded-full"
+                    style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}>
+                fin {fmtClock(endT, true)}
+                <button onClick={() => commitEnd(null)} title="Sacar el fin marcado (usar el archivo entero)"
+                        className="hover:text-white leading-none">✕</button>
+              </span>
+            )}
+          </>
+        )}
         <div className="flex items-center gap-1">
           <button onClick={zoomOut} className="btn text-xs px-3" title="Alejar">−</button>
           <button onClick={() => setZoomPps(null)} className="btn text-xs px-2" title="Ajustar al ancho">⤢</button>
@@ -494,6 +578,26 @@ export default function WaveformLyricsEditor({
                                 background: isSel ? "rgba(255,255,255,0.9)" : "rgba(34,211,238,0.45)" }} />
                 );
               })}
+              {/* Fin marcado: zona muerta sombreada + línea + bandera arrastrable */}
+              {endT != null && (
+                <>
+                  <div className="absolute top-0 pointer-events-none"
+                       style={{ left: endT * pps, width: Math.max(0, fullW - endT * pps), height: WAVE_H,
+                                background: "rgba(0,0,0,0.55)",
+                                backgroundImage: "repeating-linear-gradient(-45deg, rgba(248,113,113,0.08) 0 6px, transparent 6px 12px)" }} />
+                  <div className="absolute top-0 pointer-events-none"
+                       style={{ left: endT * pps, width: 2, height: WAVE_H, background: "#f87171" }} />
+                  <div onPointerDown={startDragEnd}
+                       onClick={e => e.stopPropagation()}
+                       onDoubleClick={e => e.stopPropagation()}
+                       title={`Fin de la canción: ${fmtClock(endT, true)} — arrastrá para moverlo`}
+                       className="absolute cursor-grab active:cursor-grabbing px-1.5 py-0.5 rounded text-[10px] font-black font-mono"
+                       style={{ left: endT * pps, top: 4, transform: "translateX(-50%)", touchAction: "none",
+                                background: "#f87171", color: "#000", zIndex: 40 }}>
+                    ⚑ FIN
+                  </div>
+                </>
+              )}
               {/* Playhead */}
               <div ref={playheadRef} className="absolute top-0 pointer-events-none"
                    style={{ left: 0, width: 2, height: WAVE_H, background: "#fff", boxShadow: "0 0 6px rgba(255,255,255,0.7)" }} />
@@ -538,7 +642,8 @@ export default function WaveformLyricsEditor({
       ) : (
         <p className="text-[10px] text-neutral-600 font-mono">
           click en la onda: mover cursor · doble click en la onda: nueva línea ahí · click en un pin: editarlo ·
-          arrastrar pin: corregir tiempo · doble click en pin: escucharlo · ESPACIO play/pausa · ←/→ ±2 s · [ ] ±0,05 s
+          arrastrar pin: corregir tiempo · doble click en pin: escucharlo · ⚑ FIN: arrastralo para marcar dónde
+          termina el tema (la app corta ahí) · ESPACIO play/pausa · ←/→ ±2 s · [ ] ±0,05 s
         </p>
       )}
     </div>

@@ -602,6 +602,16 @@ export default function SongEditor() {
     setLyrics(prev => prev.map(x => x.id === lyricId ? { ...x, text } : x));
     await supabase.from("lyric_lines").update({ text }).eq("id", lyricId);
   }
+  /* Fin marcado de la pista: segundo del ARCHIVO donde termina el tema de
+   * verdad (corta el silencio de cola). null = usar el archivo entero. */
+  async function saveAudioEnd(sec: number | null) {
+    const val = sec == null || !isFinite(sec) || sec <= 0
+      ? null
+      : Math.round(Math.min(sec, Number(song?.audio_duration_seconds) || sec) * 100) / 100;
+    setSong({ ...song, audio_end_seconds: val });
+    await supabase.from("songs").update({ audio_end_seconds: val }).eq("id", id);
+  }
+
   async function insertLyricAtTime(sec: number) {
     const maxOrder = lyrics.length ? Math.max(...lyrics.map(l => l.order_index)) : -1;
     const { data } = await supabase.from("lyric_lines").insert({
@@ -1084,6 +1094,30 @@ export default function SongEditor() {
                   Borrar pista
                 </button>
               </div>
+
+              <div className="pt-2 border-t border-neutral-900">
+                <label className="label">Fin de la canción (opcional)</label>
+                <div className="flex items-center gap-2">
+                  <input type="text"
+                         key={`aend-${song.audio_end_seconds ?? "none"}`}
+                         defaultValue={song.audio_end_seconds != null ? formatTime(Number(song.audio_end_seconds)) : ""}
+                         placeholder="ej: 4:12"
+                         onBlur={e => { const v = e.target.value.trim(); saveAudioEnd(v ? parseTimeInput(v) : null); }}
+                         className="input w-28 text-center mono text-xs" />
+                  {song.audio_end_seconds != null && (
+                    <button onClick={() => saveAudioEnd(null)}
+                            className="text-xs text-neutral-500 hover:text-white">
+                      usar el archivo entero
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-neutral-500 mt-1 leading-snug">
+                  Si el bounce trae silencio de cola, marcá acá dónde termina el tema de verdad:
+                  la app corta ahí (barra, auto-avance y encadenado) sin tocar el archivo. También
+                  lo podés arrastrar con la bandera <span className="text-red-400 font-bold">⚑ FIN</span> sobre
+                  la onda, en la solapa Letras.
+                </p>
+              </div>
             </div>
           ) : (
             <label className={`block rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition ${
@@ -1131,10 +1165,12 @@ export default function SongEditor() {
                 audioUrl={waveUrl}
                 lyrics={lyrics}
                 offsetSeconds={Number(song.offset_seconds) || 0}
+                endSeconds={song.audio_end_seconds != null ? Number(song.audio_end_seconds) : null}
                 onChangeTime={waveChangeTime}
                 onChangeText={waveChangeText}
                 onInsertAt={insertLyricAtTime}
                 onRemove={removeLyric}
+                onChangeEnd={saveAudioEnd}
               />
             ) : waveUrlErr ? (
               <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3 mb-3">
