@@ -50,6 +50,7 @@ export default function WaveformLyricsEditor({
   onInsertAt,
   onRemove,
   onChangeEnd,
+  onChangeTimeMany,
 }: {
   audioUrl: string;
   lyrics: Lyric[];
@@ -64,6 +65,8 @@ export default function WaveformLyricsEditor({
   onRemove: (lyricId: string) => void;
   /** Guarda el fin marcado (segundos de archivo) o null para usar el archivo entero. */
   onChangeEnd?: (sec: number | null) => void;
+  /** Guardado en lote (mover varias líneas juntas). Si falta, se llama onChangeTime por cada una. */
+  onChangeTimeMany?: (changes: { id: string; sec: number }[]) => void;
 }) {
   const offset = Number(offsetSeconds) || 0;
 
@@ -89,9 +92,12 @@ export default function WaveformLyricsEditor({
   const [pos, setPos] = useState(0);              // coarse, para la UI (200 ms)
   const posRef = useRef(0);                        // fino, para el rAF
   const [rate, setRate] = useState(1);
-  const [selId, setSelId] = useState<string | null>(null);
-  const [dragT, setDragT] = useState<{ id: string; t: number } | null>(null);
-  const dragTRef = useRef<{ id: string; t: number } | null>(null);
+  const [selIds, setSelIds] = useState<string[]>([]);          // selección múltiple
+  const [primaryId, setPrimaryId] = useState<string | null>(null); // ancla para rangos
+  const [dragMove, setDragMove] = useState<{ delta: number } | null>(null); // drag en bloque
+  const dragMoveRef = useRef<number | null>(null);
+  const [boxSel, setBoxSel] = useState<{ t0: number; t1: number } | null>(null); // recuadro
+  const boxRef = useRef<{ t0: number; add: boolean } | null>(null);
   const [dragEnd, setDragEnd] = useState<number | null>(null);   // bandera FIN mientras se arrastra
   const dragEndRef = useRef<number | null>(null);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
@@ -256,7 +262,31 @@ export default function WaveformLyricsEditor({
     [offset]
   );
   const byTime = [...lyrics].sort((a, b) => lyricT(a) - lyricT(b));
-  const selected = selId ? lyrics.find(l => l.id === selId) || null : null;
+  const selectedLyrics = byTime.filter(l => selIds.includes(l.id));
+  const selected = selIds.length === 1 ? lyrics.find(l => l.id === selIds[0]) || null : null;
+
+  /* ---------- selección ---------- */
+  function clearSel(){ setSelIds([]); setPrimaryId(null); }
+  function selectOnly(id: string){ setSelIds([id]); setPrimaryId(id); }
+  function toggleSel(id: string){
+    setSelIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setPrimaryId(id);
+  }
+  function selectRangeTo(id: string){
+    const target = lyrics.find(l => l.id === id);
+    if (!target) return;
+    const anchor = lyrics.find(l => l.id === primaryId) || target;
+    const [lo, hi] = lyricT(anchor) <= lyricT(target)
+      ? [lyricT(anchor), lyricT(target)] : [lyricT(target), lyricT(anchor)];
+    const ids = byTime.filter(l => lyricT(l) >= lo - 1e-6 && lyricT(l) <= hi + 1e-6).map(l => l.id);
+    setSelIds(prev => Array.from(new Set([...prev, ...ids])));
+  }
+  function selectToEnd(){
+    const first = selectedLyrics[0];
+    if (!first) return;
+    const t0 = lyricT(first);
+    setSelIds(byTime.filter(l => lyricT(l) >= t0 - 1e-6).map(l => l.id));
+  }
 
   const seekTo = useCallback((t: number) => {
     const a = audioRef.current;
@@ -287,6 +317,20 @@ export default function WaveformLyricsEditor({
   const nudge = useCallback((l: Lyric, delta: number) => {
     commitTime(l.id, lyricT(l) + delta);
   }, [commitTime, lyricT]);
+
+  /* Mover un conjunto de líneas por el mismo delta y guardar todo junto. */
+  const commitShift = useCallback((delta: number, ids?: string[]) => {
+    const idSet = ids && ids.length ? ids : selIds;
+    const list = lyrics.filter(l => idSet.includes(l.id));
+    if (!list.length || !delta) return;
+    const changes = list.map(l => ({
+      id: l.id,
+      sec: Math.max(0, Math.round((Number(l.start_time_seconds) + delta) * 100) / 100),
+    }));
+    if (onChangeTimeMany) onChangeTimeMany(changes);
+    else changes.forEach(c => onChangeTime(c.id, c.sec));
+    flash(changes.length > 1 ? `✓ ${changes.length} tiempos guardados` : "✓ tiempo guardado");
+  }, [selIds, lyrics, onChangeTimeMany, onChangeTime, flash]);
 
   /* ---------- fin marcado ("acá termina el tema") ---------- */
   const endT = dragEnd ?? (endSeconds != null && endSeconds > 0 ? Number(endSeconds) : null);
@@ -357,31 +401,81 @@ export default function WaveformLyricsEditor({
     flash("✓ línea nueva insertada");
   }, [timeFromEvent, onInsertAt, offset, flash]);
 
-  /* ---------- drag de pins ---------- */
+  /* ---------- drag de pins (mueve TODA la selección por el mismo delta) ---------- */
   const startDrag = useCallback((e: React.PointerEvent, l: Lyric) => {
     e.preventDefault();
     e.stopPropagation();
-    setSelId(l.id);
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    let ids: string[];
+    if (selIds.includes(l.id)) {
+      ids = selIds;
+      setPrimaryId(l.id);
+    } else {
+      ids = additive ? [...selIds, l.id] : [l.id];
+      setSelIds(ids);
+      setPrimaryId(l.id);
+    }
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
+    const t0 = lyricT(l);
+    const group = lyrics.filter(x => ids.includes(x.id));
+    const minT = group.length ? Math.min(...group.map(x => lyricT(x))) : t0;
+    let moved = false;
     const move = (ev: PointerEvent) => {
       const t = timeFromEvent(ev);
-      dragTRef.current = { id: l.id, t };
-      setDragT({ id: l.id, t });
+      let delta = t - t0;
+      if (minT + delta < 0) delta = -minT;   // que ninguna quede antes de 0
+      moved = true;
+      dragMoveRef.current = delta;
+      setDragMove({ delta });
     };
     const up = () => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
-      const d = dragTRef.current;
-      dragTRef.current = null;
-      setDragT(null);
-      if (d && d.id === l.id) commitTime(l.id, d.t);
+      const delta = dragMoveRef.current;
+      dragMoveRef.current = null;
+      setDragMove(null);
+      if (moved && delta != null && Math.abs(delta) > 0.005) commitShift(delta, ids);
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
-  }, [timeFromEvent, commitTime]);
+  }, [selIds, lyrics, lyricT, timeFromEvent, commitShift]);
+
+  /* ---------- recuadro de selección sobre la franja de pins ---------- */
+  const startBoxSel = useCallback((e: React.PointerEvent) => {
+    if (e.target !== e.currentTarget) return;   // solo el fondo de la franja, no un pin
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const toT = (clientX: number) => Math.max(0, Math.min(duration, (clientX - rect.left) / pps));
+    const t0 = toT(e.clientX);
+    boxRef.current = { t0, add: e.shiftKey || e.metaKey || e.ctrlKey };
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    setBoxSel({ t0, t1: t0 });
+    const move = (ev: PointerEvent) => setBoxSel({ t0: boxRef.current!.t0, t1: toT(ev.clientX) });
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      const info = boxRef.current;
+      boxRef.current = null;
+      setBoxSel(null);
+      if (!info) return;
+      const t1 = toT(ev.clientX);
+      const [lo, hi] = info.t0 <= t1 ? [info.t0, t1] : [t1, info.t0];
+      if (hi - lo < 0.05) { clearSel(); return; }   // click suelto en el fondo = deseleccionar
+      const ids = byTime.filter(l => lyricT(l) >= lo && lyricT(l) <= hi).map(l => l.id);
+      setSelIds(prev => info.add ? Array.from(new Set([...prev, ...ids])) : ids);
+      if (ids.length) setPrimaryId(ids[0]);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duration, pps, byTime, lyricT]);
 
   /* ---------- teclado ---------- */
   useEffect(() => {
@@ -391,13 +485,13 @@ export default function WaveformLyricsEditor({
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
       else if (e.code === "ArrowLeft")  { e.preventDefault(); seekTo(posRef.current - 2); }
       else if (e.code === "ArrowRight") { e.preventDefault(); seekTo(posRef.current + 2); }
-      else if (e.code === "BracketLeft" && selected)  { e.preventDefault(); nudge(selected, -0.05); }
-      else if (e.code === "BracketRight" && selected) { e.preventDefault(); nudge(selected, +0.05); }
-      else if (e.code === "Escape") setSelId(null);
+      else if (e.code === "BracketLeft" && selIds.length)  { e.preventDefault(); commitShift(-0.05); }
+      else if (e.code === "BracketRight" && selIds.length) { e.preventDefault(); commitShift(+0.05); }
+      else if (e.code === "Escape") { setSelIds([]); setPrimaryId(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePlay, seekTo, selected, nudge]);
+  }, [togglePlay, seekTo, selIds, commitShift]);
 
   /* ---------- zoom ---------- */
   function zoomIn() {
@@ -452,7 +546,7 @@ export default function WaveformLyricsEditor({
   }
 
   return (
-    <div className="card mb-3 space-y-3" style={{ userSelect: dragT ? "none" : undefined }}>
+    <div className="card mb-3 space-y-3" style={{ userSelect: (dragMove || boxSel) ? "none" : undefined }}>
       {/* Barra superior: transporte + zoom */}
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={togglePlay} disabled={loadState !== "ready"}
@@ -538,22 +632,35 @@ export default function WaveformLyricsEditor({
               ))}
             </div>
 
-            {/* Rail de pins (2 filas alternadas para que no se pisen) */}
-            <div className="relative" style={{ height: 44 }}>
+            {/* Rail de pins (2 filas alternadas). Arrastrar sobre el fondo = recuadro de selección. */}
+            <div className="relative" style={{ height: 44, touchAction: "none", cursor: "crosshair" }}
+                 onPointerDown={startBoxSel}>
+              {boxSel && (
+                <div className="absolute pointer-events-none rounded"
+                     style={{ left: Math.min(boxSel.t0, boxSel.t1) * pps,
+                              width: Math.max(1, Math.abs(boxSel.t1 - boxSel.t0) * pps),
+                              top: 0, height: "100%",
+                              background: "rgba(34,211,238,0.15)", border: "1px solid rgba(34,211,238,0.5)" }} />
+              )}
               {byTime.map((l, i) => {
-                const t = dragT?.id === l.id ? dragT.t : lyricT(l);
-                const isSel = selId === l.id;
+                const sel = selIds.includes(l.id);
+                const t = Math.max(0, lyricT(l) + (sel && dragMove ? dragMove.delta : 0));
                 return (
                   <div key={l.id}
                        onPointerDown={e => startDrag(e, l)}
-                       onClick={e => { e.stopPropagation(); setSelId(l.id); }}
+                       onClick={e => {
+                         e.stopPropagation();
+                         if (e.shiftKey) selectRangeTo(l.id);
+                         else if (e.metaKey || e.ctrlKey) toggleSel(l.id);
+                         else selectOnly(l.id);
+                       }}
                        onDoubleClick={e => { e.stopPropagation(); seekTo(Math.max(0, t - 2)); audioRef.current?.play().catch(() => {}); }}
-                       title={`${fmtClock(t, true)} · ${l.text}\narrastrá para mover · doble click: escuchar desde acá`}
+                       title={`${fmtClock(t, true)} · ${l.text}\narrastrá para mover (mueve toda la selección) · shift+click: rango · ⌘/ctrl+click: sumar/sacar · doble click: escuchar desde acá`}
                        className="absolute cursor-grab active:cursor-grabbing"
-                       style={{ left: t * pps, top: i % 2 === 0 ? 2 : 22, transform: "translateX(-50%)", touchAction: "none", zIndex: isSel ? 30 : 10 }}>
+                       style={{ left: t * pps, top: i % 2 === 0 ? 2 : 22, transform: "translateX(-50%)", touchAction: "none", zIndex: sel ? 30 : 10 }}>
                     <div className={`px-1.5 py-0.5 rounded-full text-[10px] font-black font-mono leading-none whitespace-nowrap border ${
-                      isSel ? "bg-white text-black border-white"
-                            : "bg-cyan-400 text-black border-cyan-300"}`}>
+                      sel ? "bg-white text-black border-white"
+                          : "bg-cyan-400 text-black border-cyan-300"}`}>
                       {i + 1}
                     </div>
                   </div>
@@ -570,12 +677,12 @@ export default function WaveformLyricsEditor({
               </div>
               {/* Líneas verticales de cada pin */}
               {byTime.map(l => {
-                const t = dragT?.id === l.id ? dragT.t : lyricT(l);
-                const isSel = selId === l.id;
+                const sel = selIds.includes(l.id);
+                const t = Math.max(0, lyricT(l) + (sel && dragMove ? dragMove.delta : 0));
                 return (
                   <div key={`ln-${l.id}`} className="absolute top-0 pointer-events-none"
                        style={{ left: t * pps, width: 1, height: WAVE_H,
-                                background: isSel ? "rgba(255,255,255,0.9)" : "rgba(34,211,238,0.45)" }} />
+                                background: sel ? "rgba(255,255,255,0.9)" : "rgba(34,211,238,0.45)" }} />
                 );
               })}
               {/* Fin marcado: zona muerta sombreada + línea + bandera arrastrable */}
@@ -601,13 +708,18 @@ export default function WaveformLyricsEditor({
               {/* Playhead */}
               <div ref={playheadRef} className="absolute top-0 pointer-events-none"
                    style={{ left: 0, width: 2, height: WAVE_H, background: "#fff", boxShadow: "0 0 6px rgba(255,255,255,0.7)" }} />
-              {/* Burbuja de tiempo mientras arrastrás */}
-              {dragT && (
-                <div className="absolute pointer-events-none px-1.5 py-0.5 rounded bg-white text-black text-[10px] font-mono font-bold"
-                     style={{ left: dragT.t * pps, top: 6, transform: "translateX(-50%)" }}>
-                  {fmtClock(dragT.t, true)}
-                </div>
-              )}
+              {/* Burbuja de delta mientras arrastrás (mueve toda la selección) */}
+              {dragMove && selectedLyrics.length > 0 && (() => {
+                const p = selectedLyrics.find(l => l.id === primaryId) || selectedLyrics[0];
+                const t = Math.max(0, lyricT(p) + dragMove.delta);
+                return (
+                  <div className="absolute pointer-events-none px-1.5 py-0.5 rounded bg-white text-black text-[10px] font-mono font-bold whitespace-nowrap"
+                       style={{ left: t * pps, top: 6, transform: "translateX(-50%)" }}>
+                    {(dragMove.delta >= 0 ? "+" : "") + dragMove.delta.toFixed(2)}s · {fmtClock(t, true)}
+                    {selectedLyrics.length > 1 ? ` · ${selectedLyrics.length} líneas` : ""}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -617,7 +729,7 @@ export default function WaveformLyricsEditor({
       {selected ? (
         <div className="rounded-lg border border-cyan-400/40 bg-cyan-400/5 p-3 flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] text-cyan-300 w-20 shrink-0">
-            {fmtClock(dragT?.id === selected.id ? dragT.t : lyricT(selected), true)}
+            {fmtClock(Math.max(0, lyricT(selected) + (dragMove ? dragMove.delta : 0)), true)}
           </span>
           <button onClick={() => { seekTo(Math.max(0, lyricT(selected) - 2)); audioRef.current?.play().catch(() => {}); }}
                   className="btn text-xs whitespace-nowrap" title="Escuchar desde 2 s antes de esta línea">
@@ -636,14 +748,43 @@ export default function WaveformLyricsEditor({
             onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
             className="input flex-1 min-w-[200px]"
             placeholder="Texto de la línea" />
-          <button onClick={() => { onRemove(selected.id); setSelId(null); }}
+          <button onClick={selectToEnd} className="btn text-xs whitespace-nowrap"
+                  title="Seleccionar esta línea y todas las que siguen (para correr media canción de una)">
+            ⇥ hasta el final
+          </button>
+          <button onClick={() => { onRemove(selected.id); clearSel(); }}
                   className="text-neutral-500 hover:text-red-400 text-sm px-1" title="Borrar esta línea">✕</button>
+        </div>
+      ) : selectedLyrics.length > 1 ? (
+        <div className="rounded-lg border border-cyan-400/40 bg-cyan-400/5 p-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-black text-cyan-300 whitespace-nowrap">
+            {selectedLyrics.length} líneas seleccionadas
+          </span>
+          <span className="font-mono text-[11px] text-neutral-400 whitespace-nowrap">
+            {fmtClock(lyricT(selectedLyrics[0]))} → {fmtClock(lyricT(selectedLyrics[selectedLyrics.length - 1]))}
+          </span>
+          <button onClick={() => commitShift(-1)}   className="btn text-xs px-2" title="Todas 1 s antes">−1s</button>
+          <button onClick={() => commitShift(-0.1)} className="btn text-xs px-2" title="Todas 0,1 s antes">−0,1</button>
+          <button onClick={() => commitShift(+0.1)} className="btn text-xs px-2" title="Todas 0,1 s después">+0,1</button>
+          <button onClick={() => commitShift(+1)}   className="btn text-xs px-2" title="Todas 1 s después">+1s</button>
+          <button onClick={() => { const p = selectedLyrics[0]; seekTo(Math.max(0, lyricT(p) - 2)); audioRef.current?.play().catch(() => {}); }}
+                  className="btn text-xs whitespace-nowrap" title="Escuchar desde 2 s antes de la primera seleccionada">
+            ▶ probar
+          </button>
+          <button onClick={selectToEnd} className="btn text-xs whitespace-nowrap"
+                  title="Extender la selección desde la primera seleccionada hasta el final">
+            ⇥ hasta el final
+          </button>
+          <span className="flex-1" />
+          <button onClick={clearSel} className="text-xs text-neutral-500 hover:text-white">deseleccionar</button>
         </div>
       ) : (
         <p className="text-[10px] text-neutral-600 font-mono">
           click en la onda: mover cursor · doble click en la onda: nueva línea ahí · click en un pin: editarlo ·
-          arrastrar pin: corregir tiempo · doble click en pin: escucharlo · ⚑ FIN: arrastralo para marcar dónde
-          termina el tema (la app corta ahí) · ESPACIO play/pausa · ←/→ ±2 s · [ ] ±0,05 s
+          arrastrar pin: corregir tiempo (mueve toda la selección) · shift+click: seleccionar rango ·
+          ⌘/ctrl+click: sumar/sacar de la selección · arrastrar sobre la franja de pins: seleccionar con recuadro ·
+          doble click en pin: escucharlo · ⚑ FIN: arrastralo para marcar dónde termina el tema (la app corta ahí) ·
+          ESPACIO play/pausa · ←/→ ±2 s · [ ] mueve la selección ±0,05 s · ESC deseleccionar
         </p>
       )}
     </div>

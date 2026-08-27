@@ -598,6 +598,22 @@ export default function SongEditor() {
     await supabase.from("lyric_lines").update({ start_time_seconds: sec }).eq("id", lyricId);
     await syncCueTimeWithLyric(l, oldTime, sec);
   }
+  /* Mover varias líneas juntas (selección múltiple en la onda): una pasada
+   * de updates con los valores nuevos + sync de cues, y un solo setState. */
+  async function waveChangeTimeMany(changes: { id: string; sec: number }[]) {
+    if (!changes.length) return;
+    const oldById = new Map(lyrics.map(l => [l.id, Number(l.start_time_seconds)]));
+    setLyrics(prev => prev.map(x => {
+      const c = changes.find(ch => ch.id === x.id);
+      return c ? { ...x, start_time_seconds: c.sec } : x;
+    }));
+    for (const c of changes) {
+      await supabase.from("lyric_lines").update({ start_time_seconds: c.sec }).eq("id", c.id);
+      const l = lyrics.find(x => x.id === c.id);
+      const old = oldById.get(c.id);
+      if (l && old != null) await syncCueTimeWithLyric(l, old, c.sec);
+    }
+  }
   async function waveChangeText(lyricId: string, text: string) {
     setLyrics(prev => prev.map(x => x.id === lyricId ? { ...x, text } : x));
     await supabase.from("lyric_lines").update({ text }).eq("id", lyricId);
@@ -1167,6 +1183,7 @@ export default function SongEditor() {
                 offsetSeconds={Number(song.offset_seconds) || 0}
                 endSeconds={song.audio_end_seconds != null ? Number(song.audio_end_seconds) : null}
                 onChangeTime={waveChangeTime}
+                onChangeTimeMany={waveChangeTimeMany}
                 onChangeText={waveChangeText}
                 onInsertAt={insertLyricAtTime}
                 onRemove={removeLyric}
