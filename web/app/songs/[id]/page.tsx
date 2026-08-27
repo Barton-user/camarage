@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
 import Link from "next/link";
 import { parseMidiFile, describeEvent, type MidiEvent } from "@/lib/midi-file";
+import WaveformLyricsEditor from "@/components/WaveformLyricsEditor";
 
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 function noteNumToName(n: number) { return NOTE_NAMES[n%12] + (Math.floor(n/12)-1); }
@@ -209,8 +210,22 @@ export default function SongEditor() {
   const [tapMarks, setTapMarks] = useState<Record<string, number>>({});
   const [tapErr, setTapErr] = useState<string|null>(null);
   const tapAudio = useRef<HTMLAudioElement|null>(null);
+  // --- Editor de onda (estilo SoundCloud) ---
+  const [waveUrl, setWaveUrl] = useState<string|null>(null);
+  const [waveUrlErr, setWaveUrlErr] = useState<string|null>(null);
 
   useEffect(() => { if (id) load(); }, [id]);
+
+  // URL firmada de la pista para el editor de onda (se pide al entrar a Letras)
+  useEffect(() => {
+    if (tab !== "lyrics" || !song?.audio_path || waveUrl) return;
+    supabase.storage.from(AUDIO_BUCKET).createSignedUrl(song.audio_path, 3600)
+      .then(({ data, error }) => {
+        if (error) setWaveUrlErr(error.message);
+        else setWaveUrl(data?.signedUrl || null);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, song?.audio_path]);
 
   async function load() {
     const { data: s } = await supabase.from("songs").select("*").eq("id", id).single();
@@ -569,6 +584,31 @@ export default function SongEditor() {
   async function removeLyric(lyricId: string) {
     await supabase.from("lyric_lines").delete().eq("id", lyricId);
     setLyrics(lyrics.filter(l => l.id !== lyricId));
+  }
+
+  /* ===== Callbacks del editor de onda =====
+   * Guardan directo en Supabase con el valor nuevo (sin pasar por saveLyric,
+   * que lee el state y puede quedar desactualizado en el mismo tick). */
+  async function waveChangeTime(lyricId: string, newSec: number) {
+    const l = lyrics.find(x => x.id === lyricId);
+    if (!l) return;
+    const oldTime = Number(l.start_time_seconds);
+    const sec = Math.max(0, Math.round(newSec * 100) / 100);
+    setLyrics(prev => prev.map(x => x.id === lyricId ? { ...x, start_time_seconds: sec } : x));
+    await supabase.from("lyric_lines").update({ start_time_seconds: sec }).eq("id", lyricId);
+    await syncCueTimeWithLyric(l, oldTime, sec);
+  }
+  async function waveChangeText(lyricId: string, text: string) {
+    setLyrics(prev => prev.map(x => x.id === lyricId ? { ...x, text } : x));
+    await supabase.from("lyric_lines").update({ text }).eq("id", lyricId);
+  }
+  async function insertLyricAtTime(sec: number) {
+    const maxOrder = lyrics.length ? Math.max(...lyrics.map(l => l.order_index)) : -1;
+    const { data } = await supabase.from("lyric_lines").insert({
+      song_id: id, order_index: maxOrder + 1,
+      text: "Nueva línea", start_time_seconds: Math.max(0, Math.round(sec * 100) / 100),
+    }).select().single();
+    if (data) setLyrics(prev => [...prev, data]);
   }
 
   // ===== CUE inline para una letra =====
@@ -1083,6 +1123,36 @@ export default function SongEditor() {
 
       {tab === "lyrics" && (
         <div className="space-y-2">
+
+          {/* ---------- EDITOR DE ONDA (estilo SoundCloud) ---------- */}
+          {song.audio_path ? (
+            waveUrl ? (
+              <WaveformLyricsEditor
+                audioUrl={waveUrl}
+                lyrics={lyrics}
+                offsetSeconds={Number(song.offset_seconds) || 0}
+                onChangeTime={waveChangeTime}
+                onChangeText={waveChangeText}
+                onInsertAt={insertLyricAtTime}
+                onRemove={removeLyric}
+              />
+            ) : waveUrlErr ? (
+              <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3 mb-3">
+                No pude firmar la URL del audio: {waveUrlErr}
+              </p>
+            ) : (
+              <div className="card mb-3">
+                <p className="text-xs text-neutral-500 animate-pulse">Preparando el editor de onda…</p>
+              </div>
+            )
+          ) : (
+            <div className="card mb-3">
+              <p className="text-xs text-neutral-500">
+                Subí la pista en la solapa <b className="text-neutral-300">Audio</b> y vas a poder
+                editar las letras sobre la forma de onda, arrastrando cada línea a su momento exacto.
+              </p>
+            </div>
+          )}
 
           {/* ---------- MODO MARCAR TIEMPOS ---------- */}
           {!tapOn ? (
