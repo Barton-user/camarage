@@ -1492,6 +1492,15 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
                         stroke-width="2.2" stroke-linecap="round" stroke-dasharray="0 292.17"
                         style="filter: drop-shadow(0 0 5px rgba(251,146,60,.55));"/>
               </svg>
+              <!-- Aguja giratoria: 360 grados por compas, mismo lenguaje que la
+                   vista Bateria (stub naranja con glow) pero montada sobre el borde,
+                   porque aca el centro es mas grande y taparia una aguja completa. -->
+              <div class="absolute inset-0" id="mtHandWrap" style="pointer-events:none; will-change:transform;">
+                <div id="mtHand"
+                     style="position:absolute; left:50%; top:1.5%; width:7px; height:20%; margin-left:-3.5px; border-radius:4px;
+                            background: linear-gradient(0deg, transparent, var(--accent-orange) 55%);
+                            box-shadow: 0 0 16px rgba(251,146,60,.65);"></div>
+              </div>
               <div id="mtCenter">
                 <p class="mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">Beat</p>
                 <p id="mtBeat" class="font-black leading-none" style="color:var(--accent-orange); font-size:clamp(3rem,30cqmin,8rem);">1</p>
@@ -5986,6 +5995,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     }
     function uiBeat(beat, acc){
       $m('mtBeat').textContent = beat+1;
+      const c = $m('mtCenter');
+      if (c){ c.classList.remove('drum-pulse'); void c.offsetWidth; c.classList.add('drum-pulse'); }
       dotsEl.querySelectorAll('.mt-dot').forEach((d,i)=>d.classList.toggle('now', i===beat));
       if (acc && M.flash){
         const fl=document.getElementById('mtFlashEl');
@@ -6012,12 +6023,16 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         p = p - Math.floor(p);
         if (!isFinite(p) || p < 0) p = 0;
         fg.setAttribute('stroke-dasharray', (p*RING_C).toFixed(2)+' '+RING_C.toFixed(2));
+        const hw = $m('mtHandWrap');
+        if (hw) hw.style.transform = 'rotate(' + (p*360).toFixed(2) + 'deg)';
       }
       ringRaf = requestAnimationFrame(ringLoop);
     }
     function ringReset(){
       const fg = $m('mtRingFg');
       if (fg) fg.setAttribute('stroke-dasharray', '0 '+RING_C.toFixed(2));
+      const hw = $m('mtHandWrap');
+      if (hw) hw.style.transform = 'rotate(0deg)';
     }
     function tick(){
       if (!M.running || !audioCtx) return;
