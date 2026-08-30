@@ -710,12 +710,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     /* =====================================================================
      * MODO METRONOMO — disco heredado con jog wheel, dentro de Bateria.
      * ==================================================================== */
-    #metroPanel .mt-btn{ border:1px solid var(--border-soft); background:var(--bg-card);
+    #viewMetro .mt-btn{ border:1px solid var(--border-soft); background:var(--bg-card);
       border-radius:12px; padding:0 14px; font-weight:900; color:#fff; min-height:44px; }
-    #metroPanel .mt-btn.on{ border-color:var(--accent-orange); color:var(--accent-orange); }
-    #metroPanel .mt-chip{ border:1px solid var(--border-soft); background:var(--bg-card);
+    #viewMetro .mt-btn.on{ border-color:var(--accent-orange); color:var(--accent-orange); }
+    #viewMetro .mt-chip{ border:1px solid var(--border-soft); background:var(--bg-card);
       border-radius:9999px; padding:5px 12px; font-size:11px; font-weight:700; color:#9ca3af; }
-    #metroPanel .mt-chip.on{ border-color:var(--accent-orange); color:var(--accent-orange);
+    #viewMetro .mt-chip.on{ border-color:var(--accent-orange); color:var(--accent-orange);
       background:rgba(251,146,60,0.10); }
     #mtJog{ position:absolute; inset:0; border-radius:9999px;
       background: repeating-conic-gradient(from 0deg, #34343a 0deg 4deg, #131316 4deg 12deg);
@@ -733,6 +733,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       display:flex; align-items:center; justify-content:center; }
     #mtDots .mt-dot.acc{ background:var(--accent-orange); border-color:var(--accent-orange); color:#000; }
     #mtDots .mt-dot.now{ border-color:#fff; box-shadow:0 0 14px 2px rgba(251,146,60,.8); }
+    #mtFlashEl.go{ animation: drumFlashKf .16s ease-out; }
+    body.metro-mode #hdrSongBox, body.metro-mode #hdrBpmBox{ display:none; }
   </style>
 </head>
 
@@ -776,13 +778,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         </div>
       </button>
 
-      <div class="text-center">
+      <div class="text-center" id="hdrSongBox">
         <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">Canción</p>
         <p class="text-sm font-black truncate max-w-[140px]" id="globalSongTitle">Lluvia de Neón</p>
       </div>
 
       <div class="flex items-center gap-2">
-        <div class="text-right">
+        <div class="text-right" id="hdrBpmBox">
           <p class="text-[10px] uppercase tracking-[0.22em] text-neutral-500">BPM</p>
           <p class="mono text-lg font-black" id="globalBpm" style="color: var(--accent-yellow);">112</p>
         </div>
@@ -1317,53 +1319,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <!-- Latido de pantalla: destello blanco en el 1 de cada compás (linterna).
              Vive dentro de viewDrummer, así no aparece en las otras vistas. -->
         <div id="drumFlash" style="position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:30;"></div>
-
-        <!-- ===== MODO METRONOMO · disco heredado con jog wheel =====
-             Overlay sobre la vista Bateria (z-25, abajo del drumFlash z-30
-             para que el flash tambien funcione aca). Motor propio sobre
-             audioCtx, independiente de TRACKS: anda sin cancion. -->
-        <div id="metroPanel" class="hidden-screen absolute inset-0 flex flex-col" style="background:#000; z-index:25; padding:10px; gap:8px;">
-          <div class="flex items-center justify-between gap-2">
-            <button id="mtExit" class="btn-stage rounded-xl px-3 py-2 mono text-[10px] uppercase tracking-wider"
-                    style="border:1px solid var(--border-soft);">&#8249; show</button>
-            <p class="mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">Metr&oacute;nomo</p>
-            <div class="flex items-baseline gap-1">
-              <span id="mtBpmLbl" class="mono text-3xl font-black" style="color:var(--accent-orange);">120</span>
-              <span class="mono text-[9px] text-neutral-500">BPM</span>
-            </div>
-          </div>
-          <div class="flex-1 relative grid place-items-center" style="min-height:0;">
-            <div id="mtDisc" style="position:relative; height:min(94%, 86vw, 62vh); aspect-ratio:1/1; touch-action:none; container-type:size;">
-              <div id="mtJog"></div>
-              <div id="mtCenter">
-                <p class="mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">Beat</p>
-                <p id="mtBeat" class="font-black leading-none" style="color:var(--accent-orange); font-size:clamp(3rem,30cqmin,8rem);">1</p>
-                <p class="mono text-[10px] text-neutral-500 mt-1">de <span id="mtOf">4</span> &middot; gir&aacute; el aro = BPM</p>
-              </div>
-              <div id="mtDots"></div>
-            </div>
-          </div>
-          <div class="flex gap-2 items-stretch" style="height:52px;">
-            <button id="mtM5" class="mt-btn mono">&minus;5</button>
-            <button id="mtM1" class="mt-btn mono">&minus;1</button>
-            <button id="mtTap" class="flex-1 rounded-xl font-black text-lg uppercase tracking-wider" style="background:var(--accent-orange); color:#000;">Tap tempo</button>
-            <button id="mtP1" class="mt-btn mono">+1</button>
-            <button id="mtP5" class="mt-btn mono">+5</button>
-          </div>
-          <div class="flex gap-1.5 flex-wrap items-center" id="mtSigRow"></div>
-          <div class="flex gap-2 items-center rounded-xl border border-neutral-800 bg-[var(--bg-card)] px-3" style="min-height:44px;">
-            <span class="mono text-[9px] uppercase tracking-widest text-neutral-400">Vol</span>
-            <input id="mtVol" type="range" min="0" max="100" value="75" class="range-stage flex-1"/>
-            <span id="mtVolVal" class="mono text-sm font-black" style="color:var(--accent-yellow);">75</span>
-            <button id="mtFlash" class="mt-chip mono">&#9889; flash</button>
-            <button id="mtVib" class="mt-chip mono">&#128243; vibrar</button>
-          </div>
-          <div class="flex gap-2 items-stretch" style="height:60px;">
-            <button id="mtTrainer" class="mt-btn mono text-[10px] leading-tight" style="flex:1;">ENTRENADOR<br><span class="text-neutral-500">+2 bpm / 8 compases</span></button>
-            <button id="mtPlay" class="rounded-xl font-black uppercase text-base"
-                    style="flex:2; border:1px solid rgba(34,197,94,0.45); background:rgba(34,197,94,0.12); color:var(--accent-green);">&#9654; Play</button>
-          </div>
-        </div>
         <!-- Encabezado compacto: BPM · BAR/BEAT/TIME (antes era un renglón
              aparte arriba) · sección. Sin las etiquetas TEMPO/SECCIÓN. -->
         <div id="drumTopInfo" class="px-4 pt-2 flex items-center justify-between gap-2">
@@ -1383,9 +1338,6 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <!-- Claqueta visual gigante -->
         <div id="drumMain" class="flex-1 relative mx-2 rounded-2xl overflow-hidden border border-[var(--border-soft)]"
              style="background: radial-gradient(120% 80% at 50% 50%, #0d0d10 0%, #000 70%); margin-top:6px; margin-bottom:6px;">
-          <button id="metroModeBtn" class="btn-stage rounded-full px-3 py-1.5 mono text-[10px] uppercase tracking-wider"
-                  style="position:absolute; top:10px; right:10px; z-index:15; border:1px solid rgba(251,146,60,0.5); color:var(--accent-orange); background:rgba(0,0,0,0.55);"
-                  title="Modo metronomo puro">&#9201; metro</button>
 
           <!-- Conteo regresivo overlay -->
           <div id="drumCountdown" class="absolute inset-0 hidden items-center justify-center bg-black/70 z-20">
@@ -1517,6 +1469,53 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         </div>
       </div>
 
+      <!-- ===== VISTA · METRONOMO · disco heredado con jog wheel =====
+             Overlay sobre la vista Bateria (z-25, abajo del drumFlash z-30
+             para que el flash tambien funcione aca). Motor propio sobre
+             audioCtx, independiente de TRACKS: anda sin cancion. -->
+        <div id="viewMetro" class="view absolute inset-0 hidden-screen flex flex-col" style="background:#000; padding:10px; gap:8px;">
+          <div id="mtFlashEl" style="position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:30;"></div>
+          <div class="flex items-center justify-between gap-2">
+            <span class="mono text-[10px] text-neutral-600 uppercase tracking-widest">Camarage</span>
+            <p class="mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">Metr&oacute;nomo</p>
+            <div class="flex items-baseline gap-1">
+              <span id="mtBpmLbl" class="mono text-3xl font-black" style="color:var(--accent-orange);">120</span>
+              <span class="mono text-[9px] text-neutral-500">BPM</span>
+            </div>
+          </div>
+          <div class="flex-1 relative grid place-items-center" style="min-height:0;">
+            <div id="mtDisc" style="position:relative; height:min(94%, 86vw, 62vh); aspect-ratio:1/1; touch-action:none; container-type:size;">
+              <div id="mtJog"></div>
+              <div id="mtCenter">
+                <p class="mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">Beat</p>
+                <p id="mtBeat" class="font-black leading-none" style="color:var(--accent-orange); font-size:clamp(3rem,30cqmin,8rem);">1</p>
+                <p class="mono text-[10px] text-neutral-500 mt-1">de <span id="mtOf">4</span> &middot; gir&aacute; el aro = BPM</p>
+              </div>
+              <div id="mtDots"></div>
+            </div>
+          </div>
+          <div class="flex gap-2 items-stretch" style="height:52px;">
+            <button id="mtM5" class="mt-btn mono">&minus;5</button>
+            <button id="mtM1" class="mt-btn mono">&minus;1</button>
+            <button id="mtTap" class="flex-1 rounded-xl font-black text-lg uppercase tracking-wider" style="background:var(--accent-orange); color:#000;">Tap tempo</button>
+            <button id="mtP1" class="mt-btn mono">+1</button>
+            <button id="mtP5" class="mt-btn mono">+5</button>
+          </div>
+          <div class="flex gap-1.5 flex-wrap items-center" id="mtSigRow"></div>
+          <div class="flex gap-2 items-center rounded-xl border border-neutral-800 bg-[var(--bg-card)] px-3" style="min-height:44px;">
+            <span class="mono text-[9px] uppercase tracking-widest text-neutral-400">Vol</span>
+            <input id="mtVol" type="range" min="0" max="100" value="75" class="range-stage flex-1"/>
+            <span id="mtVolVal" class="mono text-sm font-black" style="color:var(--accent-yellow);">75</span>
+            <button id="mtFlash" class="mt-chip mono">&#9889; flash</button>
+            <button id="mtVib" class="mt-chip mono">&#128243; vibrar</button>
+          </div>
+          <div class="flex gap-2 items-stretch" style="height:60px;">
+            <button id="mtTrainer" class="mt-btn mono text-[10px] leading-tight" style="flex:1;">ENTRENADOR<br><span class="text-neutral-500">+2 bpm / 8 compases</span></button>
+            <button id="mtPlay" class="rounded-xl font-black uppercase text-base"
+                    style="flex:2; border:1px solid rgba(34,197,94,0.45); background:rgba(34,197,94,0.12); color:var(--accent-green);">&#9654; Play</button>
+          </div>
+        </div>
+
       <!-- ============ VISTA · SETLIST EDITOR ============ -->
       <div id="viewSetlist" class="view absolute inset-0 hidden-screen flex flex-col overflow-y-auto no-scrollbar">
         <div class="px-4 pt-3 flex items-center justify-between gap-2">
@@ -1621,7 +1620,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     <!-- ============================================================
          BOTTOM NAV
          ============================================================ -->
-    <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 grid grid-cols-4 border-t border-[var(--border-soft)] bg-[#050505]/95 backdrop-blur">
+    <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 grid border-t border-[var(--border-soft)] bg-[#050505]/95 backdrop-blur" style="grid-template-columns:repeat(5,minmax(0,1fr));">
       <button data-view="viewSinger" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M5 8a7 7 0 0114 0v8a7 7 0 01-14 0V8z"/></svg>
         <span class="text-[10px] mono uppercase tracking-wider">Cantante</span>
@@ -1633,6 +1632,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       <button data-view="viewDrummer" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
         <span class="text-[10px] mono uppercase tracking-wider">Batería</span>
+      </button>
+      <button data-view="viewMetro" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6l4 17H5L9 3z"/><path d="M12 13l4.5-6.5"/><circle cx="12" cy="13.5" r="1.4"/></svg>
+        <span class="text-[10px] mono uppercase tracking-wider">Metro</span>
       </button>
       <button data-view="viewSetlist" class="nav-btn flex flex-col items-center justify-center py-2.5 gap-0.5">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
@@ -1902,7 +1905,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     // La stage bar (A−/A+, brillo, bloqueo) es para las vistas con letra/cifrado.
     // En la del baterista solo comía altura del disco (pedido de Pato, 21 ago).
     const sb = document.getElementById('stageBar');
-    if (sb) sb.classList.toggle('hidden-screen', id === 'viewDrummer' || id === 'viewSetlist');
+    if (sb) sb.classList.toggle('hidden-screen', id === 'viewDrummer' || id === 'viewSetlist' || id === 'viewMetro');
+    // En el metronomo el header muestra solo el estado de sync (yo mando/sigo) y la rueda:
+    // el nombre y BPM de la cancion no aplican ahi.
+    document.body.classList.toggle('metro-mode', id === 'viewMetro');
     document.querySelectorAll('.nav-btn').forEach(b => {
       const active = b.dataset.view === id;
       b.classList.toggle('text-white', active);
@@ -3629,6 +3635,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         renderSync();
       });
 
+      // Metronomo compartido: el maestro manda un ancla por compas; el seguidor
+      // la convierte a su reloj con el desfase NTP ya calibrado.
+      s.canal.on('broadcast', { event: 'metro' }, ({ payload }) => {
+        if (s.role !== 'follower') return;
+        try { if (typeof window.metroRemoto === 'function') window.metroRemoto(payload, s.desfase); } catch(e){}
+      });
+
       s.canal.subscribe(estado => {
         s.conectado = (estado === 'SUBSCRIBED');
         renderSync();
@@ -3661,6 +3674,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         playing: !!state.isPlaying,
         bpm: state.bpm,
       };
+    }
+    function mandarMetro(payload){
+      if (s.role !== 'master' || !s.canal || !s.conectado) return;
+      s.canal.send({ type:'broadcast', event:'metro', payload });
     }
     function mandarBaliza(){
       if (s.role !== 'master' || !s.canal || !s.conectado) return;
@@ -3799,7 +3816,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     else bind();
 
     return { positionSec, isFollowing, errorMs, frescura, balizaVieja, setRole, avisarCambio,
-             role: () => s.role, estaConectado: () => s.conectado, _s: s };
+             mandarMetro, role: () => s.role, estaConectado: () => s.conectado, _s: s };
   })();
 
   /* =====================================================================
@@ -5923,12 +5940,13 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
    * Persiste en localStorage (camarage_metro).
    * =================================================================== */
   (function initMetronomo(){
-    const panel = document.getElementById('metroPanel');
+    const panel = document.getElementById('viewMetro');
     if (!panel) return;
     const $m = s => document.getElementById(s);
     const M = { bpm:120, beats:4, sig:'4/4', sub:1, accents:[1,0,0,0], vol:0.75,
                 flash:true, vib:false, trainer:false,
-                running:false, nextT:0, idx:0, subIdx:0, barCount:0, timer:null, gain:null };
+                running:false, nextT:0, idx:0, subIdx:0, barCount:0, timer:null, gain:null,
+                slaved:false, slaveMute:false };
     try {
       const saved = JSON.parse(localStorage.getItem('camarage_metro') || '{}');
       for (const k of ['bpm','beats','sig','sub','accents','vol','flash','vib','trainer'])
@@ -5960,7 +5978,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       $m('mtBeat').textContent = beat+1;
       dotsEl.querySelectorAll('.mt-dot').forEach((d,i)=>d.classList.toggle('now', i===beat));
       if (acc && M.flash){
-        const fl=document.getElementById('drumFlash');
+        const fl=document.getElementById('mtFlashEl');
         if (fl){ fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go'); }
       }
       try { if (M.vib && navigator.vibrate) navigator.vibrate(acc?50:15); } catch(e){}
@@ -5973,6 +5991,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         const when = Math.max(M.nextT, audioCtx.currentTime + 0.005);
         if (M.subIdx === 0){
           const b = M.idx, acc = !!M.accents[b];
+          if (b === 0) mtBroadcast(when);
           clickM(when, acc?2:1);
           setTimeout(()=>{ if (M.running) uiBeat(b, acc); }, Math.max(0,(when-audioCtx.currentTime)*1000));
         } else clickM(when, 0);
@@ -5999,6 +6018,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       M.running=false;
       if (M.timer){ clearInterval(M.timer); M.timer=null; }
       dotsEl.querySelectorAll('.mt-dot').forEach(d=>d.classList.remove('now'));
+      if (!M.slaved){
+        try { if (typeof SYNC !== 'undefined' && SYNC && SYNC.mandarMetro) SYNC.mandarMetro({ on:false }); } catch(e){}
+      }
+      M.slaved=false;
       paintPlay();
     }
     function paintPlay(){
@@ -6007,6 +6030,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       b.style.color = M.running ? 'var(--accent-red)' : 'var(--accent-green)';
       b.style.borderColor = M.running ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)';
       b.style.background = M.running ? 'rgba(239,68,68,0.10)' : 'rgba(34,197,94,0.12)';
+      if (M.slaved && M.running) b.innerHTML = '&#9632; Stop &middot; sigo al maestro';
     }
     function setBpm(v){
       M.bpm = Math.max(30, Math.min(300, Math.round(v)));
@@ -6093,7 +6117,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     $m('mtM1').addEventListener('click',()=>setBpm(M.bpm-1));
     $m('mtP1').addEventListener('click',()=>setBpm(M.bpm+1));
     $m('mtP5').addEventListener('click',()=>setBpm(M.bpm+5));
-    $m('mtPlay').addEventListener('click',()=>{ M.running ? stop() : start(); });
+    $m('mtPlay').addEventListener('click',()=>{
+      if (M.running){ if (M.slaved){ M.slaveMute = true; } stop(); }
+      else { M.slaveMute = false; start(); }
+    });
     $m('mtVol').addEventListener('input', e=>{
       M.vol=(parseInt(e.target.value,10)||0)/100;
       $m('mtVolVal').textContent=e.target.value;
@@ -6107,15 +6134,65 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       paint();
     }
     chip('mtFlash','flash'); chip('mtVib','vib'); chip('mtTrainer','trainer');
-    const openBtn=document.getElementById('metroModeBtn');
-    if (openBtn) openBtn.addEventListener('click', ()=>{
-      panel.classList.remove('hidden-screen');
-      $m('mtBpmLbl').textContent=M.bpm;
-      $m('mtVol').value=Math.round(M.vol*100);
-      $m('mtVolVal').textContent=Math.round(M.vol*100);
-      buildDots(); buildSigRow(); paintPlay();
-    });
-    $m('mtExit').addEventListener('click', ()=>{ stop(); panel.classList.add('hidden-screen'); });
+    /* --- Sync entre aparatos ---------------------------------------------
+     * Maestro: en cada compas manda el ancla (epoch del beat 1 agendado) +
+     * parametros. Seguidor: convierte el ancla a su reloj con el desfase NTP
+     * de SYNC y engancha su propio motor a esa grilla — re-anclado por compas,
+     * el error queda en el orden del desfase calibrado (~10-30 ms). */
+    function mtBroadcast(when){
+      if (M.slaved) return;
+      try {
+        if (typeof SYNC === 'undefined' || !SYNC || !SYNC.mandarMetro) return;
+        SYNC.mandarMetro({ on:true, bpm:M.bpm, beats:M.beats, sub:M.sub, accents:M.accents,
+                           anchor: Date.now() + (when - audioCtx.currentTime)*1000 });
+      } catch(e){}
+    }
+    let slaveTimeout = null;
+    window.metroRemoto = function(p, desfaseMs){
+      if (!p) return;
+      if (!p.on){
+        M.slaveMute = false;
+        if (M.slaved){ stop(); }
+        return;
+      }
+      if (M.slaveMute) return;               // el usuario lo callo localmente
+      mtEnsure(); if (!audioCtx) return;
+      M.slaved = true;
+      M.bpm = p.bpm || M.bpm; M.beats = p.beats || 4; M.sub = p.sub || 1;
+      if (Array.isArray(p.accents)) M.accents = p.accents.slice();
+      $m('mtBpmLbl').textContent = M.bpm;
+      if (dotsEl.children.length !== M.beats) buildDots();
+      const localMs = p.anchor - (desfaseMs || 0);
+      const ctxAnchor = audioCtx.currentTime + (localMs - Date.now())/1000;
+      const subDur = (60/M.bpm)/M.sub;
+      const total = M.beats*M.sub;
+      if (M.running){
+        // ya suena: corregir deriva sin re-agendar lo ya agendado
+        const n = Math.round((M.nextT - ctxAnchor)/subDur);
+        const drift = M.nextT - (ctxAnchor + n*subDur);
+        if (Math.abs(drift) > 0.012) M.nextT -= drift;
+        const mod = ((n % total) + total) % total;
+        M.idx = Math.floor(mod/M.sub); M.subIdx = mod % M.sub;
+      } else {
+        let k = Math.ceil((audioCtx.currentTime + 0.03 - ctxAnchor)/subDur);
+        if (k < 0) k = 0;
+        M.nextT = ctxAnchor + k*subDur;
+        const mod = ((k % total) + total) % total;
+        M.idx = Math.floor(mod/M.sub); M.subIdx = mod % M.sub;
+        M.running = true;
+        M.timer = setInterval(tick, 25); tick();
+      }
+      paintPlay();
+      clearTimeout(slaveTimeout);   // failsafe: sin anclas 6s = maestro ausente
+      slaveTimeout = setTimeout(()=>{ if (M.slaved) stop(); }, 6000);
+    };
+
+    // La vista se abre desde la pestania METRO de la nav; la UI se arma de entrada
+    // y el motor sigue sonando aunque cambies de vista (como una app de metronomo).
+    $m('mtBpmLbl').textContent = M.bpm;
+    $m('mtVol').value = Math.round(M.vol*100);
+    $m('mtVolVal').textContent = Math.round(M.vol*100);
+    buildDots(); buildSigRow(); paintPlay();
   })();
 
   // Auto-sync al abrir — siempre intenta (defaults hardcodeados garantizan credenciales).
