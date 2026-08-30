@@ -1486,6 +1486,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <div class="flex-1 relative grid place-items-center" style="min-height:0;">
             <div id="mtDisc" style="position:relative; height:min(94%, 86vw, 62vh); aspect-ratio:1/1; touch-action:none; container-type:size;">
               <div id="mtJog"></div>
+              <svg id="mtRing" viewBox="0 0 100 100" style="position:absolute; inset:0; pointer-events:none; transform:rotate(-90deg);">
+                <circle cx="50" cy="50" r="46.5" fill="none" stroke="#1c1c20" stroke-width="1.4"/>
+                <circle id="mtRingFg" cx="50" cy="50" r="46.5" fill="none" stroke="var(--accent-orange)"
+                        stroke-width="2.2" stroke-linecap="round" stroke-dasharray="0 292.17"
+                        style="filter: drop-shadow(0 0 5px rgba(251,146,60,.55));"/>
+              </svg>
               <div id="mtCenter">
                 <p class="mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">Beat</p>
                 <p id="mtBeat" class="font-black leading-none" style="color:var(--accent-orange); font-size:clamp(3rem,30cqmin,8rem);">1</p>
@@ -5946,7 +5952,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     const M = { bpm:120, beats:4, sig:'4/4', sub:1, accents:[1,0,0,0], vol:0.75,
                 flash:true, vib:false, trainer:false,
                 running:false, nextT:0, idx:0, subIdx:0, barCount:0, timer:null, gain:null,
-                slaved:false, slaveMute:false };
+                slaved:false, slaveMute:false, gridZero:0 };
     try {
       const saved = JSON.parse(localStorage.getItem('camarage_metro') || '{}');
       for (const k of ['bpm','beats','sig','sub','accents','vol','flash','vib','trainer'])
@@ -5992,6 +5998,27 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         }
       } catch(e){}
     }
+    /* Anillo de progreso: barrido continuo del compas (0..1) sobre el
+       perimetro, pasando por los puntos de beat. Corre por rAF, leyendo el
+       reloj de audio — misma referencia que el sonido, cero deriva visual. */
+    let ringRaf = 0;
+    const RING_C = 292.17;   // 2*PI*46.5
+    function ringLoop(){
+      if (!M.running){ ringRaf = 0; return; }
+      const fg = $m('mtRingFg');
+      if (fg && audioCtx){
+        const barDur = (60/M.bpm)*M.beats;
+        let p = (audioCtx.currentTime - M.gridZero)/barDur;
+        p = p - Math.floor(p);
+        if (!isFinite(p) || p < 0) p = 0;
+        fg.setAttribute('stroke-dasharray', (p*RING_C).toFixed(2)+' '+RING_C.toFixed(2));
+      }
+      ringRaf = requestAnimationFrame(ringLoop);
+    }
+    function ringReset(){
+      const fg = $m('mtRingFg');
+      if (fg) fg.setAttribute('stroke-dasharray', '0 '+RING_C.toFixed(2));
+    }
     function tick(){
       if (!M.running || !audioCtx) return;
       const horizon = audioCtx.currentTime + 0.15;
@@ -6000,7 +6027,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         const when = Math.max(M.nextT, audioCtx.currentTime + 0.005);
         if (M.subIdx === 0){
           const b = M.idx, acc = !!M.accents[b];
-          if (b === 0) mtBroadcast(when);
+          if (b === 0){ mtBroadcast(when); M.gridZero = when; }
           clickM(when, acc?2:1);
           setTimeout(()=>{ if (M.running) uiBeat(b, acc); }, Math.max(0,(when-audioCtx.currentTime)*1000));
         } else clickM(when, 0);
@@ -6019,8 +6046,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       mtEnsure(); if (!audioCtx) return;
       M.idx=0; M.subIdx=0; M.barCount=0;
       M.nextT = audioCtx.currentTime + 0.08;
+      M.gridZero = M.nextT;
       M.running = true;
       M.timer = setInterval(tick, 25); tick();
+      if (!ringRaf) ringRaf = requestAnimationFrame(ringLoop);
       paintPlay();
     }
     function stop(){
@@ -6031,6 +6060,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         try { if (typeof SYNC !== 'undefined' && SYNC && SYNC.mandarMetro) SYNC.mandarMetro({ on:false }); } catch(e){}
       }
       M.slaved=false;
+      ringReset();
       paintPlay();
     }
     function paintPlay(){
@@ -6193,16 +6223,19 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         const n = Math.round((M.nextT - ctxAnchor)/subDur);
         const drift = M.nextT - (ctxAnchor + n*subDur);
         if (Math.abs(drift) > 0.012) M.nextT -= drift;
+        M.gridZero = ctxAnchor;
         const mod = ((n % total) + total) % total;
         M.idx = Math.floor(mod/M.sub); M.subIdx = mod % M.sub;
       } else {
         let k = Math.ceil((audioCtx.currentTime + 0.03 - ctxAnchor)/subDur);
         if (k < 0) k = 0;
         M.nextT = ctxAnchor + k*subDur;
+        M.gridZero = ctxAnchor;
         const mod = ((k % total) + total) % total;
         M.idx = Math.floor(mod/M.sub); M.subIdx = mod % M.sub;
         M.running = true;
         M.timer = setInterval(tick, 25); tick();
+        if (!ringRaf) ringRaf = requestAnimationFrame(ringLoop);
       }
       paintPlay();
       clearTimeout(slaveTimeout);   // failsafe: sin anclas 6s = maestro ausente
