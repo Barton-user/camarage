@@ -25,6 +25,9 @@
     <!-- Wake lock para que la pantalla no se apague durante el show -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Vibracion del metronomo (navigator.vibrate en el WebView) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
