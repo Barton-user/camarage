@@ -5952,6 +5952,10 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       for (const k of ['bpm','beats','sig','sub','accents','vol','flash','vib','trainer'])
         if (saved[k] !== undefined) M[k] = saved[k];
     } catch(e){}
+    // vib paso de booleano a nivel 0..3 (off/suave/media/fuerte)
+    if (M.vib === true) M.vib = 2;
+    if (M.vib === false || !Number.isFinite(+M.vib)) M.vib = 0;
+    M.vib = Math.max(0, Math.min(3, M.vib|0));
     function save(){ try { localStorage.setItem('camarage_metro', JSON.stringify({
       bpm:M.bpm, beats:M.beats, sig:M.sig, sub:M.sub, accents:M.accents,
       vol:M.vol, flash:M.flash, vib:M.vib, trainer:M.trainer })); } catch(e){} }
@@ -5981,7 +5985,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         const fl=document.getElementById('mtFlashEl');
         if (fl){ fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go'); }
       }
-      try { if (M.vib && navigator.vibrate) navigator.vibrate(acc?50:15); } catch(e){}
+      try {
+        if (M.vib && navigator.vibrate){
+          const v = [null, [40,15], [85,28], [150,50]][M.vib] || [85,28];
+          navigator.vibrate(acc ? v[0] : v[1]);
+        }
+      } catch(e){}
     }
     function tick(){
       if (!M.running || !audioCtx) return;
@@ -6133,7 +6142,20 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       b.addEventListener('click',()=>{ M[key]=!M[key]; paint(); save(); });
       paint();
     }
-    chip('mtFlash','flash'); chip('mtVib','vib'); chip('mtTrainer','trainer');
+    chip('mtFlash','flash'); chip('mtTrainer','trainer');
+    const vibBtn = $m('mtVib');
+    const VIB_LBL = ['off','suave','media','fuerte'];
+    function paintVib(){
+      vibBtn.classList.toggle('on', M.vib > 0);
+      vibBtn.innerHTML = '&#128243; ' + (M.vib > 0 ? VIB_LBL[M.vib] : 'vibrar');
+    }
+    vibBtn.addEventListener('click', ()=>{
+      M.vib = ((M.vib|0) + 1) % 4;
+      paintVib(); save();
+      // pulso de muestra para sentir el nivel elegido
+      try { if (M.vib && navigator.vibrate) navigator.vibrate([null,40,85,150][M.vib]); } catch(e){}
+    });
+    paintVib();
     /* --- Sync entre aparatos ---------------------------------------------
      * Maestro: en cada compas manda el ancla (epoch del beat 1 agendado) +
      * parametros. Seguidor: convierte el ancla a su reloj con el desfase NTP
