@@ -32,3 +32,6 @@ npm-debug.log*
 # (si querés excluirlos, descomentá las dos líneas siguientes)
 # *.apk
 # camarage-android.zip
+
+# Salidas de Claude (capturas, auxiliares)
+Claude outputs/

@@ -1,7 +1,7 @@
 # CAMARAGE · Contexto del proyecto
 
 > Documento para retomar el proyecto en otra conversación.
-> **Última actualización: 21 ago 2026, cierre del día.** Sesión de UX/UI a lo
+> **Última actualización: 4 sep 2026** (ver §0-bis, arriba de §0). Actualización anterior: **21 ago 2026, cierre del día.** Sesión de UX/UI a lo
 > largo de todo el día (10 commits): rediseño completo de la vista del
 > baterista (disco gigante, latido de pantalla, letra de 5 renglones, fader
 > único de click), transporte unificado en UNA fila en las tres vistas, STOP
@@ -21,6 +21,117 @@
 > ⚠️ **LEER ESTA PRIMERA PARTE ENTERA ANTES DE TOCAR NADA.** Todo lo que está
 > después de la marca «ARCHIVO HISTÓRICO» describe la arquitectura vieja y buena
 > parte ya no aplica. Sirve para no repetir caminos muertos, no como plan.
+
+---
+
+# 0-bis · SESIONES 3–4 SEP 2026 — skins fieles a Figma, auto-ocultado, fix de cambio de canción
+
+**Estado al 4 sep 2026.** Todo lo de acá está en `index.html` con sello
+`20260904-1229` (o posterior), copiado a `camarage-android/www/` y a
+`ios/App/App/public/`. Se compiló e instaló en el **A56** durante la sesión;
+**los tres iOS siguen con el build del 17 ago** (falta ⌘R en Xcode).
+Entre el 22 ago y el 30 ago hubo además 8 commits sin registrar acá: modo
+**Metrónomo** (pestaña METRO, disco heredado + jog wheel, vibración 3 niveles,
+sync maestro→seguidores), **editor de letras sobre forma de onda** en la web
+(estilo SoundCloud, selección múltiple de pins), y **fin marcado de pista**
+(`songs.audio_end_seconds`).
+
+## Bug arreglado: ⏭/⏮ con la música parada + PLAY sonaba otra canción
+`TRACKS.loadForCurrentSong()` es asíncrona (IndexedDB → arrayBuffer →
+decodeAudioData) y no tenía control de concurrencia: dos cargas en paralelo y
+la que terminaba ÚLTIMA pisaba `st.buffer`. Fix: contador de generación
+`st.loadGen` (toda carga vieja se descarta después de cada `await`),
+`decodeAndUse()` verifica que la clave siga siendo la de la canción en pantalla,
+`play()` se blinda contra un buffer ajeno (recarga), y si se toca PLAY con la
+pista todavía cargando queda armado (`st.playWhenReady`) y arranca al terminar
+en vez de caer al modo MIDI con el metrónomo pelado.
+
+## Skins: de paletas a los diseños de Figma
+La sesión anterior había implementado las 5 skins como tokens de color, con la
+regla "una skin no mueve controles" estirada a "no cambia el layout". Pato lo
+marcó; se rehicieron **fieles a los mockups** (archivo Figma "CAMARAGE ·
+Exploración UX/UI", páginas 03 y 04), sin mover el transporte:
+
+- **Lumina (P10)**: pill de estado flotante reemplaza al header (tocarla lo
+  despliega), sheet de vidrio para el transporte con handle + barra de progreso
+  (tocable: hace seek), botones redondos, PLAY 84 px con glow único. Cantante:
+  sección arriba al centro, "CHORUS en 8 compases" abajo. Batería: disco liso
+  con arco azul del compás (`#skinDrumRing`, sigue la rotación de la aguja),
+  sin aguja ni puntos, y UNA fila compacta debajo: `112 BPM` · `BAR 034 · 1/4 ·
+  00:00` · selector de subdivisión (SKINUI lo mueve del disco a esa fila).
+- **Brutal Stage (P04)**: cartel amarillo arriba (`VERSO 2 ▸ CHORUS EN 8`; en
+  batería `BAR 034 · 4/4 · 112 BPM`), línea activa en bloque amarillo Archivo
+  Black, contexto en **Oswald** (embebida en base64 como las otras), progreso
+  segmentado 1 bloque = 4 compases con "034 / 096 COMPASES", botones-bloque
+  PLAY blanco / STOP rojo, leyenda "STOP = DOS GOLPES", cinta de peligro sobre
+  la nav, beat gigante amarillo sin disco, cero transiciones. ⚙ vive en la
+  stage bar (`#skinSettingsBtn`).
+- **Sinestesia (P03)**: cada sección tiñe la pantalla con su hue (intro
+  violeta, verso cyan, estribillo magenta, puente ámbar, pre lila; resto rota),
+  subway map de estaciones abajo (tap = salto cuantizado al compás, solo
+  maestro con pista), el color de la próxima sección sangra desde abajo en los
+  últimos 4 compases, disco late al tempo en el hue. Las secciones salen de
+  `SKINUI.secciones()`: letra (`section` + `t`) o acordes (`section` + `bar`).
+  **Canción sin secciones = una estación y tinte fijo** (deuda de datos).
+- **Timeline DAW (P07)** sigue siendo paleta (dice "paleta, v1" en Ajustes).
+  La base para la timeline de regiones ya está en `SKINUI.secciones()`.
+- Módulo **`SKINUI`** (JS): inyecta `.skin-tr-top` en cada `.transport-row`,
+  alimenta pill/cartel/etiquetas a 8 fps leyendo el DOM que el resto de la app
+  ya escribe; rAF para el anillo y el pulso. Elementos ocultos por defecto con
+  `.skin-el` y mostrados por `html[data-skin=…]`.
+
+## Auto-ocultado del chrome (todas las skins)
+Módulo **`CHROME`**: a los 10 s sin tocar se esconden header (o pill) y bottom
+nav (`body.chrome-oculto`); un toque en cualquier lugar que NO sea un control
+los trae por otros 10 s. Tocar un botón con el chrome escondido no lo destapa
+(PLAY a ciegas no muestra menús) pero sí renueva el contador si estaba visible.
+Exentos: vista Setlist, modal de Ajustes, pantalla bloqueada. La stage bar
+(A±/brillo/candado) queda siempre visible. **Gotcha**: se ocultaba con
+`transform`+`opacity` en transición y en el WebView del A56 la nav (fixed +
+backdrop-blur) parpadeaba con las animaciones del metrónomo; ahora es
+`display:none` y la nav tiene `z-index:40` (sobre los flashes z-30).
+
+## Build sin red
+`build.sh` necesita `npx tailwindcss` y la Mac no tenía red para bajarlo en la
+sesión: el CSS se generó afuera (Tailwind 3.4.19, misma config) y quedó como
+`tw.css` en la raíz; después se corrió a mano la parte de sello + copia. Si la
+Mac tiene red, `bash build.sh` sigue siendo el camino. `_to_delete/oswald_face.css`
+es un auxiliar que ya se inyectó; se puede borrar.
+
+## Figma: página "07 · Notas / Partitura — 4 opciones"
+Pedido de Pato: convertir la vista BAJO en **NOTAS** con selector CIFRADO ·
+PENTAGRAMA · PARTITURA. Cuatro propuestas dibujadas (N1 Cifrado+, N2
+Pentagrama, N3 Partitura·parte en celu, N4 Atril apaisado iPad) más una nota de
+arquitectura: Cifrado usa datos existentes; Partitura pide PDF por parte + mapa
+"página/sistema → compás" (marcado en la web como los tiempos de letra);
+Pentagrama pide MusicXML + OpenSheetMusicDisplay/Verovio. Orden sugerido:
+Cifrado+ → Partitura → Pentagrama. Motivación: modo orquesta con ~20
+seguidores (el SYNC lo aguanta: 1 baliza/2 s del maestro, ping cada 8 s por
+seguidor; hace falta wifi propio, alta de miembros y vista por rol).
+
+## Conversaciones de producto (sin código)
+- **Seguidores no reproducen audio**: siguen el reloj (letras, disco, sección);
+  `TRACKS.play()` nunca se llama en un seguidor. "Seguidor con audio" es
+  factible (±3–7 ms) pero es feature nueva.
+- **Sync**: sin rango de distancia (pasa por Supabase); precisión medida 2,7 ms
+  wifi / 6,9 ms 4G / 49 ms red mala. Sin internet desde el arranque no se
+  engancha; si se corta a mitad, sigue con reloj propio. Bluetooth descartado
+  (4–8 conexiones, 10 m, plugin nativo). Camino: **maestro como servidor en
+  wifi local** (router en la valija; hotspot solo para 4–6).
+- **MIDI**: los eventos NO viajan por la red, se agendan localmente; un WIDI
+  Master ya anda hoy (⚙ → "Conectar BLE (Mac)" busca cualquier BLE MIDI);
+  varios WIDI por grupo WIDI + canales; a futuro **USB MIDI** (plugin
+  MidiManager/CoreMIDI) para semifusas a 150 bpm.
+
+## Pendientes que dejó esta sesión
+1. ⌘R en Xcode para los dos iPads y el iPhone (todo lo de arriba).
+2. Confirmar en el A56 que el parpadeo de la nav en Metro se fue (`20260904-1229`);
+   si no, sacar el `backdrop-blur` de `#bottomNav`.
+3. Decidir si el ⚙ va fijo al lado de la pill en Lumina/Sinestesia.
+4. Timeline DAW fiel (timeline de regiones, playhead fijo, ▸ CHORUS / ⟳ LOOP).
+5. Versionar: `versionName "1.1.0"` / `versionCode 2` (propuesto, sin respuesta).
+6. Elegir propuesta de NOTAS en Figma e implementar (Cifrado+ primero).
+7. Todo lo de §4 sigue vigente (datos, vista por rol, miembros, PWA…).
 
 ---
 
