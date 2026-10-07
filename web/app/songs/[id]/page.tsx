@@ -543,6 +543,22 @@ export default function SongEditor() {
     setPreviewUrl(data?.signedUrl || null);
   }
 
+  async function downloadAudio() {
+    if (!song?.audio_path) return;
+    setAudioErr(null);
+    const { data, error } = await supabase.storage
+      .from(AUDIO_BUCKET)
+      .createSignedUrl(song.audio_path, 300, { download: song.audio_filename || true });
+    if (error) { setAudioErr(error.message); return; }
+    if (!data?.signedUrl) return;
+    const a = document.createElement("a");
+    a.href = data.signedUrl;
+    a.download = song.audio_filename || "pista";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   // ===== LYRICS =====
   async function addLyric() {
     const lastT = lyrics.at(-1)?.start_time_seconds ?? 0;
@@ -1105,6 +1121,9 @@ export default function SongEditor() {
                   <input type="file" accept="audio/*" className="hidden" disabled={uploading}
                          onChange={e => { const f = e.target.files?.[0]; if (f) uploadAudio(f); e.currentTarget.value = ""; }} />
                 </label>
+                <button onClick={downloadAudio} disabled={uploading} className="btn text-xs">
+                  ⬇ Descargar
+                </button>
                 <button onClick={removeAudio} disabled={uploading}
                         className="btn text-xs text-red-400 hover:text-red-300">
                   Borrar pista
