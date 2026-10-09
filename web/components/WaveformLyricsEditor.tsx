@@ -11,6 +11,12 @@
  * (posición + offset). Con offset 0 es 1:1.
  *
  * Guardado: al soltar el pin / salir del campo, vía callbacks del padre.
+ *
+ * Grilla de tempo + click: para verificar que el bounce no esté desfasado.
+ * El compás 1 cae en tiempo de contenido 0 (el mismo origen que usa el .mid
+ * de cues), o sea en tiempo de audio −offset. Si la grilla no coincide con
+ * los golpes del click del archivo, se corrige con el offset desde acá mismo
+ * (mueve grilla + letras juntas, igual que el offset de la solapa Datos).
  * ========================================================================== */
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 
@@ -30,6 +36,15 @@ const WAVE_H = WAVE_TOP + 4 + WAVE_BOT;
 const MAX_CANVAS_W = 28000;    // límite de ancho de canvas (memoria/navegador)
 const COLOR_REST = "#8a8a8a";
 const COLOR_PLAYED = "#22d3ee";
+const GRID_BEAT = "rgba(167,139,250,0.22)";   // violeta: no se confunde con los pins cian
+const GRID_BAR = "rgba(167,139,250,0.75)";
+const GRID_LABEL = "rgba(196,181,253,0.9)";
+const LS_GRID = "camarage.wave.grid";
+const LS_CLICK = "camarage.wave.clickVol";
+
+function lsGet(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k: string, v: string) { try { localStorage.setItem(k, v); } catch {} }
+const mod = (a: number, n: number) => ((a % n) + n) % n;
 
 function fmtClock(t: number, withCents = false): string {
   if (!isFinite(t) || t < 0) t = 0;
@@ -51,6 +66,9 @@ export default function WaveformLyricsEditor({
   onRemove,
   onChangeEnd,
   onChangeTimeMany,
+  bpm = 0,
+  timeSignature = "4/4",
+  onChangeOffset,
 }: {
   audioUrl: string;
   lyrics: Lyric[];
@@ -67,8 +85,32 @@ export default function WaveformLyricsEditor({
   onChangeEnd?: (sec: number | null) => void;
   /** Guardado en lote (mover varias líneas juntas). Si falta, se llama onChangeTime por cada una. */
   onChangeTimeMany?: (changes: { id: string; sec: number }[]) => void;
+  /** Tempo de la canción, para la grilla y el click. 0 = sin grilla. */
+  bpm?: number;
+  /** "4/4", "3/4", "6/8"… se usa el numerador como tiempos por compás. */
+  timeSignature?: string;
+  /** Guarda un offset nuevo (segundos). Si falta, no se muestran los botones de corrimiento. */
+  onChangeOffset?: (sec: number) => void;
 }) {
   const offset = Number(offsetSeconds) || 0;
+
+  // --- Grilla de tempo ---
+  const bpmN = Number(bpm) > 0 ? Number(bpm) : 0;
+  const beatsPerBar = Math.max(1, Math.min(16, parseInt(String(timeSignature || "4/4"), 10) || 4));
+  const beatDur = bpmN > 0 ? 60 / bpmN : 0;
+  const gridOrigin = -offset;                       // compás 1, tiempo 1 (en tiempo de AUDIO)
+  const gridRef = useRef({ origin: gridOrigin, beatDur, beatsPerBar });
+  gridRef.current = { origin: gridOrigin, beatDur, beatsPerBar };
+  const [gridOn, setGridOn] = useState(true);
+  const [clickVol, setClickVol] = useState(0);     // 0 = click apagado
+  useEffect(() => {
+    const g = lsGet(LS_GRID); if (g === "0") setGridOn(false);
+    const v = parseFloat(lsGet(LS_CLICK) || ""); if (v > 0 && v <= 1) setClickVol(v);
+  }, []);
+  const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const beatReadRef = useRef<HTMLSpanElement | null>(null);
+  const beatDotsRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const clickCtxRef = useRef<AudioContext | null>(null);
 
   // --- Audio + análisis ---
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -225,6 +267,116 @@ export default function WaveformLyricsEditor({
     drawInto(playedCanvasRef.current, COLOR_PLAYED);
   }, [peaks, duration, fullW, pps]);
 
+  /* ---------- grilla de tempo (canvas encima de la onda) ---------- */
+  useEffect(() => {
+    const canvas = gridCanvasRef.current;
+    if (!canvas) return;
+    const dpr = fullW > 6000 ? 1 : Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = fullW * dpr;
+    canvas.height = WAVE_H * dpr;
+    canvas.style.width = fullW + "px";
+    canvas.style.height = WAVE_H + "px";
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, fullW, WAVE_H);
+    if (!gridOn || !beatDur || duration <= 0) return;
+    const beatPx = beatDur * pps;
+    const barPx = beatPx * beatsPerBar;
+    if (barPx < 3) return;                          // demasiado apretado: no aporta
+    const showBeats = beatPx >= 6;
+    let labelEvery = 1;
+    while (labelEvery * barPx < 30) labelEvery *= 2;
+    ctx.font = "bold 9px ui-monospace, monospace";
+    ctx.textBaseline = "top";
+    const k0 = Math.ceil((0 - gridOrigin) / beatDur - 1e-6);
+    for (let k = k0; ; k++) {
+      const t = gridOrigin + k * beatDur;
+      if (t > duration) break;
+      const x = Math.round(t * pps) + 0.5;
+      const isBar = mod(k, beatsPerBar) === 0;
+      if (!isBar && !showBeats) continue;
+      ctx.fillStyle = isBar ? GRID_BAR : GRID_BEAT;
+      ctx.fillRect(x - 0.5, 0, 1, WAVE_H);
+      if (isBar) {
+        const bar = Math.floor(k / beatsPerBar) + 1;
+        if (mod(bar - 1, labelEvery) === 0) {
+          ctx.fillStyle = GRID_LABEL;
+          ctx.fillText(String(bar), x + 2, WAVE_TOP + 6);
+        }
+      }
+    }
+  }, [gridOn, beatDur, beatsPerBar, gridOrigin, fullW, pps, duration]);
+
+  /* ---------- click de metrónomo, agendado contra la posición del audio ----------
+   * El <audio> no comparte reloj con Web Audio, así que se ancla: (reloj del
+   * AudioContext, posición del audio) y se proyecta hacia adelante. Si la
+   * proyección se aleja más de 40 ms de la posición real (seek, buffering), se
+   * re-ancla. Cada golpe se agenda ~120 ms antes, con precisión de sample. */
+  useEffect(() => {
+    if (!clickVol || !beatDur) return;
+    const AC: typeof AudioContext =
+      (window as any).AudioContext || (window as any).webkitAudioContext;
+    const ctx = clickCtxRef.current || new AC();
+    clickCtxRef.current = ctx;
+    ctx.resume().catch(() => {});
+    const master = ctx.createGain();
+    master.gain.value = clickVol;
+    master.connect(ctx.destination);
+    let anchor: { c: number; a: number } | null = null;
+    let nextK: number | null = null;
+    const reset = () => { anchor = null; nextK = null; };
+    const a0 = audioRef.current;
+    a0?.addEventListener("seeking", reset);
+    a0?.addEventListener("play", reset);
+
+    const blip = (when: number, accent: boolean) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "square";
+      o.frequency.value = accent ? 1760 : 1175;
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.3, when + 0.001);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + 0.045);
+      o.connect(g); g.connect(master);
+      o.start(when); o.stop(when + 0.06);
+    };
+
+    const iv = setInterval(() => {
+      const a = audioRef.current;
+      if (!a || a.paused) { reset(); return; }
+      const r = a.playbackRate || 1;
+      const cNow = ctx.currentTime;
+      const aNow = a.currentTime;
+      if (!anchor || Math.abs(anchor.a + (cNow - anchor.c) * r - aNow) > 0.04) {
+        anchor = { c: cNow, a: aNow };
+        nextK = null;
+      }
+      const aEst = anchor.a + (cNow - anchor.c) * r;
+      const { origin, beatDur: bd, beatsPerBar: n } = gridRef.current;
+      if (!bd) return;
+      if (nextK == null) nextK = Math.ceil((aEst - origin) / bd - 1e-6);
+      const horizon = aEst + 0.12 * r;
+      for (;;) {
+        const t = origin + nextK * bd;
+        if (t > horizon) break;
+        if (t >= aEst - 0.005 && t >= 0) {
+          blip(anchor.c + (t - anchor.a) / r, mod(nextK, n) === 0);
+        }
+        nextK++;
+      }
+    }, 25);
+
+    return () => {
+      clearInterval(iv);
+      a0?.removeEventListener("seeking", reset);
+      a0?.removeEventListener("play", reset);
+      try { master.disconnect(); } catch {}
+    };
+  }, [clickVol, beatDur]);
+
+  useEffect(() => () => { clickCtxRef.current?.close().catch(() => {}); }, []);
+
   /* ---------- rAF: playhead + región reproducida + autoscroll ---------- */
   useEffect(() => {
     let raf = 0;
@@ -236,6 +388,21 @@ export default function WaveformLyricsEditor({
         const px = t * pps;
         if (playheadRef.current) playheadRef.current.style.left = px + "px";
         if (clipRef.current) clipRef.current.style.width = px + "px";
+        const gp = gridRef.current;
+        if (gp.beatDur && beatReadRef.current) {
+          const f = (t - gp.origin) / gp.beatDur;
+          const k = Math.floor(f + 1e-4);
+          const beat = mod(k, gp.beatsPerBar);
+          const bar = Math.floor(k / gp.beatsPerBar) + 1;
+          beatReadRef.current.textContent = k < 0 ? "pre" : `${bar}.${beat + 1}`;
+          const lit = !a.paused && k >= 0 && (f - k) < 0.18;
+          beatDotsRef.current.forEach((d, i) => {
+            if (!d) return;
+            const on = lit && i === beat;
+            d.style.opacity = on ? "1" : i === beat ? "0.45" : "0.15";
+            d.style.transform = on ? "scale(1.35)" : "scale(1)";
+          });
+        }
         const sc = scrollRef.current;
         if (sc && !a.paused) {
           const vis0 = sc.scrollLeft, visW = sc.clientWidth;
@@ -602,6 +769,63 @@ export default function WaveformLyricsEditor({
         </div>
       </div>
 
+      {/* Grilla de tempo + click */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-400/25 bg-violet-400/5 px-3 py-2">
+        {bpmN > 0 ? (
+          <>
+            <span className="text-[11px] font-mono text-violet-200 whitespace-nowrap">
+              {bpmN} BPM · {beatsPerBar}/{String(timeSignature || "4/4").split("/")[1] || "4"}
+            </span>
+            <span className="flex items-center gap-1" aria-hidden>
+              {Array.from({ length: beatsPerBar }).map((_, i) => (
+                <span key={i} ref={el => { beatDotsRef.current[i] = el; }}
+                      className="inline-block rounded-full transition-transform duration-75"
+                      style={{ width: 9, height: 9, opacity: 0.15,
+                               background: i === 0 ? "#f0abfc" : "#a78bfa" }} />
+              ))}
+            </span>
+            <span ref={beatReadRef} className="font-mono text-[11px] text-violet-300 w-12">1.1</span>
+            <button onClick={() => { const v = !gridOn; setGridOn(v); lsSet(LS_GRID, v ? "1" : "0"); }}
+                    className="btn text-xs"
+                    style={gridOn ? { borderColor: "rgba(167,139,250,0.7)", color: "#c4b5fd" } : undefined}
+                    title="Mostrar las líneas de compás y tiempo sobre la onda">
+              {gridOn ? "▦ Grilla ON" : "▦ Grilla"}
+            </button>
+            <button onClick={() => {
+                      const v = clickVol ? 0 : 0.6;
+                      setClickVol(v); lsSet(LS_CLICK, String(v));
+                      clickCtxRef.current?.resume().catch(() => {});
+                    }}
+                    className="btn text-xs"
+                    style={clickVol ? { borderColor: "rgba(167,139,250,0.7)", color: "#c4b5fd" } : undefined}
+                    title="Suma un click de metrónomo de la app mientras suena la pista, para comparar de oído contra el click del archivo">
+              {clickVol ? "♩ Click ON" : "♩ Click"}
+            </button>
+            {!!clickVol && (
+              <input type="range" min={0.05} max={1} step={0.05} value={clickVol}
+                     onChange={e => { const v = parseFloat(e.target.value); setClickVol(v); lsSet(LS_CLICK, String(v)); }}
+                     className="w-20 accent-violet-400" title="Volumen del click" />
+            )}
+            {onChangeOffset && (
+              <span className="flex items-center gap-1 ml-auto" title="Corre la grilla Y las letras juntas respecto del audio (es el mismo offset de la solapa Datos)">
+                <span className="text-[10px] text-neutral-500 mr-1 whitespace-nowrap">grilla + letras</span>
+                <button onClick={() => onChangeOffset(Number((offset + 0.1).toFixed(3)))} className="btn text-[11px] px-2">◀ 100</button>
+                <button onClick={() => onChangeOffset(Number((offset + 0.01).toFixed(3)))} className="btn text-[11px] px-2">◀ 10</button>
+                <span className="font-mono text-[11px] text-violet-200 w-16 text-center">
+                  {offset ? `${offset > 0 ? "+" : ""}${Math.round(offset * 1000)} ms` : "0 ms"}
+                </span>
+                <button onClick={() => onChangeOffset(Number((offset - 0.01).toFixed(3)))} className="btn text-[11px] px-2">10 ▶</button>
+                <button onClick={() => onChangeOffset(Number((offset - 0.1).toFixed(3)))} className="btn text-[11px] px-2">100 ▶</button>
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-[11px] text-neutral-500">
+            Cargá el BPM en la solapa <b>Datos</b> para ver la grilla de tempo y usar el click.
+          </span>
+        )}
+      </div>
+
       {/* Línea sonando */}
       <div className="rounded-lg border border-neutral-800 bg-black/50 px-3 py-2 min-h-[38px] flex items-center">
         {currentLine ? (
@@ -675,6 +899,7 @@ export default function WaveformLyricsEditor({
               <div ref={clipRef} className="absolute top-0 left-0 overflow-hidden" style={{ width: 0, height: WAVE_H }}>
                 <canvas ref={playedCanvasRef} className="absolute top-0 left-0" />
               </div>
+              <canvas ref={gridCanvasRef} className="absolute top-0 left-0 pointer-events-none" />
               {/* Líneas verticales de cada pin */}
               {byTime.map(l => {
                 const sel = selIds.includes(l.id);
