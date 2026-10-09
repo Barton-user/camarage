@@ -1,7 +1,7 @@
 # CAMARAGE · Contexto del proyecto
 
 > Documento para retomar el proyecto en otra conversación.
-> **Última actualización: 4 sep 2026** (ver §0-bis, arriba de §0). Actualización anterior: **21 ago 2026, cierre del día.** Sesión de UX/UI a lo
+> **Última actualización: 9 oct 2026** (ver §0-ter, arriba de todo). Anterior: **4 sep 2026** (§0-bis). Actualización anterior: **21 ago 2026, cierre del día.** Sesión de UX/UI a lo
 > largo de todo el día (10 commits): rediseño completo de la vista del
 > baterista (disco gigante, latido de pantalla, letra de 5 renglones, fader
 > único de click), transporte unificado en UNA fila en las tres vistas, STOP
@@ -21,6 +21,56 @@
 > ⚠️ **LEER ESTA PRIMERA PARTE ENTERA ANTES DE TOCAR NADA.** Todo lo que está
 > después de la marca «ARCHIVO HISTÓRICO» describe la arquitectura vieja y buena
 > parte ya no aplica. Sirve para no repetir caminos muertos, no como plan.
+
+---
+
+# 0-ter · SESIÓN 8–9 OCT 2026 — faders Click/Secu, grilla en el editor, audios de 100 MB
+
+**Estado al 9 oct 2026.** `index.html` con sello `20261009-0301`, copiado a
+`camarage-android/www/`. Web admin con commit `ddf0686` (push lo hace Pato).
+
+## Qué se hizo
+- **Audios de más de 50 MB:** no subían porque el **límite global** de Supabase
+  estaba en 50 MB. Ahora está en 200 MB en Storage → Files → pestaña
+  **Settings** → *Global file size limit* (ya no está en Project Settings). El
+  bucket `song-audio` ya estaba en 200 MB. No tocar el *spend cap*.
+  El bucket acepta mp3/m4a/aac/wav/ogg/flac: un **AIFF de Logic rebota**.
+- **Web · solapa Letras:** grilla de tempo (compases + tiempos, violeta) sobre la
+  onda, click de metrónomo opcional, indicador de pulso `compás.tiempo` y botones
+  ◀100/◀10/10▶/100▶ que corren el **offset** (grilla + letras juntas). Compás 1 =
+  tiempo de contenido 0, igual que el `.mid` de cues. Usa BPM y compás de Datos.
+- **App · vista Batería:** dos faders chatos en dos renglones: **Click** (METRO
+  de la app) y **Secu** (nivel del archivo, `st.fileBus`). Se guardan en
+  localStorage. Ver §2 "Mixer del baterista".
+- **Cómo usa Pato el audio hoy:** el click **no** va en el bounce; usa el METRO
+  de la app. Las **instrucciones habladas** (cues de voz) sí van en el canal
+  izquierdo del bounce. Click y Secu salen por los dos canales, así que **Secu
+  también cambia lo que llega a la consola**. Quedó ofrecido: que los faders
+  actúen solo sobre L (in-ears) y R vaya intacto a FOH.
+
+## A56: reinstalación pendiente (cambio de firma)
+El APK del A56 era del 17 ago, **compilado en la nube** → firma distinta a la de
+la Mac. `adb install -r` falla. Hay que hacer una sola vez:
+```bash
+~/Library/Android/sdk/platform-tools/adb uninstall com.camarage.live
+~/Library/Android/sdk/platform-tools/adb install camarage-android/android/app/build/outputs/apk/debug/app-debug.apk
+```
+(o instalar el APK a mano desde el teléfono). Borra la sesión y las pistas
+cacheadas: re-loguear (`keogan3d@gmail.com`), sincronizar y ⇩ Bajar todas las
+pistas. El 9 oct `adb devices` no veía el teléfono: revisar cable de datos,
+cartel de depuración USB y modo *Transferir archivos*. **Desde ahora compilar
+siempre en la Mac.** Pato reseteó la contraseña el 9 oct (no queda escrita).
+
+## Lo próximo (10 oct)
+1. **Instalar en el iPad** (y el iPad mini): esta vez **sí** hace falta copiar
+   el HTML nuevo a iOS, porque `ios/App/App/public/` quedó viejo:
+   ```bash
+   cd camarage-android && npx cap copy ios
+   open ios/App/App.xcworkspace   # elegir el iPad y ⌘R, por cable
+   ```
+   Verificar en ⚙ el sello `20261009-0301`.
+2. Confirmar en el A56 que aparecen los dos faders y que Secu no toca el click.
+3. Git push de la web (`ddf0686`) si no se hizo, y commit de la app (este).
 
 ---
 
@@ -314,6 +364,12 @@ ganar nada.
 El metrónomo de la app es un **agregado opcional** (botón METRO) que suma encima
 **en los dos canales**, para ensayo. En vivo va apagado y el único click es el del
 archivo. El fader Click del mixer controla su nivel.
+
+**Mixer del baterista (8 oct):** dos faders chatos en la vista Batería.
+**Click** = nivel del METRO de la app (hoy Pato usa ese click, no uno bounceado).
+**Secu** = nivel del archivo entero (`st.fileBus`, solo ganancia, no toca canales).
+Los dos se guardan en localStorage (`camarage_mix_click`, `camarage_mix_seqs`);
+Secu arranca en 100 para no cambiar lo que ya sonaba.
 
 **Convención de bounce de Pato:** canal izquierdo = click + secuencias, canal
 derecho = solo secuencias. Por lo tanto el cableado es:
