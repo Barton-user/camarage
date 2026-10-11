@@ -16,3 +16,12 @@ CAP_PLUGIN(MidiPeripheralPlugin, "MidiPeripheral",
     CAP_PLUGIN_METHOD(sendToMac, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(setKeepAwake, CAPPluginReturnPromise);
 )
+
+// Sync entre integrantes por red local (clase en MidiPeripheralPlugin.swift)
+CAP_PLUGIN(LocalSyncPlugin, "LocalSync",
+    CAP_PLUGIN_METHOD(startServer, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(startClient, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(send, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(stop, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(info, CAPPluginReturnPromise);
+)

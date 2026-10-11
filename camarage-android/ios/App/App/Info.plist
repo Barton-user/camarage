@@ -22,6 +22,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CAMARAGE usa la red WiFi local para sincronizar el tiempo con los otros integrantes de la banda, sin necesitar internet</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_camarage._tcp</string>
+	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>CAMARAGE usa Bluetooth para conectarse al WIDI y a la Mac por MIDI inalambrico</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>

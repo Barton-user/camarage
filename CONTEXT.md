@@ -1,7 +1,7 @@
 # CAMARAGE · Contexto del proyecto
 
 > Documento para retomar el proyecto en otra conversación.
-> **Última actualización: 9 oct 2026** (ver §0-ter, arriba de todo). Anterior: **4 sep 2026** (§0-bis). Actualización anterior: **21 ago 2026, cierre del día.** Sesión de UX/UI a lo
+> **Última actualización: 11 oct 2026** (ver §0-quater, arriba de todo). Anterior: 9 oct (§0-ter). Anterior: **4 sep 2026** (§0-bis). Actualización anterior: **21 ago 2026, cierre del día.** Sesión de UX/UI a lo
 > largo de todo el día (10 commits): rediseño completo de la vista del
 > baterista (disco gigante, latido de pantalla, letra de 5 renglones, fader
 > único de click), transporte unificado en UNA fila en las tres vistas, STOP
@@ -21,6 +21,54 @@
 > ⚠️ **LEER ESTA PRIMERA PARTE ENTERA ANTES DE TOCAR NADA.** Todo lo que está
 > después de la marca «ARCHIVO HISTÓRICO» describe la arquitectura vieja y buena
 > parte ya no aplica. Sirve para no repetir caminos muertos, no como plan.
+
+---
+
+# 0-quater · SESIÓN 10–11 OCT 2026 — sync por red local, audio frenado en iOS, media pantalla
+
+**Estado al 11 oct 2026.** `index.html` con sello `20261011-2202` (o posterior).
+Probado en el iPad Pro: el plugin de red local carga y pide el permiso de red local.
+
+## ⚠️ Gotcha de iOS que hizo perder una tarde
+**Xcode compila `camarage-android/ios/App/MidiPeripheralPlugin.swift` y `.m`**
+(en la raíz de `ios/App/`, NO en `ios/App/App/`). Había una copia duplicada en
+`ios/App/App/` que no se compilaba; se editó esa y ningún cambio nativo llegaba
+al aparato (el HTML sí, porque se copia aparte). La copia duplicada se borró.
+Para confirmar que un cambio nativo entró: Clean Build Folder (⇧⌘K), ⌘R, y
+buscar en la consola de Xcode la línea `[CAMARAGE] LocalSync registrado: true`.
+
+En iOS la app **no carga @capacitor/core**: `Capacitor.Plugins` puede no listar
+los plugins propios. El JS habla con `LocalSync` por `Capacitor.nativePromise` /
+`Capacitor.addListener` (ver `pluginLocal()`), que vienen del native-bridge.
+
+## Sync por red local (nuevo, configurable)
+- ⚙ → Sync entre integrantes → **Conexión: por internet | red local**.
+  Internet = Supabase como siempre (default). Red local = sin internet.
+- Plugin nativo `LocalSync` (Android `LocalSyncPlugin.java`, iOS en
+  `MidiPeripheralPlugin.swift`): el maestro abre TCP en el puerto **47800** y se
+  anuncia por Bonjour `_camarage._tcp`; el seguidor lo busca solo, o por IP manual
+  (campo en Ajustes), o prueba la `.1` de la red. Una línea JSON por mensaje,
+  con `b` = banda para ignorar otras bandas en el mismo WiFi.
+- La lógica de balizas / NTP / metrónomo es la misma para los dos transportes.
+- Red: cualquier WiFi aunque no tenga internet. Lo más simple: **hotspot del
+  A56** (la Antelope lo carga por USB-C, la batería no es problema).
+- iOS pide el permiso **Red local** la primera vez (Info.plist:
+  `NSLocalNetworkUsageDescription` + `NSBonjourServices`).
+- Pendiente: probar de punta a punta A56 maestro ↔ iPad seguidor con PLAY,
+  medir el ±ms real, y reinstalar el A56 con el APK nuevo (trae LocalSync).
+
+## Otros arreglos
+- **Audio frenado en iOS:** el AudioContext queda `interrupted` (no `suspended`)
+  tras llamadas/Siri/segundo plano → no sonaba y la pantalla quedaba congelada al
+  repartir el tiempo. `despertarAudio()` + vigía `vigilarReloj()` que avisa en la
+  barra si el reloj no avanza.
+- **Sin zoom** por doble toque ni pellizco (viewport + touch-action + gesturestart).
+- **Batería a media pantalla** (iPad partido / Stage Manager / mini apaisado):
+  3 columnas disco | letra | rail, disco medido con container query.
+- **PLAY con la pista cargando:** el botón dice CARGANDO… y titila; si la pista
+  falló pero existe en la nube, PLAY reintenta y arranca al terminar.
+- iPhone 17 con iOS 27.0.1: no verifica el certificado del Apple ID gratis
+  ("se requiere conexión a internet"). Pendiente: actualizar Xcode o esperar.
 
 ---
 

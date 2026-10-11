@@ -5,6 +5,7 @@ import CoreMIDI
 import CoreAudioKit
 import UIKit
 import AVFoundation
+import Network
 
 /**
  * CAMARAGE · MIDI Peripheral (iOS / iPadOS)
@@ -76,6 +77,17 @@ public class MidiPeripheralPlugin: CAPPlugin, CAPBridgedPlugin, CBPeripheralMana
 
     override public func load() {
         configureAudioSession()
+        // Registrar el plugin de sync por red local desde acá: este plugin SÍ se
+        // carga en todos los iPads, y el registro desde MainViewController no
+        // estaba corriendo ("Error loading plugin LocalSync"). Asíncrono para no
+        // tocar la lista de plugins del bridge mientras la está recorriendo.
+        DispatchQueue.main.async { [weak self] in
+            guard let br = self?.bridge else { NSLog("[CAMARAGE] LocalSync: sin bridge"); return }
+            if br.plugin(withName: "LocalSync") == nil {
+                br.registerPluginInstance(LocalSyncPlugin())
+            }
+            NSLog("[CAMARAGE] LocalSync registrado: \(br.plugin(withName: "LocalSync") != nil)")
+        }
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAudioInterruption(_:)),
@@ -588,6 +600,10 @@ public class MidiPeripheralPlugin: CAPPlugin, CAPBridgedPlugin, CBPeripheralMana
 public class MainViewController: CAPBridgeViewController {
     override public func capacitorDidLoad() {
         bridge?.registerPluginInstance(MidiPeripheralPlugin())
+        // Sync por red local (sin internet). Sin esta línea iOS no lo carga y el
+        // seguidor se queda "buscando maestro" para siempre.
+        bridge?.registerPluginInstance(LocalSyncPlugin())
+        NSLog("[CAMARAGE] LocalSync registrado: \(bridge?.plugin(withName: "LocalSync") != nil)")
         // Red de seguridad: dejamos la sesión de audio en .playback lo antes
         // posible, sin depender de que el plugin haya corrido su load().
         do {
@@ -597,5 +613,334 @@ public class MainViewController: CAPBridgeViewController {
         } catch {
             NSLog("[CAMARAGE] AVAudioSession desde MainViewController falló: \(error)")
         }
+    }
+}
+
+
+// ============================================================================
+// CAMARAGE · Sync por red local (sin internet) — versión iOS
+// ----------------------------------------------------------------------------
+// Va en este mismo archivo a propósito: así queda dentro del target de Xcode
+// sin tener que tocar el project.pbxproj.
+//
+// El maestro abre un servidor TCP (NWListener) en la red WiFi local y se anuncia
+// por Bonjour como "_camarage._tcp". Los seguidores lo encuentran (NWBrowser) y
+// se conectan directo. Sirve cualquier WiFi aunque no tenga internet.
+// Una línea de texto por mensaje; el JSON lo arma index.html.
+//
+// Misma interfaz que Android (LocalSyncPlugin.java):
+//   startServer({port?}) · startClient({host?, port?}) · send({data}) · stop() · info()
+//   eventos: "message" {data} · "state" {mode, listening, connected, clients, peer}
+// ============================================================================
+
+final class LSConn {
+    let conn: NWConnection
+    let addr: String
+    private var buffer = Data()
+    var onLine: ((String) -> Void)?
+    var onClose: (() -> Void)?
+    private var closed = false
+
+    init(_ c: NWConnection) {
+        conn = c
+        switch c.endpoint {
+        case .hostPort(let host, _): addr = "\(host)"
+        case .service(let name, _, _, _): addr = name
+        default: addr = "?"
+        }
+    }
+
+    func receive() {
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self else { return }
+            if let data = data, !data.isEmpty {
+                self.buffer.append(data)
+                while let idx = self.buffer.firstIndex(of: 0x0A) {
+                    let lineData = self.buffer.subdata(in: self.buffer.startIndex..<idx)
+                    self.buffer.removeSubrange(self.buffer.startIndex...idx)
+                    if let line = String(data: lineData, encoding: .utf8), !line.isEmpty {
+                        self.onLine?(line)
+                    }
+                }
+            }
+            if isComplete || error != nil { self.close(); return }
+            self.receive()
+        }
+    }
+
+    func send(_ line: String) {
+        guard !closed, let d = (line + "\n").data(using: .utf8) else { return }
+        conn.send(content: d, completion: .contentProcessed { [weak self] err in
+            if err != nil { self?.close() }
+        })
+    }
+
+    func close() {
+        if closed { return }
+        closed = true
+        conn.cancel()
+        onClose?()
+    }
+}
+
+@objc(LocalSyncPlugin)
+public class LocalSyncPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "LocalSyncPlugin"
+    public let jsName = "LocalSync"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "startServer", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startClient", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "send", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "info", returnType: CAPPluginReturnPromise)
+    ]
+
+    private static let serviceType = "_camarage._tcp"
+    private let q = DispatchQueue(label: "camarage.localsync")
+    private var mode = "off"                 // off | server | client
+    private var port: UInt16 = 47800
+    private var gen = 0
+    private var listener: NWListener?
+    private var peers: [LSConn] = []
+    private var upstream: LSConn?
+    private var pendiente: LSConn?           // retiene la conexión mientras se establece
+    private var connecting = false
+    private var browser: NWBrowser?
+    private var bonjourEndpoint: NWEndpoint?
+    private var manualHost: String?
+    private var timer: DispatchSourceTimer?
+    private var candidatoIdx = 0
+
+    private func params() -> NWParameters {
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        tcp.connectionTimeout = 2
+        let p = NWParameters(tls: nil, tcp: tcp)
+        p.includePeerToPeer = true
+        return p
+    }
+
+    // ------------------------------------------------------------ API JS
+
+    @objc func startServer(_ call: CAPPluginCall) {
+        let pt = UInt16(call.getInt("port") ?? 47800)
+        q.async {
+            self.stopAll()
+            self.gen += 1
+            let myGen = self.gen
+            self.mode = "server"
+            self.port = pt
+            do {
+                guard let nwPort = NWEndpoint.Port(rawValue: pt) else { throw NSError(domain: "LocalSync", code: 1) }
+                let l = try NWListener(using: self.params(), on: nwPort)
+                l.service = NWListener.Service(name: "CAMARAGE " + self.nombreEquipo(), type: LocalSyncPlugin.serviceType)
+                l.newConnectionHandler = { [weak self] c in
+                    guard let self = self, myGen == self.gen else { c.cancel(); return }
+                    let p = LSConn(c)
+                    p.onLine = { [weak self] line in self?.notifyListeners("message", data: ["data": line]) }
+                    p.onClose = { [weak self, weak p] in
+                        guard let self = self else { return }
+                        self.q.async {
+                            self.peers.removeAll { $0 === p }
+                            if myGen == self.gen { self.notifyState() }
+                        }
+                    }
+                    c.stateUpdateHandler = { [weak self, weak p] st in
+                        guard let self = self else { return }
+                        switch st {
+                        case .ready: self.q.async { self.notifyState() }
+                        case .failed(_), .cancelled: p?.close()
+                        default: break
+                        }
+                    }
+                    self.peers.append(p)
+                    c.start(queue: self.q)
+                    p.receive()
+                }
+                l.stateUpdateHandler = { [weak self] st in
+                    guard let self = self else { return }
+                    if case .failed(let err) = st { NSLog("[CAMARAGE] LocalSync listener falló: \(err)") }
+                    self.q.async { self.notifyState() }
+                }
+                self.listener = l
+                l.start(queue: self.q)
+                self.notifyState()
+                call.resolve(["port": Int(pt), "ips": self.ips()])
+            } catch {
+                self.mode = "off"
+                call.reject("No pude abrir el puerto \(pt): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    @objc func startClient(_ call: CAPPluginCall) {
+        let pt = UInt16(call.getInt("port") ?? 47800)
+        let h = (call.getString("host") ?? "").trimmingCharacters(in: .whitespaces)
+        q.async {
+            self.stopAll()
+            self.gen += 1
+            let myGen = self.gen
+            self.mode = "client"
+            self.port = pt
+            self.manualHost = h.isEmpty ? nil : h
+            // Buscar al maestro por Bonjour
+            let b = NWBrowser(for: .bonjour(type: LocalSyncPlugin.serviceType, domain: nil), using: self.params())
+            b.browseResultsChangedHandler = { [weak self] results, _ in
+                guard let self = self, myGen == self.gen else { return }
+                if let r = results.first { self.bonjourEndpoint = r.endpoint }
+                self.intentarConectar(myGen)
+            }
+            b.start(queue: self.q)
+            self.browser = b
+            // Reintento cada 2 s mientras no haya conexión
+            let t = DispatchSource.makeTimerSource(queue: self.q)
+            t.schedule(deadline: .now(), repeating: 2.0)
+            t.setEventHandler { [weak self] in self?.intentarConectar(myGen) }
+            t.resume()
+            self.timer = t
+            self.notifyState()
+            call.resolve()
+        }
+    }
+
+    @objc func send(_ call: CAPPluginCall) {
+        let data = call.getString("data") ?? ""
+        q.async {
+            if self.mode == "server" { self.peers.forEach { $0.send(data) } }
+            else if self.mode == "client" { self.upstream?.send(data) }
+        }
+        call.resolve()
+    }
+
+    @objc func stop(_ call: CAPPluginCall) {
+        q.async {
+            self.stopAll()
+            self.notifyState()
+            call.resolve()
+        }
+    }
+
+    @objc func info(_ call: CAPPluginCall) {
+        q.async { call.resolve(["ips": self.ips(), "mode": self.mode, "port": Int(self.port)]) }
+    }
+
+    // ------------------------------------------------------------ internos
+
+    private func candidatos() -> [NWEndpoint] {
+        var out: [NWEndpoint] = []
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { return out }
+        if let h = manualHost { out.append(.hostPort(host: NWEndpoint.Host(h), port: nwPort)); return out }
+        if let e = bonjourEndpoint { out.append(e) }
+        // Último recurso: el router/hotspot suele ser la .1 de la red
+        if let ip = ips().first {
+            var parts = ip.split(separator: ".").map(String.init)
+            if parts.count == 4 { parts[3] = "1"; out.append(.hostPort(host: NWEndpoint.Host(parts.joined(separator: ".")), port: nwPort)) }
+        }
+        return out
+    }
+
+    private func intentarConectar(_ myGen: Int) {
+        guard myGen == gen, mode == "client", upstream == nil, !connecting else { return }
+        let lista = candidatos()
+        guard !lista.isEmpty else { return }
+        let ep = lista[candidatoIdx % lista.count]
+        candidatoIdx += 1
+        connecting = true
+        let c = NWConnection(to: ep, using: params())
+        let p = LSConn(c)
+        pendiente = p
+        p.onLine = { [weak self] line in self?.notifyListeners("message", data: ["data": line]) }
+        p.onClose = { [weak self, weak p] in
+            guard let self = self else { return }
+            self.q.async {
+                if self.upstream === p { self.upstream = nil }
+                if self.pendiente === p { self.pendiente = nil }
+                self.connecting = false
+                if myGen == self.gen { self.notifyState() }
+            }
+        }
+        c.stateUpdateHandler = { [weak self, weak p] st in
+            guard let self = self, let p = p else { return }
+            switch st {
+            case .ready:
+                self.q.async {
+                    guard myGen == self.gen else { p.close(); return }
+                    self.connecting = false
+                    self.upstream = p
+                    self.pendiente = nil
+                    self.candidatoIdx = 0
+                    self.notifyState()
+                }
+            case .waiting(_), .failed(_):
+                p.close()
+            case .cancelled:
+                self.q.async { self.connecting = false }
+            default: break
+            }
+        }
+        c.start(queue: q)
+        p.receive()
+        // Si en 2,5 s no quedó lista, abortar y probar el próximo candidato
+        q.asyncAfter(deadline: .now() + 2.5) { [weak self, weak p] in
+            guard let self = self, let p = p else { return }
+            if self.upstream !== p { p.close() }
+        }
+    }
+
+    private func notifyState() {
+        let listening = mode == "server" && listener?.state == .ready
+        notifyListeners("state", data: [
+            "mode": mode,
+            "listening": listening,
+            "connected": mode == "client" && upstream != nil,
+            "clients": peers.count,
+            "peer": upstream?.addr ?? ""
+        ])
+    }
+
+    private func stopAll() {
+        gen += 1
+        mode = "off"
+        timer?.cancel(); timer = nil
+        browser?.cancel(); browser = nil
+        listener?.cancel(); listener = nil
+        let ps = peers; peers = []
+        ps.forEach { $0.close() }
+        let u = upstream; upstream = nil
+        u?.close()
+        let pe = pendiente; pendiente = nil
+        pe?.close()
+        bonjourEndpoint = nil
+        connecting = false
+        candidatoIdx = 0
+    }
+
+    private func nombreEquipo() -> String {
+        var name = ""
+        DispatchQueue.main.sync { name = UIDevice.current.name }
+        return name
+    }
+
+    private func ips() -> [String] {
+        var out: [String] = []
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return out }
+        defer { freeifaddrs(ifaddr) }
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let p = ptr {
+            let flags = Int32(p.pointee.ifa_flags)
+            if let addr = p.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET),
+               (flags & IFF_UP) != 0, (flags & IFF_LOOPBACK) == 0 {
+                let name = String(cString: p.pointee.ifa_name)
+                if name.hasPrefix("en") || name.hasPrefix("bridge") {
+                    var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    if getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
+                        out.append(String(cString: host))
+                    }
+                }
+            }
+            ptr = p.pointee.ifa_next
+        }
+        return out
     }
 }
