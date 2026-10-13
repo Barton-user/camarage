@@ -115,6 +115,11 @@ export default function WaveformLyricsEditor({
   /** Número de compás (1 = el primero) de un tiempo de contenido. */
   const barOf = (c: number) => Math.round(c / (snap || 1)) + 1;
   const focusNewRef = useRef<string | null>(null);
+  /* Modo acordes: casillero flotante sobre la línea de compás para escribir
+   * el acorde ahí mismo. id = null → todavía no existe (se crea al confirmar). */
+  const [inline, setInline] = useState<{ id: string | null; c: number; k: number } | null>(null);
+  const inlineDoneRef = useRef(0);   // k del último casillero ya confirmado/cancelado
+  const inlineSeqRef = useRef(0);
 
   // --- Grilla de tempo ---
   const bpmN = Number(bpm) > 0 ? Number(bpm) : 0;
@@ -606,10 +611,44 @@ export default function WaveformLyricsEditor({
     seekTo(timeFromEvent(e));
   }, [seekTo, timeFromEvent]);
 
+  /* Abre el casillero en el compás más cercano a ese tiempo de contenido. */
+  const openInlineAt = useCallback((c: number) => {
+    const at = snapC(c);
+    const there = lyrics.find(l => Math.abs(Number(l.start_time_seconds) - at) < 1e-3);
+    setInline({ id: there ? there.id : null, c: at, k: ++inlineSeqRef.current });
+    if (there) { setSelIds([there.id]); setPrimaryId(there.id); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lyrics, snap]);
+
+  /* Confirma lo escrito. move = +1/−1 abre el casillero en el compás siguiente/anterior. */
+  const commitInline = useCallback(async (text: string, move: 0 | 1 | -1 = 0) => {
+    const cur = inline;
+    if (!cur || inlineDoneRef.current === cur.k) return;
+    inlineDoneRef.current = cur.k;
+    const val = text.trim();
+    const prev = cur.id ? lyrics.find(l => l.id === cur.id) : null;
+    if (val) {
+      if (cur.id) {
+        if (!prev || prev.text !== val) onChangeText(cur.id, val);
+      } else {
+        const newId = await onInsertAt(cur.c);
+        if (typeof newId === "string" && newId) {
+          onChangeText(newId, val);
+          setSelIds([newId]); setPrimaryId(newId);
+        }
+      }
+      flash(`✓ ${val} en compás ${barOf(cur.c)}`);
+    }
+    if (move) openInlineAt(Math.max(0, cur.c + move * snap));
+    else setInline(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inline, lyrics, onChangeText, onInsertAt, flash, openInlineAt, snap]);
+
   const onWaveDblClick = useCallback((e: React.MouseEvent) => {
     const t = timeFromEvent(e);
-    doInsert(t + offset);
-  }, [timeFromEvent, doInsert, offset]);
+    if (snap) openInlineAt(t + offset);
+    else doInsert(t + offset);
+  }, [timeFromEvent, doInsert, offset, snap, openInlineAt]);
 
   /* ---------- drag de pins (mueve TODA la selección por el mismo delta) ---------- */
   const startDrag = useCallback((e: React.PointerEvent, l: Lyric) => {
@@ -931,7 +970,8 @@ export default function WaveformLyricsEditor({
 
             {/* Rail de pins (2 filas alternadas). Arrastrar sobre el fondo = recuadro de selección. */}
             <div className="relative" style={{ height: 44, touchAction: "none", cursor: "crosshair" }}
-                 onPointerDown={startBoxSel}>
+                 onPointerDown={startBoxSel}
+                 onDoubleClick={e => { if (snap && e.target === e.currentTarget) openInlineAt(timeFromEvent(e) + offset); }}>
               {boxSel && (
                 <div className="absolute pointer-events-none rounded"
                      style={{ left: Math.min(boxSel.t0, boxSel.t1) * pps,
@@ -951,7 +991,11 @@ export default function WaveformLyricsEditor({
                          else if (e.metaKey || e.ctrlKey) toggleSel(l.id);
                          else selectOnly(l.id);
                        }}
-                       onDoubleClick={e => { e.stopPropagation(); seekTo(Math.max(0, t - 2)); audioRef.current?.play().catch(() => {}); }}
+                       onDoubleClick={e => {
+                         e.stopPropagation();
+                         if (snap) { openInlineAt(Number(l.start_time_seconds)); return; }
+                         seekTo(Math.max(0, t - 2)); audioRef.current?.play().catch(() => {});
+                       }}
                        title={`${fmtClock(t, true)} · ${l.text}\narrastrá para mover (mueve toda la selección) · shift+click: rango · ⌘/ctrl+click: sumar/sacar · doble click: escuchar desde acá`}
                        className="absolute cursor-grab active:cursor-grabbing"
                        style={{ left: t * pps, top: i % 2 === 0 ? 2 : 22,
@@ -1005,6 +1049,29 @@ export default function WaveformLyricsEditor({
                     ⚑ FIN
                   </div>
                 </>
+              )}
+              {/* Casillero para escribir el acorde sobre la línea de compás */}
+              {inline && (
+                <div className="absolute" style={{ left: Math.max(0, (inline.c - offset) * pps), top: 8, zIndex: 50 }}
+                     onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+                  <div className="mono text-[9px] text-violet-200 mb-0.5 whitespace-nowrap bg-black/80 rounded px-1 w-fit">comp. {barOf(inline.c)}</div>
+                  <input
+                    key={`inl-${inline.k}`}
+                    autoFocus
+                    defaultValue={inline.id ? ((lyrics.find(l => l.id === inline.id)?.text || "").replace(/^\?$/, "")) : ""}
+                    onFocus={e => e.target.select()}
+                    onKeyDown={e => {
+                      const v = (e.target as HTMLInputElement).value;
+                      if (e.key === "Enter") { e.preventDefault(); commitInline(v, 0); }
+                      else if (e.key === "Tab") { e.preventDefault(); commitInline(v, e.shiftKey ? -1 : 1); }
+                      else if (e.key === "Escape") { e.preventDefault(); inlineDoneRef.current = inline.k; setInline(null); }
+                    }}
+                    onBlur={e => commitInline(e.target.value, 0)}
+                    placeholder="Am7"
+                    className="w-24 rounded-md border-2 border-violet-300 bg-black px-2 py-1 text-sm font-black text-white outline-none shadow-lg"
+                    style={{ boxShadow: "0 0 0 3px rgba(167,139,250,0.25)" }} />
+                  <div className="mono text-[9px] text-neutral-300 mt-0.5 whitespace-nowrap bg-black/80 rounded px-1 w-fit">Enter · Tab = siguiente compás · Esc</div>
+                </div>
               )}
               {/* Playhead */}
               <div ref={playheadRef} className="absolute top-0 pointer-events-none"
@@ -1113,7 +1180,8 @@ export default function WaveformLyricsEditor({
         </div>
       ) : snap ? (
         <p className="text-[10px] text-neutral-600 font-mono">
-          doble click en la onda: acorde nuevo en ese compás (escribís Am7, F/A, C#m… y Enter) ·
+          doble click en la línea de un compás (o sobre un acorde): escribís Am7, F/A, C#m… ahí mismo · Enter guarda ·
+          Tab guarda y pasa al compás siguiente (shift+Tab, al anterior) · Esc cancela ·
           click en la onda: mover cursor · click en un acorde: editarlo · arrastrar acorde: cambia de compás
           (mueve toda la selección) · shift+click: rango · ⌘/ctrl+click: sumar/sacar · arrastrar sobre la franja:
           recuadro · doble click en acorde: escucharlo · ESPACIO play/pausa · ←/→ ±2 s · [ ] mueve la selección
