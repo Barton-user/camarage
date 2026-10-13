@@ -226,6 +226,7 @@ export default function SongEditor() {
   const chordSyncTimer = useRef<any>(null);
   const chordSyncBusy = useRef<Promise<void>>(Promise.resolve());
   const [bassNotesErr, setBassNotesErr] = useState<string | null>(null);
+  const [accidentalMissing, setAccidentalMissing] = useState(false);
   // Volumen de las notas del pentagrama (0 = mudas), recordado en este navegador
   const [staffVol, setStaffVol] = useState(0.6);
   useEffect(() => {
@@ -984,22 +985,38 @@ export default function SongEditor() {
     await persistChords(rest, rest);
   }
   // ===== PENTAGRAMA DEL BAJO =====
-  async function addBassNote(midi: number, startBeat: number, durationBeats = 0.5): Promise<string | null> {
-    const { data, error } = await supabase.from("bass_notes").insert({
-      song_id: id, midi, start_beat: startBeat, duration_beats: durationBeats,
-    }).select().single();
+  async function addBassNote(midi: number, startBeat: number, durationBeats = 0.5, accidental: number | null = null): Promise<string | null> {
+    const row: any = { song_id: id, midi, start_beat: startBeat, duration_beats: durationBeats };
+    if (accidental && !accidentalMissing) row.accidental = accidental;
+    let { data, error } = await supabase.from("bass_notes").insert(row).select().single();
+    if (error && /accidental/i.test(error.message) && row.accidental != null) {
+      setAccidentalMissing(true);
+      delete row.accidental;
+      ({ data, error } = await supabase.from("bass_notes").insert(row).select().single());
+      if (data) data = { ...data, accidental };
+    }
     if (error || !data) { alert("No pude guardar la nota: " + (error?.message || "")); return null; }
-    const row = { ...data, start_beat: Number(data.start_beat), duration_beats: Number(data.duration_beats) };
-    bassNotesRef.current = [...bassNotesRef.current, row];
+    const saved = { ...data, start_beat: Number(data.start_beat), duration_beats: Number(data.duration_beats) };
+    bassNotesRef.current = [...bassNotesRef.current, saved];
     setBassNotes(bassNotesRef.current);
     scheduleChordSync();
     return data.id;
   }
-  async function updateBassNote(noteId: string, patch: { midi?: number; start_beat?: number; duration_beats?: number }) {
+  async function updateBassNote(noteId: string, patch: { midi?: number; start_beat?: number; duration_beats?: number; accidental?: number | null }) {
     bassNotesRef.current = bassNotesRef.current.map(n => n.id === noteId ? { ...n, ...patch } : n);
     setBassNotes(bassNotesRef.current);
-    if (patch.midi != null || patch.start_beat != null) scheduleChordSync();
-    const { error } = await supabase.from("bass_notes").update(patch).eq("id", noteId);
+    if (patch.midi != null || patch.start_beat != null || "accidental" in patch) scheduleChordSync();
+    const dbPatch: any = { ...patch };
+    if (accidentalMissing) delete dbPatch.accidental;
+    if (!Object.keys(dbPatch).length) return;
+    let { error } = await supabase.from("bass_notes").update(dbPatch).eq("id", noteId);
+    if (error && /accidental/i.test(error.message) && "accidental" in dbPatch) {
+      // Falta la columna (migración sin correr): se guarda la altura igual
+      setAccidentalMissing(true);
+      delete dbPatch.accidental;
+      if (Object.keys(dbPatch).length) ({ error } = await supabase.from("bass_notes").update(dbPatch).eq("id", noteId));
+      else error = null;
+    }
     if (error) alert("No pude guardar la nota: " + error.message);
   }
   async function removeBassNotes(ids: string[]) {
@@ -1039,7 +1056,8 @@ export default function SongEditor() {
       seenBars.add(bar);
       const pc = ((n.midi % 12) + 12) % 12;
       if (desired.length && desired[desired.length - 1].pc === pc) continue;   // misma nota: sigue el acorde
-      desired.push({ bar, pc, name: (flats ? ROOTS_FLAT : ROOTS_SHARP)[pc] });
+      const useFlat = n.accidental === -1 ? true : n.accidental === 1 ? false : flats;
+      desired.push({ bar, pc, name: (useFlat ? ROOTS_FLAT : ROOTS_SHARP)[pc] });
     }
     const prev = chordsRef.current;
     const byBar = new Map<number, any>();
@@ -1715,7 +1733,7 @@ export default function SongEditor() {
                     tuningCents={tuneCents}
                     preferFlats={FLAT_KEYS.has(String(song.key || "").trim())}
                     volume={recordingNotes ? 0 : staffVol}
-                    onAdd={addBassNote}
+                    onAdd={(m, b, acc) => addBassNote(m, b, 0.5, acc)}
                     onUpdate={updateBassNote}
                     onRemove={removeBassNote}
                   />
@@ -1759,6 +1777,12 @@ export default function SongEditor() {
                        className="w-24 accent-amber-400" />
               </label>
               <span className="text-[11px] text-neutral-500 ml-2">{bassNotes.length} notas</span>
+              {accidentalMissing && (
+                <p className="basis-full text-[11px] text-amber-300">
+                  La altura se guarda bien, pero para que el ♯ / ♭ elegido quede guardado falta correr
+                  <b className="mono"> migration_bass_notes_accidental.sql</b> en Supabase.
+                </p>
+              )}
               {waveAudioReady && (
                 <NoteRecorder
                   getAudio={getWaveAudio}
@@ -1780,8 +1804,8 @@ export default function SongEditor() {
               </p>
               <p className="basis-full order-last text-[10px] text-neutral-600 font-mono">
                 click en el pentagrama: nota en esa corchea (shift = ♯, alt = ♭) · click en una nota: suena · arrastrarla:
-                tiempo y altura · con una nota elegida: ↑/↓ semitono, shift+↑/↓ octava, − / = más corta / más larga,
-                Supr borra · el bajo se escribe una octava arriba de cómo suena · la afinación cambia solo el sonido, no lo escrito
+                tiempo y altura · con una nota elegida: ♭ ♮ ♯ en su etiqueta (o teclas B, N, # / S), ↑/↓ semitono,
+                shift+↑/↓ octava, − / = más corta / más larga, Supr borra · el bajo se escribe una octava arriba de cómo suena · la afinación cambia solo el sonido, no lo escrito
               </p>
               <span className="flex-1" />
               <span className="text-[11px] text-neutral-400 whitespace-nowrap" title="Cuánto se aparta la afinación real del tema de la escrita. Las notas se siguen viendo igual en el pentagrama; cambia solo cómo suenan.">

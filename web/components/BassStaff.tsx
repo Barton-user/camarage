@@ -17,7 +17,10 @@
  * ========================================================================== */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type BassNote = { id: string; midi: number; start_beat: number | string; duration_beats: number | string };
+/** accidental: cómo se escribe una tecla negra. 1 = con sostenido (Sol♯), −1 = con bemol (La♭),
+ *  null/0 = según la tonalidad de la canción. */
+export type BassNote = { id: string; midi: number; start_beat: number | string; duration_beats: number | string; accidental?: number | null };
+type Patch = { midi?: number; start_beat?: number; duration_beats?: number; accidental?: number | null };
 
 const HALF = 6;                 // medio espacio (px): distancia entre línea y espacio
 const D_MIN = 13;               // Si1 escrito (bajo de 5 cuerdas al aire)
@@ -34,13 +37,14 @@ const yOfD = (d: number) => PAD + (D_MAX - d) * HALF;
 const naturalMidi = (d: number) => (Math.floor(d / 7) + 1) * 12 + STEP_SEMI[((d % 7) + 7) % 7];
 
 /** Cómo se escribe una altura: posición diatónica + alteración (−1, 0, +1). */
-export function spell(midi: number, preferFlats: boolean) {
+export function spell(midi: number, preferFlats: boolean, accidental?: number | null) {
   const oct = Math.floor(midi / 12) - 1;
   const pc = ((midi % 12) + 12) % 12;
   let step = STEP_SEMI.indexOf(pc);
   let acc = 0;
   if (step < 0) {
-    if (preferFlats) { step = STEP_SEMI.indexOf(pc + 1); acc = -1; }
+    const flat = accidental === -1 ? true : accidental === 1 ? false : preferFlats;
+    if (flat) { step = STEP_SEMI.indexOf(pc + 1); acc = -1; }
     else { step = STEP_SEMI.indexOf(pc - 1); acc = 1; }
   }
   return { d: oct * 7 + step, acc, name: NAMES[step] + (acc > 0 ? "♯" : acc < 0 ? "♭" : ""), oct };
@@ -102,8 +106,8 @@ export default function BassStaff({
   preferFlats?: boolean;
   /** Volumen de las notas (0–1). Suenan solas junto con la pista; 0 = mudas. */
   volume?: number;
-  onAdd: (midi: number, startBeat: number) => Promise<string | null | undefined> | void;
-  onUpdate: (id: string, patch: { midi?: number; start_beat?: number; duration_beats?: number }) => void;
+  onAdd: (midi: number, startBeat: number, accidental?: number | null) => Promise<string | null | undefined> | void;
+  onUpdate: (id: string, patch: Patch) => void;
   onRemove: (id: string) => void;
 }) {
   const beatDur = bpm > 0 ? 60 / bpm : 0;
@@ -193,9 +197,17 @@ export default function BassStaff({
       if (!n) return;
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault(); e.stopPropagation();
-        const step = (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 12 : 1);
-        const midi = Math.max(0, Math.min(127, n.midi + step));
-        onUpdate(n.id, { midi }); sound(midi, Number(n.duration_beats));
+        const up = e.key === "ArrowUp";
+        const midi = Math.max(0, Math.min(127, n.midi + (up ? 1 : -1) * (e.shiftKey ? 12 : 1)));
+        // Subiendo se escribe con sostenido, bajando con bemol (como en los editores de partitura)
+        onUpdate(n.id, e.shiftKey ? { midi } : { midi, accidental: up ? 1 : -1 });
+        sound(midi, Number(n.duration_beats));
+      } else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "#" || e.key === "s" || e.key === "S")) {
+        e.preventDefault(); setAccidental(n, 1);
+      } else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "b" || e.key === "B")) {
+        e.preventDefault(); setAccidental(n, -1);
+      } else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "n" || e.key === "N")) {
+        e.preventDefault(); setAccidental(n, 0);
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault(); e.stopPropagation();
         onRemove(n.id); setSelId(null);
@@ -209,7 +221,19 @@ export default function BassStaff({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [selId, onUpdate, onRemove, sound]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selId, onUpdate, onRemove, sound, preferFlats]);
+
+  /* ♯ / ♭ / ♮ sobre la letra que se ve: Sol → Sol♯, Sol → Sol♭, Sol♯ → Sol.
+   * Repetir el mismo botón vuelve a natural. */
+  function setAccidental(n: BassNote, want: 1 | -1 | 0) {
+    const sp = spell(n.midi, preferFlats, n.accidental);
+    const nat = naturalMidi(sp.d);
+    const target = want !== 0 && sp.acc === want ? 0 : want;
+    const midi = Math.max(0, Math.min(127, nat + target));
+    onUpdate(n.id, { midi, accidental: target === 0 ? null : target });
+    sound(midi, Number(n.duration_beats));
+  }
 
   /* ---------- mouse ---------- */
   const local = (e: { clientX: number; clientY: number }) => {
@@ -221,12 +245,13 @@ export default function BassStaff({
     if (!beatDur) return;
     const { x, y } = local(e);
     const beat = snapBeat(beatOfX(x));
-    const midi = naturalMidi(dOfY(y)) + (e.shiftKey ? 1 : e.altKey ? -1 : 0);
+    const acc = e.shiftKey ? 1 : e.altKey ? -1 : 0;
+    const midi = naturalMidi(dOfY(y)) + acc;
     sound(midi);
     // Monofónico: si ya hay una nota en esa corchea, se le cambia la altura
     const there = notesRef.current.find(n => Math.abs(Number(n.start_beat) - beat) < 1e-3);
-    if (there) { onUpdate(there.id, { midi }); setSelId(there.id); return; }
-    const id = await onAdd(midi, beat);
+    if (there) { onUpdate(there.id, { midi, accidental: acc || null }); setSelId(there.id); return; }
+    const id = await onAdd(midi, beat, acc || null);
     if (typeof id === "string" && id) setSelId(id);
   }
 
@@ -236,7 +261,7 @@ export default function BassStaff({
     el.setPointerCapture(e.pointerId);
     setSelId(n.id);
     const p0 = local(e);
-    const sp = spell(n.midi, preferFlats);
+    const sp = spell(n.midi, preferFlats, n.accidental);
     const accSemi = n.midi - naturalMidi(sp.d);
     const beat0 = Number(n.start_beat);
     let moved = false;
@@ -345,7 +370,7 @@ export default function BassStaff({
           const dragging = drag && drag.id === n.id;
           const midi = dragging ? drag!.midi : n.midi;
           const beat = dragging ? drag!.beat : Number(n.start_beat);
-          const sp = spell(midi, preferFlats);
+          const sp = spell(midi, preferFlats, n.accidental);
           const x = xOfBeat(beat);
           const y = yOfD(Math.max(D_MIN, Math.min(D_MAX, sp.d)));
           const isSel = n.id === selId;
@@ -377,14 +402,30 @@ export default function BassStaff({
       {sel && (() => {
         const midi = drag && drag.id === sel.id ? drag.midi : sel.midi;
         const beat = drag && drag.id === sel.id ? drag.beat : Number(sel.start_beat);
-        const sp = spell(midi, preferFlats);
+        const sp = spell(midi, preferFlats, sel.accidental);
         const y = yOfD(Math.max(D_MIN, Math.min(D_MAX, sp.d)));
         const bar = Math.floor(beat / beatsPerBar) + 1;
         const inBar = beat - (bar - 1) * beatsPerBar;
+        const accBtn = (want: 1 | -1 | 0, label: string, title: string) => (
+          <button key={want}
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); setAccidental(sel, want); }}
+                  title={title}
+                  className={`w-5 h-5 rounded text-[12px] leading-none font-black ${
+                    (want === 0 ? sp.acc === 0 : sp.acc === want) ? "bg-black text-white" : "bg-neutral-200 text-black hover:bg-amber-300"}`}>
+            {label}
+          </button>
+        );
         return (
-          <div className="absolute pointer-events-none rounded bg-white text-black text-[10px] font-mono font-bold px-1.5 py-0.5 whitespace-nowrap"
-               style={{ left: xOfBeat(beat) + 10, top: Math.max(0, y - 22), zIndex: 7 }}>
-            {sp.name}{sp.oct} · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · suena {hzOf(midi).toFixed(1)} Hz
+          <div className="absolute flex items-center gap-1 rounded bg-white text-black text-[10px] font-mono font-bold pl-1 pr-1.5 py-0.5 whitespace-nowrap shadow"
+               style={{ left: xOfBeat(beat) + 10, top: Math.max(0, y - 26), zIndex: 7 }}
+               onClick={e => e.stopPropagation()}>
+            {accBtn(-1, "♭", "Bemol (tecla B)")}
+            {accBtn(0, "♮", "Natural (tecla N)")}
+            {accBtn(1, "♯", "Sostenido (tecla # o S)")}
+            <span className="ml-1 pointer-events-none">
+              {sp.name}{sp.oct} · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · suena {hzOf(midi).toFixed(1)} Hz
+            </span>
           </div>
         );
       })()}
