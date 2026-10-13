@@ -234,13 +234,21 @@ export default function BassStaff({
 
   /* ---------- dibujo ---------- */
   const barLines: { x: number; bar: number }[] = [];
+  // Numerar cada 1, 2, 4, 8… compases según el zoom, para que no se encimen
+  const barPx = beatDur * beatsPerBar * pps;
+  let labelEvery = 1;
+  while (barPx > 0 && labelEvery * barPx < 30) labelEvery *= 2;
   const beatTicks: number[] = [];
   if (beatDur) {
     const k0 = Math.max(0, Math.ceil(offset / beatDur - 1e-6));
     for (let k = k0; ; k++) {
       const x = xOfBeat(k);
       if (x > fullW) break;
-      if (k % beatsPerBar === 0) barLines.push({ x, bar: k / beatsPerBar + 1 });
+      if (k % beatsPerBar === 0) {
+        const bar = k / beatsPerBar + 1;
+        // muy alejado: solo las líneas numeradas, si no el pentagrama es una reja
+        if (barPx >= 12 || (bar - 1) % labelEvery === 0) barLines.push({ x, bar });
+      }
       else if (beatDur * pps >= 10) beatTicks.push(x);
     }
   }
@@ -277,7 +285,9 @@ export default function BassStaff({
         {barLines.map(b => (
           <g key={`b${b.bar}`}>
             <line x1={b.x} x2={b.x} y1={top} y2={bottom} stroke="rgba(167,139,250,0.6)" />
-            <text x={b.x + 2} y={top - 4} fontSize={8} fill="rgba(196,181,253,0.7)" fontFamily="ui-monospace, monospace">{b.bar}</text>
+            {(b.bar - 1) % labelEvery === 0 && (
+              <text x={b.x + 2} y={top - 4} fontSize={8} fill="rgba(196,181,253,0.7)" fontFamily="ui-monospace, monospace">{b.bar}</text>
+            )}
           </g>
         ))}
 
