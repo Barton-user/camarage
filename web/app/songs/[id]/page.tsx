@@ -1020,6 +1020,48 @@ export default function SongEditor() {
     }
     if (error) alert("No pude guardar la nota: " + error.message);
   }
+  /* Lote: pegar / duplicar / copiar arrastrando. Un solo insert y un solo setState. */
+  async function addBassNotesMany(list: { midi: number; start_beat: number; duration_beats: number; accidental?: number | null }[]): Promise<string[]> {
+    if (!list.length) return [];
+    const rows: any[] = list.map(n => {
+      const r: any = { song_id: id, midi: n.midi, start_beat: n.start_beat, duration_beats: n.duration_beats };
+      if (n.accidental && !accidentalMissing) r.accidental = n.accidental;
+      return r;
+    });
+    let { data, error } = await supabase.from("bass_notes").insert(rows).select();
+    if (error && /accidental/i.test(error.message)) {
+      setAccidentalMissing(true);
+      rows.forEach(r => { delete r.accidental; });
+      ({ data, error } = await supabase.from("bass_notes").insert(rows).select());
+    }
+    if (error || !data) { alert("No pude guardar las notas: " + (error?.message || "")); return []; }
+    const saved = data.map((d: any) => ({ ...d, start_beat: Number(d.start_beat), duration_beats: Number(d.duration_beats) }));
+    bassNotesRef.current = [...bassNotesRef.current, ...saved];
+    setBassNotes(bassNotesRef.current);
+    scheduleChordSync();
+    return saved.map((d: any) => d.id);
+  }
+  async function updateBassNotesMany(changes: { id: string; patch: { midi?: number; start_beat?: number; duration_beats?: number; accidental?: number | null } }[]) {
+    if (!changes.length) return;
+    const byId = new Map(changes.map(c => [c.id, c.patch]));
+    bassNotesRef.current = bassNotesRef.current.map(n => byId.has(n.id) ? { ...n, ...byId.get(n.id) } : n);
+    setBassNotes(bassNotesRef.current);
+    if (changes.some(c => c.patch.midi != null || c.patch.start_beat != null || "accidental" in c.patch)) scheduleChordSync();
+    let missing = accidentalMissing;
+    for (const c of changes) {
+      const dbPatch: any = { ...c.patch };
+      if (missing) delete dbPatch.accidental;
+      if (!Object.keys(dbPatch).length) continue;
+      let { error } = await supabase.from("bass_notes").update(dbPatch).eq("id", c.id);
+      if (error && /accidental/i.test(error.message) && "accidental" in dbPatch) {
+        missing = true; setAccidentalMissing(true);
+        delete dbPatch.accidental;
+        if (Object.keys(dbPatch).length) ({ error } = await supabase.from("bass_notes").update(dbPatch).eq("id", c.id));
+        else error = null;
+      }
+      if (error) { alert("No pude guardar las notas: " + error.message); break; }
+    }
+  }
   async function removeBassNotes(ids: string[]) {
     if (!ids.length) return;
     bassNotesRef.current = bassNotesRef.current.filter(n => !ids.includes(n.id));
@@ -1738,6 +1780,9 @@ export default function SongEditor() {
                     onAdd={(m, b, acc) => addBassNote(m, b, 0.5, acc)}
                     onUpdate={updateBassNote}
                     onRemove={removeBassNote}
+                    onAddMany={addBassNotesMany}
+                    onUpdateMany={updateBassNotesMany}
+                    onRemoveMany={removeBassNotes}
                     toolbarTarget={staffBarEl}
                   />
                 )}
@@ -1806,9 +1851,10 @@ export default function SongEditor() {
                 se mantiene mientras no cambies esa nota.
               </p>
               <p className="basis-full order-last text-[10px] text-neutral-600 font-mono">
-                click en el pentagrama: nota en esa corchea (shift = ♯, alt = ♭) · click en una nota: suena · arrastrarla:
-                tiempo y altura · con una nota elegida: ♭ ♮ ♯ en su etiqueta (o teclas B, N, # / S), ↑/↓ semitono,
-                shift+↑/↓ octava, − / = más corta / más larga, Supr borra · el bajo se escribe una octava arriba de cómo suena · la afinación cambia solo el sonido, no lo escrito
+                click en el pentagrama: nota en esa corchea (shift = ♯, alt = ♭) · click en una nota: elegirla y escucharla ·
+                arrastrar el fondo: elegir varias (shift/⌘ suma) · ⌘A todas · arrastrar notas elegidas: mover (alt: copiar) ·
+                ⌘C / ⌘X / ⌘V (pega en el cursor) · ⌘D duplica a continuación · ←/→ corchea (shift: compás) ·
+                ↑/↓ semitono (shift: octava) · B N # · − / = duración · Supr borra · el bajo se escribe una octava arriba de cómo suena · la afinación cambia solo el sonido, no lo escrito
               </p>
               <span className="flex-1" />
               <span className="text-[11px] text-neutral-400 whitespace-nowrap" title="Cuánto se aparta la afinación real del tema de la escrita. Las notas se siguen viendo igual en el pentagrama; cambia solo cómo suenan.">

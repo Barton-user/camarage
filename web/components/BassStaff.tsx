@@ -22,6 +22,10 @@ import { createPortal } from "react-dom";
  *  null/0 = según la tonalidad de la canción. */
 export type BassNote = { id: string; midi: number; start_beat: number | string; duration_beats: number | string; accidental?: number | null };
 type Patch = { midi?: number; start_beat?: number; duration_beats?: number; accidental?: number | null };
+type NewNote = { midi: number; start_beat: number; duration_beats: number; accidental?: number | null };
+
+/* Portapapeles del pentagrama: vive mientras la página esté abierta (sirve para copiar entre canciones). */
+let CLIP: { midi: number; rel: number; dur: number; acc: number | null }[] = [];
 
 const HALF = 6;                 // medio espacio (px): distancia entre línea y espacio
 const D_MIN = 13;               // Si1 escrito (bajo de 5 cuerdas al aire)
@@ -93,7 +97,7 @@ export function playTone(hz: number, seconds = 0.45, vol = 0.6, when?: number) {
 export default function BassStaff({
   notes, bpm, beatsPerBar, offset, pps, fullW, getAudio,
   tuningSemis = 0, tuningCents = 0, preferFlats = false, volume = 0.6,
-  onAdd, onUpdate, onRemove, toolbarTarget,
+  onAdd, onUpdate, onRemove, onAddMany, onUpdateMany, onRemoveMany, toolbarTarget,
 }: {
   notes: BassNote[];
   bpm: number;
@@ -110,6 +114,10 @@ export default function BassStaff({
   onAdd: (midi: number, startBeat: number, accidental?: number | null) => Promise<string | null | undefined> | void;
   onUpdate: (id: string, patch: Patch) => void;
   onRemove: (id: string) => void;
+  /** Operaciones en lote (copiar/pegar/mover varias). Si faltan, se hace nota por nota. */
+  onAddMany?: (list: NewNote[]) => Promise<string[] | void>;
+  onUpdateMany?: (changes: { id: string; patch: Patch }[]) => void;
+  onRemoveMany?: (ids: string[]) => void;
   /** Dónde va la barra de la nota elegida (♭ ♮ ♯ + datos). Si falta, flota junto a la nota. */
   toolbarTarget?: HTMLElement | null;
 }) {
@@ -118,8 +126,10 @@ export default function BassStaff({
   const volRef = useRef(volume);
   volRef.current = volume;
   const headRef = useRef<HTMLDivElement | null>(null);
-  const [selId, setSelId] = useState<string | null>(null);
-  const [drag, setDrag] = useState<{ id: string; beat: number; midi: number } | null>(null);
+  const [selIds, setSelIds] = useState<string[]>([]);
+  const [drag, setDrag] = useState<{ ids: string[]; dBeat: number; dSteps: number; copy: boolean } | null>(null);
+  const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [clipN, setClipN] = useState(CLIP.length);
   const [hover, setHover] = useState<{ beat: number; d: number } | null>(null);
 
   const xOfBeat = useCallback((b: number) => (b * beatDur - offset) * pps, [beatDur, offset, pps]);
@@ -190,53 +200,174 @@ export default function BassStaff({
     };
   }, [getAudio, beatDur, offset, audible]);
 
-  /* ---------- teclado sobre la nota seleccionada ---------- */
+  /* ---------- selección múltiple ---------- */
+  const selSet = new Set(selIds);
+  const selRef = useRef(selIds);
+  selRef.current = selIds;
+  const selectOnly = (ids: string[]) => setSelIds(ids);
+  const selected = () => notesRef.current.filter(n => selRef.current.includes(n.id));
+
+  /* Una nota corrida dBeat tiempos y dSteps lugares del pentagrama (conserva su ♯/♭). */
+  function moved(n: BassNote, dBeat: number, dSteps: number) {
+    const sp = spell(n.midi, preferFlats, n.accidental);
+    const accSemi = n.midi - naturalMidi(sp.d);
+    const midi = Math.max(0, Math.min(127, naturalMidi(sp.d + dSteps) + accSemi));
+    return { beat: Math.max(0, Number(n.start_beat) + dBeat), midi };
+  }
+
+  /* Monofónico: las notas que caen exactamente donde aterrizan otras se van. */
+  function clearLanding(beats: number[], except: Set<string>) {
+    const hit = notesRef.current
+      .filter(n => !except.has(n.id) && beats.some(b => Math.abs(Number(n.start_beat) - b) < 1e-3))
+      .map(n => n.id);
+    if (hit.length) removeMany(hit);
+  }
+  const removeMany = (ids: string[]) => { if (onRemoveMany) onRemoveMany(ids); else ids.forEach(id => onRemove(id)); };
+  const updateMany = (changes: { id: string; patch: Patch }[]) => {
+    if (!changes.length) return;
+    if (onUpdateMany) onUpdateMany(changes); else changes.forEach(c => onUpdate(c.id, c.patch));
+  };
+  async function addMany(list: NewNote[]): Promise<string[]> {
+    if (!list.length) return [];
+    if (onAddMany) { const r = await onAddMany(list); return Array.isArray(r) ? r : []; }
+    const ids: string[] = [];
+    for (const n of list) {
+      const id = await onAdd(n.midi, n.start_beat, n.accidental ?? null);
+      if (typeof id === "string" && id) ids.push(id);
+    }
+    return ids;
+  }
+
+  /* ---------- acciones sobre la selección ---------- */
+  function shiftSel(dBeat: number, dSteps: number) {
+    const sel = selected();
+    if (!sel.length) return;
+    const minB = Math.min(...sel.map(n => Number(n.start_beat)));
+    if (minB + dBeat < 0) dBeat = -minB;
+    if (!dBeat && !dSteps) return;
+    const changes = sel.map(n => {
+      const m = moved(n, dBeat, dSteps);
+      const patch: Patch = {};
+      if (dBeat) patch.start_beat = m.beat;
+      if (dSteps) patch.midi = m.midi;
+      return { id: n.id, patch, beat: m.beat };
+    });
+    clearLanding(changes.map(c => c.beat), new Set(sel.map(n => n.id)));
+    updateMany(changes.map(({ id, patch }) => ({ id, patch })));
+  }
+  function transposeSel(semis: number, setAcc: boolean) {
+    const sel = selected();
+    if (!sel.length) return;
+    updateMany(sel.map(n => {
+      const midi = Math.max(0, Math.min(127, n.midi + semis));
+      return { id: n.id, patch: setAcc ? { midi, accidental: semis > 0 ? 1 : -1 } : { midi } };
+    }));
+    const first = sel[0];
+    sound(Math.max(0, Math.min(127, first.midi + semis)), Number(first.duration_beats));
+  }
+  function durationSel(delta: number) {
+    const sel = selected();
+    updateMany(sel.map(n => ({ id: n.id, patch: { duration_beats: Math.max(SNAP_BEATS, Number(n.duration_beats) + delta) } })));
+  }
+  function deleteSel() {
+    const ids = selRef.current;
+    if (!ids.length) return;
+    removeMany(ids);
+    setSelIds([]);
+  }
+  function copySel(cut = false) {
+    const sel = selected();
+    if (!sel.length) return;
+    const minB = Math.min(...sel.map(n => Number(n.start_beat)));
+    CLIP = sel.map(n => ({ midi: n.midi, rel: Number(n.start_beat) - minB, dur: Number(n.duration_beats), acc: n.accidental ?? null }));
+    setClipN(CLIP.length);
+    flash(cut ? `✂ ${sel.length} cortadas` : `⧉ ${sel.length} copiadas`);
+    if (cut) deleteSel();
+  }
+  async function pasteAt(beat: number) {
+    if (!CLIP.length) return;
+    const list: NewNote[] = CLIP.map(c => ({ midi: c.midi, start_beat: beat + c.rel, duration_beats: c.dur, accidental: c.acc }));
+    clearLanding(list.map(n => n.start_beat), new Set());
+    const ids = await addMany(list);
+    if (ids.length) setSelIds(ids);
+    flash(`✓ ${list.length} pegadas en comp. ${Math.floor(beat / beatsPerBar) + 1}`);
+  }
+  function cursorBeat() {
+    const a = getAudio();
+    if (!a || !beatDur) return 0;
+    return snapBeat((a.currentTime + offset) / beatDur);
+  }
+  async function duplicateSel() {
+    const sel = selected();
+    if (!sel.length) return;
+    const minB = Math.min(...sel.map(n => Number(n.start_beat)));
+    const maxE = Math.max(...sel.map(n => Number(n.start_beat) + Number(n.duration_beats)));
+    // Corre de a compases enteros: un riff de 2 compases se duplica en los 2 siguientes
+    const shift = Math.max(1, Math.ceil((maxE - minB) / beatsPerBar - 1e-6)) * beatsPerBar;
+    const list: NewNote[] = sel.map(n => ({ midi: n.midi, start_beat: Number(n.start_beat) + shift,
+      duration_beats: Number(n.duration_beats), accidental: n.accidental ?? null }));
+    clearLanding(list.map(n => n.start_beat), new Set());
+    const ids = await addMany(list);
+    if (ids.length) setSelIds(ids);
+    flash(`✓ duplicadas ${shift / beatsPerBar} comp. más adelante`);
+  }
+  /* ♯ / ♭ / ♮ sobre la letra que se ve: Sol → Sol♯, Sol → Sol♭, Sol♯ → Sol.
+   * Repetir el mismo botón vuelve a natural. Con varias notas, se aplica a todas. */
+  function setAccidentalSel(want: 1 | -1 | 0) {
+    const sel = selected();
+    if (!sel.length) return;
+    const allAlready = want !== 0 && sel.every(n => spell(n.midi, preferFlats, n.accidental).acc === want);
+    const target = allAlready ? 0 : want;
+    updateMany(sel.map(n => {
+      const nat = naturalMidi(spell(n.midi, preferFlats, n.accidental).d);
+      const midi = Math.max(0, Math.min(127, nat + target));
+      return { id: n.id, patch: { midi, accidental: target === 0 ? null : target } };
+    }));
+    if (sel.length === 1) sound(naturalMidi(spell(sel[0].midi, preferFlats, sel[0].accidental).d) + target, Number(sel[0].duration_beats));
+  }
+
+  const [msg, setMsg] = useState<string | null>(null);
+  const msgT = useRef<any>(null);
+  function flash(m: string) { setMsg(m); clearTimeout(msgT.current); msgT.current = setTimeout(() => setMsg(null), 1800); }
+
+  /* ---------- teclado ---------- */
+  const hoverStaff = useRef(false);
+  const actionsRef = useRef({ shiftSel, transposeSel, durationSel, deleteSel, copySel, pasteAt, cursorBeat, duplicateSel, setAccidentalSel });
+  actionsRef.current = { shiftSel, transposeSel, durationSel, deleteSel, copySel, pasteAt, cursorBeat, duplicateSel, setAccidentalSel };
   useEffect(() => {
-    if (!selId) return;
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
       if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.tagName === "SELECT" || tgt.isContentEditable)) return;
-      const n = notesRef.current.find(x => x.id === selId);
-      if (!n) return;
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault(); e.stopPropagation();
+      const A = actionsRef.current;
+      const mod = e.metaKey || e.ctrlKey;
+      const has = selRef.current.length > 0;
+      const k = e.key.toLowerCase();
+      const eat = () => { e.preventDefault(); e.stopPropagation(); };
+      // Pegar funciona sin selección (va al cursor de reproducción)
+      if (mod && k === "v" && CLIP.length) { eat(); A.pasteAt(A.cursorBeat()); return; }
+      if (mod && k === "a" && (hoverStaff.current || has)) { eat(); setSelIds(notesRef.current.map(n => n.id)); return; }
+      if (!has) return;
+      if (mod && k === "c") { eat(); A.copySel(false); }
+      else if (mod && k === "x") { eat(); A.copySel(true); }
+      else if (mod && k === "d") { eat(); A.duplicateSel(); }
+      else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        eat();
         const up = e.key === "ArrowUp";
-        const midi = Math.max(0, Math.min(127, n.midi + (up ? 1 : -1) * (e.shiftKey ? 12 : 1)));
         // Subiendo se escribe con sostenido, bajando con bemol (como en los editores de partitura)
-        onUpdate(n.id, e.shiftKey ? { midi } : { midi, accidental: up ? 1 : -1 });
-        sound(midi, Number(n.duration_beats));
-      } else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "#" || e.key === "s" || e.key === "S")) {
-        e.preventDefault(); setAccidental(n, 1);
-      } else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "b" || e.key === "B")) {
-        e.preventDefault(); setAccidental(n, -1);
-      } else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "n" || e.key === "N")) {
-        e.preventDefault(); setAccidental(n, 0);
-      } else if (e.key === "Delete" || e.key === "Backspace") {
-        e.preventDefault(); e.stopPropagation();
-        onRemove(n.id); setSelId(null);
-      } else if (e.key === "-" || e.key === "=" || e.key === "+") {
-        e.preventDefault();
-        const dur = Math.max(SNAP_BEATS, Number(n.duration_beats) + (e.key === "-" ? -SNAP_BEATS : SNAP_BEATS));
-        onUpdate(n.id, { duration_beats: dur });
-      } else if (e.key === "Escape") {
-        setSelId(null);
-      }
+        A.transposeSel((up ? 1 : -1) * (e.shiftKey ? 12 : 1), !e.shiftKey);
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        eat();
+        A.shiftSel((e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? beatsPerBar : SNAP_BEATS), 0);
+      } else if (!mod && !e.altKey && (e.key === "#" || k === "s")) { eat(); A.setAccidentalSel(1); }
+      else if (!mod && !e.altKey && k === "b") { eat(); A.setAccidentalSel(-1); }
+      else if (!mod && !e.altKey && k === "n") { eat(); A.setAccidentalSel(0); }
+      else if (e.key === "Delete" || e.key === "Backspace") { eat(); A.deleteSel(); }
+      else if (e.key === "-" || e.key === "=" || e.key === "+") { eat(); A.durationSel(e.key === "-" ? -SNAP_BEATS : SNAP_BEATS); }
+      else if (e.key === "Escape") { setSelIds([]); }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selId, onUpdate, onRemove, sound, preferFlats]);
-
-  /* ♯ / ♭ / ♮ sobre la letra que se ve: Sol → Sol♯, Sol → Sol♭, Sol♯ → Sol.
-   * Repetir el mismo botón vuelve a natural. */
-  function setAccidental(n: BassNote, want: 1 | -1 | 0) {
-    const sp = spell(n.midi, preferFlats, n.accidental);
-    const nat = naturalMidi(sp.d);
-    const target = want !== 0 && sp.acc === want ? 0 : want;
-    const midi = Math.max(0, Math.min(127, nat + target));
-    onUpdate(n.id, { midi, accidental: target === 0 ? null : target });
-    sound(midi, Number(n.duration_beats));
-  }
+  }, [beatsPerBar]);
 
   /* ---------- mouse ---------- */
   const local = (e: { clientX: number; clientY: number }) => {
@@ -244,52 +375,123 @@ export default function BassStaff({
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  async function onBackgroundClick(e: React.MouseEvent) {
-    if (!beatDur) return;
-    const { x, y } = local(e);
-    const beat = snapBeat(beatOfX(x));
-    const acc = e.shiftKey ? 1 : e.altKey ? -1 : 0;
-    const midi = naturalMidi(dOfY(y)) + acc;
+  /* Fondo: click = nota nueva · arrastrar = recuadro de selección (shift/⌘ suma). */
+  function onBackgroundDown(e: React.PointerEvent) {
+    if (!beatDur || e.button !== 0) return;
+    const el = e.currentTarget as Element;
+    el.setPointerCapture(e.pointerId);
+    const p0 = local(e);
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    const mods = { shift: e.shiftKey, alt: e.altKey };
+    let boxing = false;
+    const move = (ev: PointerEvent) => {
+      const p = local(ev);
+      if (!boxing && Math.hypot(p.x - p0.x, p.y - p0.y) < 5) return;
+      boxing = true;
+      setBox({ x0: p0.x, y0: p0.y, x1: p.x, y1: p.y });
+    };
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener("pointermove", move as any);
+      el.removeEventListener("pointerup", up as any);
+      el.removeEventListener("pointercancel", up as any);
+      setBox(null);
+      const p = local(ev);
+      if (boxing) {
+        const [xa, xb] = [Math.min(p0.x, p.x), Math.max(p0.x, p.x)];
+        const [ya, yb] = [Math.min(p0.y, p.y), Math.max(p0.y, p.y)];
+        const inside = notesRef.current.filter(n => {
+          const x = xOfBeat(Number(n.start_beat));
+          const y = yOfD(Math.max(D_MIN, Math.min(D_MAX, spell(n.midi, preferFlats, n.accidental).d)));
+          return x >= xa - 6 && x <= xb + 6 && y >= ya - 4 && y <= yb + 4;
+        }).map(n => n.id);
+        setSelIds(prev => additive ? Array.from(new Set([...prev, ...inside])) : inside);
+        return;
+      }
+      // Click suelto: con varias elegidas, solo deselecciona (para no meter notas sin querer)
+      if (selRef.current.length > 1) { setSelIds([]); return; }
+      addAt(p, mods);
+    };
+    el.addEventListener("pointermove", move as any);
+    el.addEventListener("pointerup", up as any);
+    el.addEventListener("pointercancel", up as any);
+  }
+
+  async function addAt(p: { x: number; y: number }, mods: { shift: boolean; alt: boolean }) {
+    const beat = snapBeat(beatOfX(p.x));
+    const acc = mods.shift ? 1 : mods.alt ? -1 : 0;
+    const midi = naturalMidi(dOfY(p.y)) + acc;
     sound(midi);
     // Monofónico: si ya hay una nota en esa corchea, se le cambia la altura
     const there = notesRef.current.find(n => Math.abs(Number(n.start_beat) - beat) < 1e-3);
-    if (there) { onUpdate(there.id, { midi, accidental: acc || null }); setSelId(there.id); return; }
+    if (there) { onUpdate(there.id, { midi, accidental: acc || null }); selectOnly([there.id]); return; }
     const id = await onAdd(midi, beat, acc || null);
-    if (typeof id === "string" && id) setSelId(id);
+    if (typeof id === "string" && id) selectOnly([id]);
   }
 
+  /* Nota: click = elegirla (shift/⌘ suma o saca) · arrastrar = mover toda la selección
+   * (tiempo + altura) · alt + arrastrar = copiar. */
   function startNoteDrag(e: React.PointerEvent, n: BassNote) {
     e.preventDefault(); e.stopPropagation();
+    if (e.button !== 0) return;
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    const wasSel = selRef.current.includes(n.id);
+    if (additive) {
+      setSelIds(prev => prev.includes(n.id) ? prev.filter(x => x !== n.id) : [...prev, n.id]);
+      sound(n.midi, Number(n.duration_beats));
+      return;
+    }
+    const ids = wasSel ? selRef.current : [n.id];
+    if (!wasSel) setSelIds(ids);
     const el = e.currentTarget as Element;
     el.setPointerCapture(e.pointerId);
-    setSelId(n.id);
     const p0 = local(e);
-    const sp = spell(n.midi, preferFlats, n.accidental);
-    const accSemi = n.midi - naturalMidi(sp.d);
-    const beat0 = Number(n.start_beat);
-    let moved = false;
-    let cur = { beat: beat0, midi: n.midi };
+    const copy = e.altKey;
+    const group = notesRef.current.filter(x => ids.includes(x.id));
+    const minB = Math.min(...group.map(x => Number(x.start_beat)));
+    let dragged = false;
+    let cur = { dBeat: 0, dSteps: 0 };
     const move = (ev: PointerEvent) => {
       const p = local(ev);
-      if (!moved && Math.hypot(p.x - p0.x, p.y - p0.y) < 3) return;
-      moved = true;
-      const beat = snapBeat(beat0 + (p.x - p0.x) / pps / beatDur);
-      const d = Math.max(D_MIN, Math.min(D_MAX, sp.d + Math.round(-(p.y - p0.y) / HALF)));
-      const midi = naturalMidi(d) + accSemi;
-      if (midi !== cur.midi) sound(midi);
-      cur = { beat, midi };
-      setDrag({ id: n.id, beat, midi });
+      if (!dragged && Math.hypot(p.x - p0.x, p.y - p0.y) < 3) return;
+      dragged = true;
+      let dBeat = Math.round(((p.x - p0.x) / pps / beatDur) / SNAP_BEATS) * SNAP_BEATS;
+      if (minB + dBeat < 0) dBeat = -minB;
+      const dSteps = Math.round(-(p.y - p0.y) / HALF);
+      if (dSteps !== cur.dSteps) sound(moved(n, 0, dSteps).midi);
+      cur = { dBeat, dSteps };
+      setDrag({ ids, dBeat, dSteps, copy });
     };
-    const up = () => {
+    const up = async () => {
       el.removeEventListener("pointermove", move as any);
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
       setDrag(null);
-      if (!moved) { sound(n.midi, Number(n.duration_beats)); return; }
-      const patch: any = {};
-      if (Math.abs(cur.beat - beat0) > 1e-3) patch.start_beat = cur.beat;
-      if (cur.midi !== n.midi) patch.midi = cur.midi;
-      if (Object.keys(patch).length) onUpdate(n.id, patch);
+      if (!dragged) {
+        sound(n.midi, Number(n.duration_beats));
+        if (wasSel && ids.length > 1) setSelIds([n.id]);       // click en una de varias: queda esa sola
+        return;
+      }
+      if (!cur.dBeat && !cur.dSteps) return;
+      if (copy) {
+        const list: NewNote[] = group.map(x => {
+          const m = moved(x, cur.dBeat, cur.dSteps);
+          return { midi: m.midi, start_beat: m.beat, duration_beats: Number(x.duration_beats), accidental: x.accidental ?? null };
+        });
+        clearLanding(list.map(l => l.start_beat), new Set(ids));
+        const newIds = await addMany(list);
+        if (newIds.length) setSelIds(newIds);
+        flash(`✓ ${list.length} copiadas`);
+      } else {
+        const changes = group.map(x => {
+          const m = moved(x, cur.dBeat, cur.dSteps);
+          const patch: Patch = {};
+          if (cur.dBeat) patch.start_beat = m.beat;
+          if (cur.dSteps) patch.midi = m.midi;
+          return { id: x.id, patch, beat: m.beat };
+        });
+        clearLanding(changes.map(c => c.beat), new Set(ids));
+        updateMany(changes.map(({ id, patch }) => ({ id, patch })));
+      }
     };
     el.addEventListener("pointermove", move as any);
     el.addEventListener("pointerup", up);
@@ -316,47 +518,78 @@ export default function BassStaff({
       else if (beatDur * pps >= 10) beatTicks.push(x);
     }
   }
-  const sel = selId ? notes.find(n => n.id === selId) || null : null;
+  const selNotes = sorted.filter(n => selSet.has(n.id));
+  const sel1 = selNotes.length === 1 ? selNotes[0] : null;
   const top = yOfD(STAFF_D[4]);
   const bottom = yOfD(STAFF_D[0]);
 
+  const drawNote = (key: string, n: BassNote, beat: number, midi: number, color: string, opacity = 1, interactive = true) => {
+    const sp = spell(midi, preferFlats, n.accidental);
+    const x = xOfBeat(beat);
+    const y = yOfD(Math.max(D_MIN, Math.min(D_MAX, sp.d)));
+    const len = Number(n.duration_beats) * beatDur * pps;
+    const ledgers: number[] = [];
+    for (let d = 16; d >= sp.d; d -= 2) ledgers.push(d);
+    for (let d = 28; d <= sp.d; d += 2) ledgers.push(d);
+    return (
+      <g key={key} opacity={opacity} style={{ cursor: interactive ? "grab" : undefined }}
+         pointerEvents={interactive ? undefined : "none"}
+         onPointerDown={interactive ? (e => startNoteDrag(e, n)) : undefined}>
+        <rect x={x} y={y - 1.5} width={Math.max(0, len - 2)} height={3} rx={1.5} fill={color} opacity={0.3} />
+        {ledgers.map(d => (
+          <line key={d} x1={x - 9} x2={x + 9} y1={yOfD(d)} y2={yOfD(d)} stroke={color} strokeWidth={1} />
+        ))}
+        {sp.acc !== 0 && (
+          <text x={x - 16} y={y + 4} fontSize={12} fill={color} fontWeight={700}>{sp.acc > 0 ? "♯" : "♭"}</text>
+        )}
+        <ellipse cx={x} cy={y} rx={5.5} ry={4} transform={`rotate(-20 ${x} ${y})`} fill={color} />
+        {/* zona de agarre más grande que la cabeza */}
+        <rect x={x - 9} y={y - 7} width={18} height={14} fill="transparent" />
+      </g>
+    );
+  };
+
   return (
-    <div className="relative border-t border-neutral-800" style={{ height: H }}>
+    <div className="relative border-t border-neutral-800" style={{ height: H, userSelect: "none", WebkitUserSelect: "none" }}
+         onMouseEnter={() => { hoverStaff.current = true; }}
+         onMouseLeave={() => { hoverStaff.current = false; }}>
       {/* Clave de fa, siempre visible al scrollear */}
       <div className="pointer-events-none" style={{ position: "sticky", left: 0, width: 0, height: H, zIndex: 3 }}>
         <span style={{ position: "absolute", left: 4, top: top - 9, fontSize: 40, lineHeight: 1, color: "rgba(212,212,212,0.28)" }}>𝄢</span>
       </div>
       <svg ref={svgRef} width={fullW} height={H} className="absolute top-0 left-0"
-           style={{ cursor: beatDur ? "crosshair" : "default" }}
-           onClick={onBackgroundClick}
+           style={{ cursor: beatDur ? "crosshair" : "default", touchAction: "none" }}
+           onPointerDown={e => { if (e.target === e.currentTarget || (e.target as Element).getAttribute("data-bg")) onBackgroundDown(e); }}
            onMouseMove={e => {
              if (!beatDur) return;
              const { x, y } = local(e);
              setHover({ beat: snapBeat(beatOfX(x)), d: dOfY(y) });
            }}
            onMouseLeave={() => setHover(null)}>
-        {/* líneas guía de las líneas adicionales (muy tenues) */}
-        {[14, 16, 28, 30, 32].map(d => (
-          <line key={`g${d}`} x1={0} x2={fullW} y1={yOfD(d)} y2={yOfD(d)} stroke="rgba(255,255,255,0.05)" strokeDasharray="2 6" />
-        ))}
-        {/* pentagrama */}
-        {STAFF_D.map(d => (
-          <line key={d} x1={0} x2={fullW} y1={yOfD(d)} y2={yOfD(d)} stroke="rgba(212,212,212,0.45)" strokeWidth={1} />
-        ))}
-        {beatTicks.map((x, i) => (
-          <line key={`t${i}`} x1={x} x2={x} y1={top} y2={bottom} stroke="rgba(167,139,250,0.12)" />
-        ))}
-        {barLines.map(b => (
-          <g key={`b${b.bar}`}>
-            <line x1={b.x} x2={b.x} y1={top} y2={bottom} stroke="rgba(167,139,250,0.6)" />
-            {(b.bar - 1) % labelEvery === 0 && (
-              <text x={b.x + 2} y={top - 4} fontSize={8} fill="rgba(196,181,253,0.7)" fontFamily="ui-monospace, monospace">{b.bar}</text>
-            )}
-          </g>
-        ))}
+        <g data-bg="1" pointerEvents="none">
+          {/* líneas guía de las líneas adicionales (muy tenues) */}
+          {[14, 16, 28, 30, 32].map(d => (
+            <line key={`g${d}`} x1={0} x2={fullW} y1={yOfD(d)} y2={yOfD(d)} stroke="rgba(255,255,255,0.05)" strokeDasharray="2 6" />
+          ))}
+          {/* pentagrama */}
+          {STAFF_D.map(d => (
+            <line key={d} x1={0} x2={fullW} y1={yOfD(d)} y2={yOfD(d)} stroke="rgba(212,212,212,0.45)" strokeWidth={1} />
+          ))}
+          {beatTicks.map((x, i) => (
+            <line key={`t${i}`} x1={x} x2={x} y1={top} y2={bottom} stroke="rgba(167,139,250,0.12)" />
+          ))}
+          {barLines.map(b => (
+            <g key={`b${b.bar}`}>
+              <line x1={b.x} x2={b.x} y1={top} y2={bottom} stroke="rgba(167,139,250,0.6)" />
+              {(b.bar - 1) % labelEvery === 0 && (
+                <text x={b.x + 2} y={top - 4} fontSize={8} fill="rgba(196,181,253,0.7)" fontFamily="ui-monospace, monospace">{b.bar}</text>
+              )}
+            </g>
+          ))}
+        </g>
 
         {/* fantasma bajo el mouse */}
-        {hover && !drag && (() => {
+        {hover && !drag && !box && (() => {
           const x = xOfBeat(hover.beat);
           return (
             <g pointerEvents="none" opacity={0.35}>
@@ -370,79 +603,91 @@ export default function BassStaff({
 
         {/* notas */}
         {sorted.map(n => {
-          const dragging = drag && drag.id === n.id;
-          const midi = dragging ? drag!.midi : n.midi;
-          const beat = dragging ? drag!.beat : Number(n.start_beat);
-          const sp = spell(midi, preferFlats, n.accidental);
-          const x = xOfBeat(beat);
-          const y = yOfD(Math.max(D_MIN, Math.min(D_MAX, sp.d)));
-          const isSel = n.id === selId;
+          const isSel = selSet.has(n.id);
           const color = isSel ? "#ffffff" : NOTE_COLOR;
-          const len = Number(n.duration_beats) * beatDur * pps;
-          const ledgers: number[] = [];
-          for (let d = 16; d >= sp.d; d -= 2) ledgers.push(d);
-          for (let d = 28; d <= sp.d; d += 2) ledgers.push(d);
-          return (
-            <g key={n.id} style={{ cursor: "grab" }}
-               onPointerDown={e => startNoteDrag(e, n)}
-               onClick={e => e.stopPropagation()}>
-              <rect x={x} y={y - 1.5} width={Math.max(0, len - 2)} height={3} rx={1.5} fill={color} opacity={0.3} />
-              {ledgers.map(d => (
-                <line key={d} x1={x - 9} x2={x + 9} y1={yOfD(d)} y2={yOfD(d)} stroke={color} strokeWidth={1} />
-              ))}
-              {sp.acc !== 0 && (
-                <text x={x - 16} y={y + 4} fontSize={12} fill={color} fontWeight={700}>{sp.acc > 0 ? "♯" : "♭"}</text>
-              )}
-              <ellipse cx={x} cy={y} rx={5.5} ry={4} transform={`rotate(-20 ${x} ${y})`} fill={color} />
-              {/* zona de agarre más grande que la cabeza */}
-              <rect x={x - 9} y={y - 7} width={18} height={14} fill="transparent" />
-            </g>
-          );
+          if (drag && drag.ids.includes(n.id)) {
+            const m = moved(n, drag.dBeat, drag.dSteps);
+            return (
+              <g key={n.id}>
+                {/* original: tenue si se mueve, normal si se copia */}
+                {drawNote(`o-${n.id}`, n, Number(n.start_beat), n.midi, drag.copy ? NOTE_COLOR : color, drag.copy ? 1 : 0.25, false)}
+                {drawNote(`m-${n.id}`, n, m.beat, m.midi, "#ffffff", 0.9, false)}
+              </g>
+            );
+          }
+          return drawNote(n.id, n, Number(n.start_beat), n.midi, color);
         })}
+
+        {/* recuadro de selección */}
+        {box && (
+          <rect x={Math.min(box.x0, box.x1)} y={Math.min(box.y0, box.y1)}
+                width={Math.abs(box.x1 - box.x0)} height={Math.abs(box.y1 - box.y0)}
+                fill="rgba(251,191,36,0.10)" stroke="rgba(251,191,36,0.7)" strokeDasharray="4 3" pointerEvents="none" />
+        )}
       </svg>
 
-      {/* barra de la nota seleccionada: ♭ ♮ ♯ + nombre escrito + frecuencia real.
-          Va afuera del pentagrama (toolbarTarget) para no tapar notas vecinas. */}
+      {/* Barra de la selección: ♭ ♮ ♯ + datos + copiar/pegar/duplicar/borrar.
+          Va afuera del pentagrama (toolbarTarget) para no tapar notas. */}
       {(() => {
-        const accBtn = (want: 1 | -1 | 0, label: string, title: string, active: boolean, n: BassNote | null) => (
-          <button key={want} disabled={!n}
+        const n = selNotes.length;
+        const accNow = n ? (selNotes.every(x => spell(x.midi, preferFlats, x.accidental).acc === spell(selNotes[0].midi, preferFlats, selNotes[0].accidental).acc)
+          ? spell(selNotes[0].midi, preferFlats, selNotes[0].accidental).acc : 99) : 99;
+        const btn = (label: React.ReactNode, title: string, onClick: () => void, opts: { active?: boolean; disabled?: boolean; wide?: boolean; danger?: boolean } = {}) => (
+          <button disabled={opts.disabled}
                   onPointerDown={e => e.stopPropagation()}
-                  onClick={e => { e.stopPropagation(); if (n) setAccidental(n, want); }}
+                  onClick={e => { e.stopPropagation(); onClick(); }}
                   title={title}
-                  className={`w-7 h-7 rounded-md text-[15px] leading-none font-black disabled:opacity-30 ${
-                    active ? "bg-amber-300 text-black" : "bg-neutral-800 text-neutral-200 hover:bg-neutral-700"}`}>
+                  className={`${opts.wide ? "px-2" : "w-7"} h-7 rounded-md leading-none font-black disabled:opacity-30 ${
+                    opts.wide ? "text-[11px]" : "text-[15px]"} ${
+                    opts.active ? "bg-amber-300 text-black"
+                    : opts.danger ? "bg-neutral-800 text-red-300 hover:bg-red-500/30"
+                    : "bg-neutral-800 text-neutral-200 hover:bg-neutral-700"}`}>
             {label}
           </button>
         );
-        let info: React.ReactNode = <span className="text-neutral-500">elegí una nota del pentagrama para cambiarle ♭ ♮ ♯</span>;
-        let acc = 99;
-        if (sel) {
-          const midi = drag && drag.id === sel.id ? drag.midi : sel.midi;
-          const beat = drag && drag.id === sel.id ? drag.beat : Number(sel.start_beat);
-          const sp = spell(midi, preferFlats, sel.accidental);
-          acc = sp.acc;
+        let info: React.ReactNode = (
+          <span className="text-neutral-500">click: elegir · arrastrar el fondo: elegir varias · shift/⌘+click: sumar</span>
+        );
+        if (sel1) {
+          const sp = spell(sel1.midi, preferFlats, sel1.accidental);
+          const beat = Number(sel1.start_beat);
           const bar = Math.floor(beat / beatsPerBar) + 1;
           const inBar = beat - (bar - 1) * beatsPerBar;
           info = (
             <span className="text-neutral-200">
               <b className="text-amber-300 text-sm">{sp.name}{sp.oct}</b>
-              <span className="text-neutral-500"> · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · suena {hzOf(midi).toFixed(1)} Hz</span>
+              <span className="text-neutral-500"> · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · suena {hzOf(sel1.midi).toFixed(1)} Hz</span>
+            </span>
+          );
+        } else if (n > 1) {
+          const b0 = Math.min(...selNotes.map(x => Number(x.start_beat)));
+          const b1 = Math.max(...selNotes.map(x => Number(x.start_beat)));
+          info = (
+            <span className="text-neutral-200">
+              <b className="text-amber-300 text-sm">{n} notas</b>
+              <span className="text-neutral-500"> · comp. {Math.floor(b0 / beatsPerBar) + 1}–{Math.floor(b1 / beatsPerBar) + 1}</span>
             </span>
           );
         }
-        const bar = (
-          <div className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/5 px-2 py-1.5 font-mono text-[11px]"
+        const barEl = (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/5 px-2 py-1.5 font-mono text-[11px]"
                onClick={e => e.stopPropagation()}>
             <span className="text-amber-300 mr-1">𝄢</span>
-            {accBtn(-1, "♭", "Bemol (tecla B)", acc === -1, sel)}
-            {accBtn(0, "♮", "Natural (tecla N)", acc === 0, sel)}
-            {accBtn(1, "♯", "Sostenido (tecla # o S)", acc === 1, sel)}
-            <span className="ml-2 truncate">{info}</span>
+            {btn("♭", "Bemol (tecla B)", () => setAccidentalSel(-1), { active: accNow === -1, disabled: !n })}
+            {btn("♮", "Natural (tecla N)", () => setAccidentalSel(0), { active: accNow === 0, disabled: !n })}
+            {btn("♯", "Sostenido (tecla # o S)", () => setAccidentalSel(1), { active: accNow === 1, disabled: !n })}
+            <span className="ml-2 truncate min-w-0">{info}</span>
+            <span className="flex-1" />
+            {msg && <span className="text-green-400 mr-1">{msg}</span>}
+            {btn("⧉ Copiar", "Copiar (⌘C)", () => copySel(false), { wide: true, disabled: !n })}
+            {btn(`⎘ Pegar${clipN ? ` (${clipN})` : ""}`, "Pegar en el cursor de reproducción (⌘V)", () => pasteAt(cursorBeat()), { wide: true, disabled: !clipN })}
+            {btn("⧺ Duplicar", "Duplicar a continuación, de a compases enteros (⌘D)", () => duplicateSel(), { wide: true, disabled: !n })}
+            {btn("✕ Borrar", "Borrar (Supr)", () => deleteSel(), { wide: true, disabled: !n, danger: true })}
           </div>
         );
-        if (toolbarTarget) return createPortal(bar, toolbarTarget);
-        if (!sel) return null;
-        return <div className="absolute" style={{ left: 40, bottom: 4, zIndex: 7 }}>{bar}</div>;
+        if (toolbarTarget) return createPortal(barEl, toolbarTarget);
+        if (!n) return null;
+        return <div className="absolute" style={{ left: 40, bottom: 4, zIndex: 7 }}>{barEl}</div>;
       })()}
 
       {/* playhead */}
