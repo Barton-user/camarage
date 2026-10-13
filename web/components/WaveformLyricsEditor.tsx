@@ -78,6 +78,7 @@ export default function WaveformLyricsEditor({
   textPlaceholder,
   belowWave,
   onAudio,
+  afterWave,
 }: {
   audioUrl: string;
   lyrics: Lyric[];
@@ -117,6 +118,8 @@ export default function WaveformLyricsEditor({
   }) => React.ReactNode;
   /** Le pasa al padre cómo leer el <audio> (para grabar notas contra la pista). */
   onAudio?: (getAudio: () => HTMLAudioElement | null) => void;
+  /** Algo fijo justo debajo del área de la onda (fuera del scroll), p.ej. la barra de la nota elegida. */
+  afterWave?: React.ReactNode;
 }) {
   const offset = Number(offsetSeconds) || 0;
   const snap = Number(snapSeconds) > 0 ? Number(snapSeconds) : 0;
@@ -1124,6 +1127,7 @@ export default function WaveformLyricsEditor({
           </div>
         </div>
       )}
+      {afterWave}
 
       {/* Panel de la línea seleccionada */}
       {selected ? (

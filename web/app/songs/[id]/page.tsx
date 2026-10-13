@@ -238,6 +238,7 @@ export default function SongEditor() {
   const onWaveAudio = useCallback((g: () => HTMLAudioElement | null) => { waveAudioRef.current = g; setWaveAudioReady(true); }, []);
   const getWaveAudio = useCallback(() => waveAudioRef.current(), []);
   const [recordingNotes, setRecordingNotes] = useState(false);
+  const [staffBarEl, setStaffBarEl] = useState<HTMLDivElement | null>(null);
   function changeStaffVol(v: number) {
     setStaffVol(v);
     try { localStorage.setItem("camarage.staff.vol", String(v)); } catch {}
@@ -1720,6 +1721,7 @@ export default function SongEditor() {
                 contextLines={lyrics}
                 textPlaceholder="Am7, F/A, C#m…"
                 onAudio={onWaveAudio}
+                afterWave={bassNotesErr ? undefined : <div ref={setStaffBarEl} />}
                 belowWave={bassNotesErr ? undefined : v => (
                   <BassStaff
                     notes={bassNotes}
@@ -1736,6 +1738,7 @@ export default function SongEditor() {
                     onAdd={(m, b, acc) => addBassNote(m, b, 0.5, acc)}
                     onUpdate={updateBassNote}
                     onRemove={removeBassNote}
+                    toolbarTarget={staffBarEl}
                   />
                 )}
               />

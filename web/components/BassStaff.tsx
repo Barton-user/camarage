@@ -16,6 +16,7 @@
  * Tiempo: negras desde el compás 1 (tiempo de contenido = beat × 60/BPM).
  * ========================================================================== */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /** accidental: cómo se escribe una tecla negra. 1 = con sostenido (Sol♯), −1 = con bemol (La♭),
  *  null/0 = según la tonalidad de la canción. */
@@ -92,7 +93,7 @@ export function playTone(hz: number, seconds = 0.45, vol = 0.6, when?: number) {
 export default function BassStaff({
   notes, bpm, beatsPerBar, offset, pps, fullW, getAudio,
   tuningSemis = 0, tuningCents = 0, preferFlats = false, volume = 0.6,
-  onAdd, onUpdate, onRemove,
+  onAdd, onUpdate, onRemove, toolbarTarget,
 }: {
   notes: BassNote[];
   bpm: number;
@@ -109,6 +110,8 @@ export default function BassStaff({
   onAdd: (midi: number, startBeat: number, accidental?: number | null) => Promise<string | null | undefined> | void;
   onUpdate: (id: string, patch: Patch) => void;
   onRemove: (id: string) => void;
+  /** Dónde va la barra de la nota elegida (♭ ♮ ♯ + datos). Si falta, flota junto a la nota. */
+  toolbarTarget?: HTMLElement | null;
 }) {
   const beatDur = bpm > 0 ? 60 / bpm : 0;
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -398,36 +401,48 @@ export default function BassStaff({
         })}
       </svg>
 
-      {/* etiqueta de la nota seleccionada: nombre escrito + frecuencia real */}
-      {sel && (() => {
-        const midi = drag && drag.id === sel.id ? drag.midi : sel.midi;
-        const beat = drag && drag.id === sel.id ? drag.beat : Number(sel.start_beat);
-        const sp = spell(midi, preferFlats, sel.accidental);
-        const y = yOfD(Math.max(D_MIN, Math.min(D_MAX, sp.d)));
-        const bar = Math.floor(beat / beatsPerBar) + 1;
-        const inBar = beat - (bar - 1) * beatsPerBar;
-        const accBtn = (want: 1 | -1 | 0, label: string, title: string) => (
-          <button key={want}
+      {/* barra de la nota seleccionada: ♭ ♮ ♯ + nombre escrito + frecuencia real.
+          Va afuera del pentagrama (toolbarTarget) para no tapar notas vecinas. */}
+      {(() => {
+        const accBtn = (want: 1 | -1 | 0, label: string, title: string, active: boolean, n: BassNote | null) => (
+          <button key={want} disabled={!n}
                   onPointerDown={e => e.stopPropagation()}
-                  onClick={e => { e.stopPropagation(); setAccidental(sel, want); }}
+                  onClick={e => { e.stopPropagation(); if (n) setAccidental(n, want); }}
                   title={title}
-                  className={`w-5 h-5 rounded text-[12px] leading-none font-black ${
-                    (want === 0 ? sp.acc === 0 : sp.acc === want) ? "bg-black text-white" : "bg-neutral-200 text-black hover:bg-amber-300"}`}>
+                  className={`w-7 h-7 rounded-md text-[15px] leading-none font-black disabled:opacity-30 ${
+                    active ? "bg-amber-300 text-black" : "bg-neutral-800 text-neutral-200 hover:bg-neutral-700"}`}>
             {label}
           </button>
         );
-        return (
-          <div className="absolute flex items-center gap-1 rounded bg-white text-black text-[10px] font-mono font-bold pl-1 pr-1.5 py-0.5 whitespace-nowrap shadow"
-               style={{ left: xOfBeat(beat) + 10, top: Math.max(0, y - 26), zIndex: 7 }}
-               onClick={e => e.stopPropagation()}>
-            {accBtn(-1, "♭", "Bemol (tecla B)")}
-            {accBtn(0, "♮", "Natural (tecla N)")}
-            {accBtn(1, "♯", "Sostenido (tecla # o S)")}
-            <span className="ml-1 pointer-events-none">
-              {sp.name}{sp.oct} · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · suena {hzOf(midi).toFixed(1)} Hz
+        let info: React.ReactNode = <span className="text-neutral-500">elegí una nota del pentagrama para cambiarle ♭ ♮ ♯</span>;
+        let acc = 99;
+        if (sel) {
+          const midi = drag && drag.id === sel.id ? drag.midi : sel.midi;
+          const beat = drag && drag.id === sel.id ? drag.beat : Number(sel.start_beat);
+          const sp = spell(midi, preferFlats, sel.accidental);
+          acc = sp.acc;
+          const bar = Math.floor(beat / beatsPerBar) + 1;
+          const inBar = beat - (bar - 1) * beatsPerBar;
+          info = (
+            <span className="text-neutral-200">
+              <b className="text-amber-300 text-sm">{sp.name}{sp.oct}</b>
+              <span className="text-neutral-500"> · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · suena {hzOf(midi).toFixed(1)} Hz</span>
             </span>
+          );
+        }
+        const bar = (
+          <div className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/5 px-2 py-1.5 font-mono text-[11px]"
+               onClick={e => e.stopPropagation()}>
+            <span className="text-amber-300 mr-1">𝄢</span>
+            {accBtn(-1, "♭", "Bemol (tecla B)", acc === -1, sel)}
+            {accBtn(0, "♮", "Natural (tecla N)", acc === 0, sel)}
+            {accBtn(1, "♯", "Sostenido (tecla # o S)", acc === 1, sel)}
+            <span className="ml-2 truncate">{info}</span>
           </div>
         );
+        if (toolbarTarget) return createPortal(bar, toolbarTarget);
+        if (!sel) return null;
+        return <div className="absolute" style={{ left: 40, bottom: 4, zIndex: 7 }}>{bar}</div>;
       })()}
 
       {/* playhead */}
