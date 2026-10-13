@@ -181,6 +181,19 @@ function formatTime(seconds: number): string {
   return `${min}:${secStr}`;
 }
 
+/* Cifrado: "Am7" → raíz A + calidad m7. La app del escenario muestra
+ * raíz + calidad, así que esos dos campos se derivan SIEMPRE del símbolo. */
+function parseChordSymbol(raw: string) {
+  const sym = String(raw || "").trim().replace(/\s+/g, "");
+  const m = sym.match(/^([A-Ga-g])([#b♯♭]?)(.*)$/);
+  if (!m) return { chord_symbol: sym || "?", root_note: sym || "?", quality: "" };
+  const acc = m[2] === "♯" ? "#" : m[2] === "♭" ? "b" : m[2];
+  const root = m[1].toUpperCase() + acc;
+  const quality = m[3];
+  return { chord_symbol: root + quality, root_note: root, quality };
+}
+const chordShown = (c: any) => `${c.root_note ?? ""}${c.quality ?? ""}`;
+
 export default function SongEditor() {
   const supabase = createClient();
   const { id } = useParams<{ id: string }>();
@@ -189,6 +202,8 @@ export default function SongEditor() {
   const [lyrics, setLyrics] = useState<any[]>([]);
   const [cues, setCues] = useState<any[]>([]);
   const [chords, setChords] = useState<any[]>([]);
+  const chordsRef = useRef<any[]>([]);
+  chordsRef.current = chords;
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio"|"midiout">("meta");
   // --- Pistas de audio ---
@@ -218,7 +233,7 @@ export default function SongEditor() {
 
   // URL firmada de la pista para el editor de onda (se pide al entrar a Letras)
   useEffect(() => {
-    if (tab !== "lyrics" || !song?.audio_path || waveUrl) return;
+    if ((tab !== "lyrics" && tab !== "chords") || !song?.audio_path || waveUrl) return;
     supabase.storage.from(AUDIO_BUCKET).createSignedUrl(song.audio_path, 3600)
       .then(({ data, error }) => {
         if (error) setWaveUrlErr(error.message);
@@ -651,6 +666,7 @@ export default function SongEditor() {
       text: "Nueva línea", start_time_seconds: Math.max(0, Math.round(sec * 100) / 100),
     }).select().single();
     if (data) setLyrics(prev => [...prev, data]);
+    return data?.id as string | undefined;
   }
 
   // ===== CUE inline para una letra =====
@@ -845,32 +861,94 @@ export default function SongEditor() {
   }
 
   // ===== CHORDS =====
-  async function addChord() {
-    const next = chords.length;
-    const last = chords.at(-1);
-    const { data } = await supabase.from("chord_charts").insert({
-      song_id: id, order_index: next,
-      chord_symbol: "C", root_note: "C", quality: "",
-      start_bar: (last?.start_bar || 0) + (last?.bar_count || 2),
-      bar_count: 2,
+  // Un compás en segundos (tiempo de contenido). El compás 1 = start_bar 0 = 0 s,
+  // igual que la app del escenario (bar * tiemposPorCompás * 60/BPM).
+  const chordBpb = Math.max(1, parseInt(String(song?.time_signature || "4/4"), 10) || 4);
+  const chordBarDur = Number(song?.bpm) > 0 ? (60 / Number(song.bpm)) * chordBpb : 0;
+  const secToBar = (sec: number) => chordBarDur ? Math.max(0, Math.round(sec / chordBarDur)) : 0;
+
+  /* Ordena por compás y recalcula cuántos compases dura cada acorde (hasta el siguiente). */
+  function chordsWithCounts(list: any[]) {
+    const sorted = [...list].sort((x, y) => x.start_bar - y.start_bar);
+    return sorted.map((c, i) => {
+      const next = sorted[i + 1];
+      const bc = next ? Math.max(1, next.start_bar - c.start_bar) : Math.max(1, c.bar_count || 1);
+      return { ...c, bar_count: bc };
+    });
+  }
+  /* Guarda en Supabase solo lo que cambió respecto de `prev`. */
+  async function persistChords(next: any[], prev: any[]) {
+    const withCounts = chordsWithCounts(next);
+    chordsRef.current = withCounts;
+    setChords(withCounts);
+    const prevById = new Map(prev.map(c => [c.id, c]));
+    for (const c of withCounts) {
+      const p = prevById.get(c.id);
+      if (!p) continue;
+      const patch: any = {};
+      for (const k of ["start_bar", "bar_count", "chord_symbol", "root_note", "quality"]) {
+        if (p[k] !== c[k]) patch[k] = c[k];
+      }
+      if (Object.keys(patch).length) await supabase.from("chord_charts").update(patch).eq("id", c.id);
+    }
+  }
+  async function chordInsertBar(bar: number): Promise<string | null> {
+    const prev = chordsRef.current;
+    const there = prev.find(c => c.start_bar === bar);
+    if (there) return there.id;                    // ya hay uno ahí: seleccionarlo
+    const maxOrder = prev.length ? Math.max(...prev.map(c => c.order_index ?? 0)) : -1;
+    const { data, error } = await supabase.from("chord_charts").insert({
+      song_id: id, order_index: maxOrder + 1,
+      chord_symbol: "?", root_note: "?", quality: "",
+      start_bar: bar, bar_count: 1,
     }).select().single();
-    if (data) setChords([...chords, data]);
+    if (error || !data) { alert("No pude crear el acorde: " + (error?.message || "")); return null; }
+    const cur = [...chordsRef.current, data];
+    await persistChords(cur, cur);
+    return data.id;
   }
-  function updateChord(chordId: string, patch: any) {
-    setChords(chords.map(c => c.id === chordId ? { ...c, ...patch } : c));
+  async function addChord() {
+    const sorted = chordsWithCounts(chordsRef.current);
+    const last = sorted.at(-1);
+    await chordInsertBar(last ? last.start_bar + (last.bar_count || 2) : 0);
   }
-  async function saveChord(chordId: string) {
-    const c = chords.find(x => x.id === chordId);
-    if (!c) return;
-    await supabase.from("chord_charts").update({
-      chord_symbol: c.chord_symbol, root_note: c.root_note, quality: c.quality,
-      start_bar: c.start_bar, bar_count: c.bar_count,
-    }).eq("id", chordId);
+  async function chordWaveTimeMany(changes: { id: string; sec: number }[]) {
+    const prev = chordsRef.current;
+    const next = prev.map(c => {
+      const ch = changes.find(x => x.id === c.id);
+      return ch ? { ...c, start_bar: secToBar(ch.sec) } : c;
+    });
+    await persistChords(next, prev);
+  }
+  async function chordWaveTime(chordId: string, sec: number) {
+    await chordWaveTimeMany([{ id: chordId, sec }]);
+  }
+  async function chordSetBar(chordId: string, bar: number) {
+    const prev = chordsRef.current;
+    await persistChords(prev.map(c => c.id === chordId ? { ...c, start_bar: Math.max(0, bar) } : c), prev);
+  }
+  async function chordSetSymbol(chordId: string, text: string) {
+    const prev = chordsRef.current;
+    const parsed = parseChordSymbol(text);
+    await persistChords(prev.map(c => c.id === chordId ? { ...c, ...parsed } : c), prev);
+  }
+  /* Acordes cargados antes, con raíz/calidad que no coinciden con el símbolo. */
+  async function fixAllChordFields() {
+    const prev = chordsRef.current;
+    await persistChords(prev.map(c => ({ ...c, ...parseChordSymbol(c.chord_symbol) })), prev);
   }
   async function removeChord(chordId: string) {
     await supabase.from("chord_charts").delete().eq("id", chordId);
-    setChords(chords.filter(c => c.id !== chordId));
+    const rest = chordsRef.current.filter(c => c.id !== chordId);
+    await persistChords(rest, rest);
   }
+  const chordItems = chords.map(c => ({
+    id: c.id,
+    text: c.chord_symbol,
+    start_time_seconds: (c.start_bar || 0) * chordBarDur,
+    order_index: c.order_index,
+  }));
+  const chordsMismatch = chords.filter(c => c.chord_symbol && chordShown(c) !== parseChordSymbol(c.chord_symbol).chord_symbol);
 
   if (!song) return <div className="p-6">Cargando…</div>;
 
@@ -1452,32 +1530,91 @@ export default function SongEditor() {
 
       {tab === "chords" && (
         <div className="space-y-2">
-          <p className="text-xs text-neutral-500 mb-2">Progresión armónica para la vista del bajista. Cada acorde con cuántos compases dura.</p>
-          {chords.map(c => (
+
+          {/* ---------- EDITOR DE ONDA: acordes clavados en su compás ---------- */}
+          {!chordBarDur ? (
+            <div className="card mb-3">
+              <p className="text-xs text-neutral-500">
+                Cargá el <b className="text-neutral-300">BPM</b> y el compás en la solapa <b className="text-neutral-300">Datos</b>:
+                los acordes se ubican por compás y sin tempo no hay grilla.
+              </p>
+            </div>
+          ) : song.audio_path ? (
+            waveUrl ? (
+              <WaveformLyricsEditor
+                audioUrl={waveUrl}
+                lyrics={chordItems}
+                offsetSeconds={Number(song.offset_seconds) || 0}
+                endSeconds={song.audio_end_seconds != null ? Number(song.audio_end_seconds) : null}
+                onChangeTime={chordWaveTime}
+                onChangeTimeMany={chordWaveTimeMany}
+                onChangeText={chordSetSymbol}
+                onInsertAt={sec => chordInsertBar(secToBar(sec))}
+                onRemove={removeChord}
+                bpm={Number(song.bpm) || 0}
+                timeSignature={song.time_signature || "4/4"}
+                onChangeOffset={guardarOffset}
+                snapSeconds={chordBarDur}
+                itemNoun="acorde"
+                itemNounPlural="acordes"
+                pinShowsText
+                contextLines={lyrics}
+                textPlaceholder="Am7, F/A, C#m…"
+              />
+            ) : waveUrlErr ? (
+              <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3 mb-3">
+                No pude firmar la URL del audio: {waveUrlErr}
+              </p>
+            ) : (
+              <div className="card mb-3">
+                <p className="text-xs text-neutral-500 animate-pulse">Preparando el editor de onda…</p>
+              </div>
+            )
+          ) : (
+            <div className="card mb-3">
+              <p className="text-xs text-neutral-500">
+                Subí la pista en la solapa <b className="text-neutral-300">Audio</b> y vas a poder
+                clavar cada acorde sobre la forma de onda, con la grilla de compases.
+              </p>
+            </div>
+          )}
+
+          {chordsMismatch.length > 0 && (
+            <div className="card flex flex-wrap items-center gap-2 border-amber-400/40">
+              <p className="text-xs text-amber-300 flex-1 min-w-0">
+                ⚠ {chordsMismatch.length} acorde{chordsMismatch.length > 1 ? "s" : ""} se
+                {chordsMismatch.length > 1 ? " ven" : " ve"} distinto en el escenario de lo que dice el símbolo
+                (ej. <b>{chordsMismatch[0].chord_symbol}</b> aparece como <b>{chordShown(chordsMismatch[0]) || "—"}</b>).
+              </p>
+              <button onClick={fixAllChordFields} className="btn text-xs">Arreglar todos</button>
+            </div>
+          )}
+
+          {/* ---------- Lista (para ver todo de un vistazo o escribir de corrido) ---------- */}
+          <p className="text-xs text-neutral-500 mb-2">
+            Escribí el acorde completo (<span className="mono">Am7</span>, <span className="mono">F/A</span>,
+            <span className="mono"> C#m</span>…): la raíz y la calidad salen solas. Cada acorde dura hasta el siguiente.
+          </p>
+          {chordsWithCounts(chords).map(c => (
             <div key={c.id} className="card flex items-center gap-2">
-              <input value={c.start_bar}
-                     onChange={e => updateChord(c.id, { start_bar: parseInt(e.target.value)||0 })}
-                     onBlur={() => saveChord(c.id)}
-                     className="input w-16 text-center mono text-xs" placeholder="bar" />
-              <span className="mono text-[10px] text-neutral-500">bar</span>
-              <input value={c.chord_symbol}
-                     onChange={e => updateChord(c.id, { chord_symbol: e.target.value })}
-                     onBlur={() => saveChord(c.id)}
-                     className="input w-24 font-bold" placeholder="Am7" />
-              <input value={c.root_note}
-                     onChange={e => updateChord(c.id, { root_note: e.target.value })}
-                     onBlur={() => saveChord(c.id)}
-                     className="input w-16 text-center mono" placeholder="A" />
-              <input value={c.quality}
-                     onChange={e => updateChord(c.id, { quality: e.target.value })}
-                     onBlur={() => saveChord(c.id)}
-                     className="input w-20 mono" placeholder="m7" />
-              <input type="number" min="1" value={c.bar_count}
-                     onChange={e => updateChord(c.id, { bar_count: parseInt(e.target.value)||1 })}
-                     onBlur={() => saveChord(c.id)}
+              <span className="mono text-[10px] text-neutral-500">comp.</span>
+              <input key={`bar-${c.id}-${c.start_bar}`} defaultValue={c.start_bar + 1}
+                     onBlur={e => {
+                       const v = parseInt(e.target.value, 10);
+                       if (isFinite(v) && v >= 1 && v - 1 !== c.start_bar) chordSetBar(c.id, v - 1);
+                       else e.target.value = String(c.start_bar + 1);
+                     }}
+                     onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                      className="input w-16 text-center mono text-xs" />
-              <span className="mono text-[10px] text-neutral-500">bars</span>
-              <button onClick={() => removeChord(c.id)} className="text-neutral-600 hover:text-red-400 px-2">×</button>
+              <input key={`sym-${c.id}-${c.chord_symbol}`} defaultValue={c.chord_symbol === "?" ? "" : c.chord_symbol}
+                     onBlur={e => { if (e.target.value.trim() && e.target.value.trim() !== c.chord_symbol) chordSetSymbol(c.id, e.target.value); }}
+                     onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                     className="input w-28 font-bold" placeholder="Am7" />
+              <span className="mono text-[10px] text-neutral-500 whitespace-nowrap">
+                {c.bar_count} comp.{chordBarDur ? ` · ${Math.floor(c.start_bar * chordBarDur / 60)}:${String(Math.floor((c.start_bar * chordBarDur) % 60)).padStart(2, "0")}` : ""}
+              </span>
+              <span className="flex-1" />
+              <button onClick={() => removeChord(c.id)} className="text-neutral-600 hover:text-red-400 px-2" title="Borrar acorde">×</button>
             </div>
           ))}
           <button onClick={addChord} className="w-full card border-dashed text-neutral-500 hover:text-white hover:border-cyan-400/40 transition">

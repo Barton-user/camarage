@@ -69,6 +69,12 @@ export default function WaveformLyricsEditor({
   bpm = 0,
   timeSignature = "4/4",
   onChangeOffset,
+  snapSeconds = 0,
+  itemNoun = "línea",
+  itemNounPlural = "líneas",
+  pinShowsText = false,
+  contextLines,
+  textPlaceholder,
 }: {
   audioUrl: string;
   lyrics: Lyric[];
@@ -78,8 +84,8 @@ export default function WaveformLyricsEditor({
   /** Guarda el nuevo start_time_seconds (tiempo de contenido, ya con offset). */
   onChangeTime: (lyricId: string, newStartSeconds: number) => void;
   onChangeText: (lyricId: string, text: string) => void;
-  /** Inserta una línea nueva en ese tiempo de contenido. */
-  onInsertAt: (startSeconds: number) => void;
+  /** Inserta un ítem nuevo en ese tiempo de contenido. Si devuelve el id, queda seleccionado y con el campo de texto listo para escribir. */
+  onInsertAt: (startSeconds: number) => void | Promise<string | null | undefined | void>;
   onRemove: (lyricId: string) => void;
   /** Guarda el fin marcado (segundos de archivo) o null para usar el archivo entero. */
   onChangeEnd?: (sec: number | null) => void;
@@ -91,8 +97,24 @@ export default function WaveformLyricsEditor({
   timeSignature?: string;
   /** Guarda un offset nuevo (segundos). Si falta, no se muestran los botones de corrimiento. */
   onChangeOffset?: (sec: number) => void;
+  /** >0 = modo ACORDES: todo se imanta a múltiplos de este valor de tiempo de
+   *  contenido (la duración de un compás). Mover, insertar y correr van de a compás. */
+  snapSeconds?: number;
+  itemNoun?: string;
+  itemNounPlural?: string;
+  /** El pin muestra el texto del ítem (p.ej. "Am7") en vez del número. */
+  pinShowsText?: boolean;
+  /** Letras de referencia, solo lectura: se muestran bajo el acorde que suena. */
+  contextLines?: { start_time_seconds: number | string; text: string }[];
+  textPlaceholder?: string;
 }) {
   const offset = Number(offsetSeconds) || 0;
+  const snap = Number(snapSeconds) > 0 ? Number(snapSeconds) : 0;
+  /** Imanta un tiempo de CONTENIDO al compás más cercano (si hay snap). */
+  const snapC = (c: number) => (snap ? Math.max(0, Math.round(c / snap) * snap) : Math.max(0, c));
+  /** Número de compás (1 = el primero) de un tiempo de contenido. */
+  const barOf = (c: number) => Math.round(c / (snap || 1)) + 1;
+  const focusNewRef = useRef<string | null>(null);
 
   // --- Grilla de tempo ---
   const bpmN = Number(bpm) > 0 ? Number(bpm) : 0;
@@ -231,7 +253,9 @@ export default function WaveformLyricsEditor({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // El contenedor recién existe cuando termina de cargar (antes hay un placeholder):
+    // sin esta dependencia nunca se medía y la onda quedaba en 800 px.
+  }, [loadState]);
 
   /* ---------- dibujar la onda (una vez por zoom) ---------- */
   useEffect(() => {
@@ -476,10 +500,12 @@ export default function WaveformLyricsEditor({
   }, []);
 
   const commitTime = useCallback((lyricId: string, audioT: number) => {
-    const start = Math.max(0, Math.round((audioT + offset) * 100) / 100);
+    const raw = audioT + offset;
+    const start = snap ? snapC(raw) : Math.max(0, Math.round(raw * 100) / 100);
     onChangeTime(lyricId, start);
-    flash("✓ tiempo guardado");
-  }, [offset, onChangeTime, flash]);
+    flash(snap ? `✓ compás ${barOf(start)}` : "✓ tiempo guardado");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offset, onChangeTime, flash, snap]);
 
   const nudge = useCallback((l: Lyric, delta: number) => {
     commitTime(l.id, lyricT(l) + delta);
@@ -489,15 +515,33 @@ export default function WaveformLyricsEditor({
   const commitShift = useCallback((delta: number, ids?: string[]) => {
     const idSet = ids && ids.length ? ids : selIds;
     const list = lyrics.filter(l => idSet.includes(l.id));
-    if (!list.length || !delta) return;
+    const d = snap ? Math.round(delta / snap) * snap : delta;
+    if (!list.length || !d) return;
     const changes = list.map(l => ({
       id: l.id,
-      sec: Math.max(0, Math.round((Number(l.start_time_seconds) + delta) * 100) / 100),
+      sec: snap
+        ? snapC(Number(l.start_time_seconds) + d)
+        : Math.max(0, Math.round((Number(l.start_time_seconds) + d) * 100) / 100),
     }));
     if (onChangeTimeMany) onChangeTimeMany(changes);
     else changes.forEach(c => onChangeTime(c.id, c.sec));
     flash(changes.length > 1 ? `✓ ${changes.length} tiempos guardados` : "✓ tiempo guardado");
-  }, [selIds, lyrics, onChangeTimeMany, onChangeTime, flash]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selIds, lyrics, onChangeTimeMany, onChangeTime, flash, snap]);
+
+  /* Insertar un ítem nuevo (tiempo de contenido). Si el padre devuelve el id,
+   * se selecciona y el campo de texto toma el foco para escribir de una. */
+  const doInsert = useCallback(async (c: number) => {
+    const at = snap ? snapC(c) : Math.max(0, Math.round(c * 100) / 100);
+    const newId = await onInsertAt(at);
+    if (typeof newId === "string" && newId) {
+      focusNewRef.current = newId;
+      setSelIds([newId]);
+      setPrimaryId(newId);
+    }
+    flash(snap ? `✓ ${itemNoun} en compás ${barOf(at)}` : "✓ línea nueva insertada");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap, onInsertAt, flash, itemNoun]);
 
   /* ---------- fin marcado ("acá termina el tema") ---------- */
   const endT = dragEnd ?? (endSeconds != null && endSeconds > 0 ? Number(endSeconds) : null);
@@ -564,9 +608,8 @@ export default function WaveformLyricsEditor({
 
   const onWaveDblClick = useCallback((e: React.MouseEvent) => {
     const t = timeFromEvent(e);
-    onInsertAt(Math.round((t + offset) * 100) / 100);
-    flash("✓ línea nueva insertada");
-  }, [timeFromEvent, onInsertAt, offset, flash]);
+    doInsert(t + offset);
+  }, [timeFromEvent, doInsert, offset]);
 
   /* ---------- drag de pins (mueve TODA la selección por el mismo delta) ---------- */
   const startDrag = useCallback((e: React.PointerEvent, l: Lyric) => {
@@ -591,6 +634,10 @@ export default function WaveformLyricsEditor({
     const move = (ev: PointerEvent) => {
       const t = timeFromEvent(ev);
       let delta = t - t0;
+      if (snap) {                              // modo acordes: salta de compás en compás
+        const c0 = Number(l.start_time_seconds);
+        delta = snapC(c0 + delta) - c0;
+      }
       if (minT + delta < 0) delta = -minT;   // que ninguna quede antes de 0
       moved = true;
       dragMoveRef.current = delta;
@@ -608,7 +655,8 @@ export default function WaveformLyricsEditor({
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
-  }, [selIds, lyrics, lyricT, timeFromEvent, commitShift]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selIds, lyrics, lyricT, timeFromEvent, commitShift, snap]);
 
   /* ---------- recuadro de selección sobre la franja de pins ---------- */
   const startBoxSel = useCallback((e: React.PointerEvent) => {
@@ -652,13 +700,13 @@ export default function WaveformLyricsEditor({
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
       else if (e.code === "ArrowLeft")  { e.preventDefault(); seekTo(posRef.current - 2); }
       else if (e.code === "ArrowRight") { e.preventDefault(); seekTo(posRef.current + 2); }
-      else if (e.code === "BracketLeft" && selIds.length)  { e.preventDefault(); commitShift(-0.05); }
-      else if (e.code === "BracketRight" && selIds.length) { e.preventDefault(); commitShift(+0.05); }
+      else if (e.code === "BracketLeft" && selIds.length)  { e.preventDefault(); commitShift(-(snap || 0.05)); }
+      else if (e.code === "BracketRight" && selIds.length) { e.preventDefault(); commitShift(+(snap || 0.05)); }
       else if (e.code === "Escape") { setSelIds([]); setPrimaryId(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePlay, seekTo, selIds, commitShift]);
+  }, [togglePlay, seekTo, selIds, commitShift, snap]);
 
   /* ---------- zoom ---------- */
   function zoomIn() {
@@ -687,9 +735,18 @@ export default function WaveformLyricsEditor({
   /* ---------- línea "sonando" ---------- */
   const contentPos = pos + offset;
   let currentLine: Lyric | null = null;
+  let nextLine: Lyric | null = null;
   for (const l of byTime) {
     if (Number(l.start_time_seconds) <= contentPos) currentLine = l;
-    else break;
+    else { nextLine = l; break; }
+  }
+  let ctxLine: { text: string } | null = null;
+  if (contextLines && contextLines.length) {
+    const ctxSorted = [...contextLines].sort((a, b) => Number(a.start_time_seconds) - Number(b.start_time_seconds));
+    for (const l of ctxSorted) {
+      if (Number(l.start_time_seconds) <= contentPos) ctxLine = l;
+      else break;
+    }
   }
 
   /* ---------- regla de tiempos ---------- */
@@ -732,10 +789,12 @@ export default function WaveformLyricsEditor({
         </select>
         <span className="flex-1" />
         {savedFlash && <span className="text-[11px] text-green-400 font-mono">{savedFlash}</span>}
-        <button onClick={() => onInsertAt(Math.round((posRef.current + offset) * 100) / 100)}
+        <button onClick={() => doInsert(posRef.current + offset)}
                 disabled={loadState !== "ready"}
-                className="btn text-xs" title="Inserta una línea nueva donde está el cursor de reproducción">
-          + Línea en el cursor
+                className="btn text-xs" title={snap
+                  ? "Inserta un acorde en el compás donde está el cursor de reproducción"
+                  : "Inserta una línea nueva donde está el cursor de reproducción"}>
+          + {itemNoun.charAt(0).toUpperCase() + itemNoun.slice(1)} en el cursor
         </button>
         {onChangeEnd && (
           <>
@@ -808,7 +867,7 @@ export default function WaveformLyricsEditor({
             )}
             {onChangeOffset && (
               <span className="flex items-center gap-1 ml-auto" title="Corre la grilla Y las letras juntas respecto del audio (es el mismo offset de la solapa Datos)">
-                <span className="text-[10px] text-neutral-500 mr-1 whitespace-nowrap">grilla + letras</span>
+                <span className="text-[10px] text-neutral-500 mr-1 whitespace-nowrap">{snap ? "grilla + acordes + letras" : "grilla + letras"}</span>
                 <button onClick={() => onChangeOffset(Number((offset + 0.1).toFixed(3)))} className="btn text-[11px] px-2">◀ 100</button>
                 <button onClick={() => onChangeOffset(Number((offset + 0.01).toFixed(3)))} className="btn text-[11px] px-2">◀ 10</button>
                 <span className="font-mono text-[11px] text-violet-200 w-16 text-center">
@@ -828,7 +887,21 @@ export default function WaveformLyricsEditor({
 
       {/* Línea sonando */}
       <div className="rounded-lg border border-neutral-800 bg-black/50 px-3 py-2 min-h-[38px] flex items-center">
-        {currentLine ? (
+        {snap ? (
+          <div className="flex items-baseline gap-3 min-w-0 w-full">
+            {currentLine ? (
+              <span className="text-2xl font-black text-violet-300 leading-none shrink-0">{currentLine.text || "?"}</span>
+            ) : (
+              <span className="text-xs text-neutral-600 shrink-0">— todavía no entró ningún acorde —</span>
+            )}
+            {nextLine && (
+              <span className="text-xs font-mono text-neutral-500 shrink-0">
+                → {nextLine.text || "?"} <span className="text-neutral-700">(comp. {barOf(Number(nextLine.start_time_seconds))})</span>
+              </span>
+            )}
+            {ctxLine && <span className="text-xs italic text-neutral-500 truncate">♪ {ctxLine.text}</span>}
+          </div>
+        ) : currentLine ? (
           <p className="text-sm font-bold truncate">
             <span className="text-cyan-300 font-mono text-[11px] mr-2">{fmtClock(lyricT(currentLine))}</span>
             {currentLine.text}
@@ -881,11 +954,14 @@ export default function WaveformLyricsEditor({
                        onDoubleClick={e => { e.stopPropagation(); seekTo(Math.max(0, t - 2)); audioRef.current?.play().catch(() => {}); }}
                        title={`${fmtClock(t, true)} · ${l.text}\narrastrá para mover (mueve toda la selección) · shift+click: rango · ⌘/ctrl+click: sumar/sacar · doble click: escuchar desde acá`}
                        className="absolute cursor-grab active:cursor-grabbing"
-                       style={{ left: t * pps, top: i % 2 === 0 ? 2 : 22, transform: "translateX(-50%)", touchAction: "none", zIndex: sel ? 30 : 10 }}>
+                       style={{ left: t * pps, top: i % 2 === 0 ? 2 : 22,
+                                // acordes: la etiqueta arranca en la línea (como un marcador de DAW)
+                                transform: pinShowsText ? "none" : "translateX(-50%)",
+                                touchAction: "none", zIndex: sel ? 30 : 10 }}>
                     <div className={`px-1.5 py-0.5 rounded-full text-[10px] font-black font-mono leading-none whitespace-nowrap border ${
                       sel ? "bg-white text-black border-white"
                           : "bg-cyan-400 text-black border-cyan-300"}`}>
-                      {i + 1}
+                      {pinShowsText ? (l.text || "?") : i + 1}
                     </div>
                   </div>
                 );
@@ -940,8 +1016,10 @@ export default function WaveformLyricsEditor({
                 return (
                   <div className="absolute pointer-events-none px-1.5 py-0.5 rounded bg-white text-black text-[10px] font-mono font-bold whitespace-nowrap"
                        style={{ left: t * pps, top: 6, transform: "translateX(-50%)" }}>
-                    {(dragMove.delta >= 0 ? "+" : "") + dragMove.delta.toFixed(2)}s · {fmtClock(t, true)}
-                    {selectedLyrics.length > 1 ? ` · ${selectedLyrics.length} líneas` : ""}
+                    {snap
+                      ? `compás ${barOf(Number(p.start_time_seconds) + dragMove.delta)}`
+                      : `${(dragMove.delta >= 0 ? "+" : "") + dragMove.delta.toFixed(2)}s · ${fmtClock(t, true)}`}
+                    {selectedLyrics.length > 1 ? ` · ${selectedLyrics.length} ${itemNounPlural}` : ""}
                   </div>
                 );
               })()}
@@ -954,25 +1032,44 @@ export default function WaveformLyricsEditor({
       {selected ? (
         <div className="rounded-lg border border-cyan-400/40 bg-cyan-400/5 p-3 flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] text-cyan-300 w-20 shrink-0">
-            {fmtClock(Math.max(0, lyricT(selected) + (dragMove ? dragMove.delta : 0)), true)}
+            {snap
+              ? `comp. ${barOf(Number(selected.start_time_seconds))}`
+              : fmtClock(Math.max(0, lyricT(selected) + (dragMove ? dragMove.delta : 0)), true)}
           </span>
           <button onClick={() => { seekTo(Math.max(0, lyricT(selected) - 2)); audioRef.current?.play().catch(() => {}); }}
-                  className="btn text-xs whitespace-nowrap" title="Escuchar desde 2 s antes de esta línea">
+                  className="btn text-xs whitespace-nowrap" title="Escuchar desde 2 s antes">
             ▶ probar
           </button>
-          <button onClick={() => nudge(selected, -0.1)} className="btn text-xs px-2" title="0,1 s antes">−0,1</button>
-          <button onClick={() => nudge(selected, +0.1)} className="btn text-xs px-2" title="0,1 s después">+0,1</button>
+          {snap ? (
+            <>
+              <button onClick={() => commitShift(-snap, [selected.id])} className="btn text-xs px-2" title="Un compás antes">−1 comp</button>
+              <button onClick={() => commitShift(+snap, [selected.id])} className="btn text-xs px-2" title="Un compás después">+1 comp</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => nudge(selected, -0.1)} className="btn text-xs px-2" title="0,1 s antes">−0,1</button>
+              <button onClick={() => nudge(selected, +0.1)} className="btn text-xs px-2" title="0,1 s después">+0,1</button>
+            </>
+          )}
           <button onClick={() => commitTime(selected.id, posRef.current)}
-                  className="btn text-xs whitespace-nowrap" title="Mueve esta línea a donde está el cursor de reproducción">
+                  className="btn text-xs whitespace-nowrap" title={snap
+                    ? "Mueve este acorde al compás donde está el cursor de reproducción"
+                    : "Mueve esta línea a donde está el cursor de reproducción"}>
             ⌖ al cursor
           </button>
           <input
             key={`sel-txt-${selected.id}`}
+            ref={el => {
+              if (el && focusNewRef.current === selected.id) {
+                focusNewRef.current = null;
+                el.focus(); el.select();
+              }
+            }}
             defaultValue={selected.text}
             onBlur={e => { if (e.target.value !== selected.text) { onChangeText(selected.id, e.target.value); flash("✓ texto guardado"); } }}
             onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
             className="input flex-1 min-w-[200px]"
-            placeholder="Texto de la línea" />
+            placeholder={textPlaceholder || "Texto de la línea"} />
           <button onClick={selectToEnd} className="btn text-xs whitespace-nowrap"
                   title="Seleccionar esta línea y todas las que siguen (para correr media canción de una)">
             ⇥ hasta el final
@@ -983,15 +1080,26 @@ export default function WaveformLyricsEditor({
       ) : selectedLyrics.length > 1 ? (
         <div className="rounded-lg border border-cyan-400/40 bg-cyan-400/5 p-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-black text-cyan-300 whitespace-nowrap">
-            {selectedLyrics.length} líneas seleccionadas
+            {selectedLyrics.length} {itemNounPlural} en la selección
           </span>
           <span className="font-mono text-[11px] text-neutral-400 whitespace-nowrap">
             {fmtClock(lyricT(selectedLyrics[0]))} → {fmtClock(lyricT(selectedLyrics[selectedLyrics.length - 1]))}
           </span>
-          <button onClick={() => commitShift(-1)}   className="btn text-xs px-2" title="Todas 1 s antes">−1s</button>
-          <button onClick={() => commitShift(-0.1)} className="btn text-xs px-2" title="Todas 0,1 s antes">−0,1</button>
-          <button onClick={() => commitShift(+0.1)} className="btn text-xs px-2" title="Todas 0,1 s después">+0,1</button>
-          <button onClick={() => commitShift(+1)}   className="btn text-xs px-2" title="Todas 1 s después">+1s</button>
+          {snap ? (
+            <>
+              <button onClick={() => commitShift(-4 * snap)} className="btn text-xs px-2" title="Todos 4 compases antes">−4 comp</button>
+              <button onClick={() => commitShift(-snap)}     className="btn text-xs px-2" title="Todos 1 compás antes">−1 comp</button>
+              <button onClick={() => commitShift(+snap)}     className="btn text-xs px-2" title="Todos 1 compás después">+1 comp</button>
+              <button onClick={() => commitShift(+4 * snap)} className="btn text-xs px-2" title="Todos 4 compases después">+4 comp</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => commitShift(-1)}   className="btn text-xs px-2" title="Todas 1 s antes">−1s</button>
+              <button onClick={() => commitShift(-0.1)} className="btn text-xs px-2" title="Todas 0,1 s antes">−0,1</button>
+              <button onClick={() => commitShift(+0.1)} className="btn text-xs px-2" title="Todas 0,1 s después">+0,1</button>
+              <button onClick={() => commitShift(+1)}   className="btn text-xs px-2" title="Todas 1 s después">+1s</button>
+            </>
+          )}
           <button onClick={() => { const p = selectedLyrics[0]; seekTo(Math.max(0, lyricT(p) - 2)); audioRef.current?.play().catch(() => {}); }}
                   className="btn text-xs whitespace-nowrap" title="Escuchar desde 2 s antes de la primera seleccionada">
             ▶ probar
@@ -1003,6 +1111,14 @@ export default function WaveformLyricsEditor({
           <span className="flex-1" />
           <button onClick={clearSel} className="text-xs text-neutral-500 hover:text-white">deseleccionar</button>
         </div>
+      ) : snap ? (
+        <p className="text-[10px] text-neutral-600 font-mono">
+          doble click en la onda: acorde nuevo en ese compás (escribís Am7, F/A, C#m… y Enter) ·
+          click en la onda: mover cursor · click en un acorde: editarlo · arrastrar acorde: cambia de compás
+          (mueve toda la selección) · shift+click: rango · ⌘/ctrl+click: sumar/sacar · arrastrar sobre la franja:
+          recuadro · doble click en acorde: escucharlo · ESPACIO play/pausa · ←/→ ±2 s · [ ] mueve la selección
+          ±1 compás · ESC deseleccionar
+        </p>
       ) : (
         <p className="text-[10px] text-neutral-600 font-mono">
           click en la onda: mover cursor · doble click en la onda: nueva línea ahí · click en un pin: editarlo ·
