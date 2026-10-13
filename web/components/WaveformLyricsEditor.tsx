@@ -77,6 +77,7 @@ export default function WaveformLyricsEditor({
   contextLines,
   textPlaceholder,
   belowWave,
+  onAudio,
 }: {
   audioUrl: string;
   lyrics: Lyric[];
@@ -114,6 +115,8 @@ export default function WaveformLyricsEditor({
     pps: number; fullW: number; offset: number; duration: number;
     getAudio: () => HTMLAudioElement | null;
   }) => React.ReactNode;
+  /** Le pasa al padre cómo leer el <audio> (para grabar notas contra la pista). */
+  onAudio?: (getAudio: () => HTMLAudioElement | null) => void;
 }) {
   const offset = Number(offsetSeconds) || 0;
   const snap = Number(snapSeconds) > 0 ? Number(snapSeconds) : 0;
@@ -510,6 +513,7 @@ export default function WaveformLyricsEditor({
   }, [duration]);
 
   const getAudio = useCallback(() => audioRef.current, []);
+  useEffect(() => { onAudio?.(getAudio); }, [onAudio, getAudio]);
 
   const togglePlay = useCallback(() => {
     const a = audioRef.current;

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { parseMidiFile, describeEvent, type MidiEvent } from "@/lib/midi-file";
 import WaveformLyricsEditor from "@/components/WaveformLyricsEditor";
 import BassStaff, { playTone, soundingHz } from "@/components/BassStaff";
+import NoteRecorder from "@/components/NoteRecorder";
 
 const FLAT_KEYS = new Set(["F","Bb","Eb","Ab","Db","Gb","Dm","Gm","Cm","Fm","Bbm","Ebm"]);
 
@@ -230,6 +231,12 @@ export default function SongEditor() {
   useEffect(() => {
     try { const v = parseFloat(localStorage.getItem("camarage.staff.vol") || ""); if (v >= 0 && v <= 1) setStaffVol(v); } catch {}
   }, []);
+  // Grabación de notas (placa / MIDI): necesita leer la pista del editor de onda
+  const waveAudioRef = useRef<() => HTMLAudioElement | null>(() => null);
+  const [waveAudioReady, setWaveAudioReady] = useState(false);
+  const onWaveAudio = useCallback((g: () => HTMLAudioElement | null) => { waveAudioRef.current = g; setWaveAudioReady(true); }, []);
+  const getWaveAudio = useCallback(() => waveAudioRef.current(), []);
+  const [recordingNotes, setRecordingNotes] = useState(false);
   function changeStaffVol(v: number) {
     setStaffVol(v);
     try { localStorage.setItem("camarage.staff.vol", String(v)); } catch {}
@@ -977,9 +984,9 @@ export default function SongEditor() {
     await persistChords(rest, rest);
   }
   // ===== PENTAGRAMA DEL BAJO =====
-  async function addBassNote(midi: number, startBeat: number): Promise<string | null> {
+  async function addBassNote(midi: number, startBeat: number, durationBeats = 0.5): Promise<string | null> {
     const { data, error } = await supabase.from("bass_notes").insert({
-      song_id: id, midi, start_beat: startBeat, duration_beats: 0.5,
+      song_id: id, midi, start_beat: startBeat, duration_beats: durationBeats,
     }).select().single();
     if (error || !data) { alert("No pude guardar la nota: " + (error?.message || "")); return null; }
     const row = { ...data, start_beat: Number(data.start_beat), duration_beats: Number(data.duration_beats) };
@@ -994,6 +1001,13 @@ export default function SongEditor() {
     if (patch.midi != null || patch.start_beat != null) scheduleChordSync();
     const { error } = await supabase.from("bass_notes").update(patch).eq("id", noteId);
     if (error) alert("No pude guardar la nota: " + error.message);
+  }
+  async function removeBassNotes(ids: string[]) {
+    if (!ids.length) return;
+    bassNotesRef.current = bassNotesRef.current.filter(n => !ids.includes(n.id));
+    setBassNotes(bassNotesRef.current);
+    scheduleChordSync();
+    await supabase.from("bass_notes").delete().in("id", ids);
   }
   async function removeBassNote(noteId: string) {
     bassNotesRef.current = bassNotesRef.current.filter(n => n.id !== noteId);
@@ -1687,6 +1701,7 @@ export default function SongEditor() {
                 pinShowsText
                 contextLines={lyrics}
                 textPlaceholder="Am7, F/A, C#m…"
+                onAudio={onWaveAudio}
                 belowWave={bassNotesErr ? undefined : v => (
                   <BassStaff
                     notes={bassNotes}
@@ -1699,7 +1714,7 @@ export default function SongEditor() {
                     tuningSemis={tuneSemis}
                     tuningCents={tuneCents}
                     preferFlats={FLAT_KEYS.has(String(song.key || "").trim())}
-                    volume={staffVol}
+                    volume={recordingNotes ? 0 : staffVol}
                     onAdd={addBassNote}
                     onUpdate={updateBassNote}
                     onRemove={removeBassNote}
@@ -1744,6 +1759,19 @@ export default function SongEditor() {
                        className="w-24 accent-amber-400" />
               </label>
               <span className="text-[11px] text-neutral-500 ml-2">{bassNotes.length} notas</span>
+              {waveAudioReady && (
+                <NoteRecorder
+                  getAudio={getWaveAudio}
+                  bpm={Number(song.bpm) || 0}
+                  offset={Number(song.offset_seconds) || 0}
+                  tuningSemis={tuneSemis}
+                  tuningCents={tuneCents}
+                  notes={bassNotes}
+                  onAddNote={addBassNote}
+                  onRemoveNotes={removeBassNotes}
+                  onRecordingChange={setRecordingNotes}
+                />
+              )}
               <p className="basis-full order-last text-[11px] text-amber-200/80">
                 Los acordes de arriba salen solos de la primera nota de cada compás (es lo que ve el bajista en el escenario),
                 en el tramo que va de tu primera a tu última nota; fuera de ese tramo no se toca nada.
