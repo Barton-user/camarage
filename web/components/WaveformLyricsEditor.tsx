@@ -75,6 +75,7 @@ export default function WaveformLyricsEditor({
   pinShowsText = false,
   contextLines,
   textPlaceholder,
+  belowWave,
 }: {
   audioUrl: string;
   lyrics: Lyric[];
@@ -107,6 +108,11 @@ export default function WaveformLyricsEditor({
   /** Letras de referencia, solo lectura: se muestran bajo el acorde que suena. */
   contextLines?: { start_time_seconds: number | string; text: string }[];
   textPlaceholder?: string;
+  /** Carril extra debajo de la onda, dentro del mismo scroll (p.ej. el pentagrama). */
+  belowWave?: (v: {
+    pps: number; fullW: number; offset: number; duration: number;
+    getAudio: () => HTMLAudioElement | null;
+  }) => React.ReactNode;
 }) {
   const offset = Number(offsetSeconds) || 0;
   const snap = Number(snapSeconds) > 0 ? Number(snapSeconds) : 0;
@@ -491,6 +497,8 @@ export default function WaveformLyricsEditor({
     posRef.current = a.currentTime;
     setPos(a.currentTime);
   }, [duration]);
+
+  const getAudio = useCallback(() => audioRef.current, []);
 
   const togglePlay = useCallback(() => {
     const a = audioRef.current;
@@ -1091,6 +1099,7 @@ export default function WaveformLyricsEditor({
                 );
               })()}
             </div>
+            {belowWave && belowWave({ pps, fullW, offset, duration, getAudio })}
           </div>
         </div>
       )}

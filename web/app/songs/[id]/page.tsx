@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase-client";
 import Link from "next/link";
 import { parseMidiFile, describeEvent, type MidiEvent } from "@/lib/midi-file";
 import WaveformLyricsEditor from "@/components/WaveformLyricsEditor";
+import BassStaff, { playTone, soundingHz } from "@/components/BassStaff";
+
+const FLAT_KEYS = new Set(["F","Bb","Eb","Ab","Db","Gb","Dm","Gm","Cm","Fm","Bbm","Ebm"]);
 
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 function noteNumToName(n: number) { return NOTE_NAMES[n%12] + (Math.floor(n/12)-1); }
@@ -204,6 +207,10 @@ export default function SongEditor() {
   const [chords, setChords] = useState<any[]>([]);
   const chordsRef = useRef<any[]>([]);
   chordsRef.current = chords;
+  // --- Pentagrama del bajo ---
+  const [bassNotes, setBassNotes] = useState<any[]>([]);
+  const [bassNotesErr, setBassNotesErr] = useState<string | null>(null);
+  const [staffPlayAlong, setStaffPlayAlong] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio"|"midiout">("meta");
   // --- Pistas de audio ---
@@ -251,6 +258,10 @@ export default function SongEditor() {
     setCues(c || []);
     const { data: ch } = await supabase.from("chord_charts").select("*").eq("song_id", id).order("order_index");
     setChords(ch || []);
+    // Si la tabla no existe todavía (falta la migración) se avisa, sin romper el resto
+    const { data: bn, error: bnErr } = await supabase.from("bass_notes").select("*").eq("song_id", id).order("start_beat");
+    setBassNotes((bn || []).map((n: any) => ({ ...n, start_beat: Number(n.start_beat), duration_beats: Number(n.duration_beats) })));
+    setBassNotesErr(bnErr ? bnErr.message : null);
     const { data: me } = await supabase.from("midi_events").select("*").eq("song_id", id).order("time_seconds");
     setMidiEvents(me || []);
   }
@@ -942,6 +953,33 @@ export default function SongEditor() {
     const rest = chordsRef.current.filter(c => c.id !== chordId);
     await persistChords(rest, rest);
   }
+  // ===== PENTAGRAMA DEL BAJO =====
+  async function addBassNote(midi: number, startBeat: number): Promise<string | null> {
+    const { data, error } = await supabase.from("bass_notes").insert({
+      song_id: id, midi, start_beat: startBeat, duration_beats: 0.5,
+    }).select().single();
+    if (error || !data) { alert("No pude guardar la nota: " + (error?.message || "")); return null; }
+    setBassNotes(prev => [...prev, { ...data, start_beat: Number(data.start_beat), duration_beats: Number(data.duration_beats) }]);
+    return data.id;
+  }
+  async function updateBassNote(noteId: string, patch: { midi?: number; start_beat?: number; duration_beats?: number }) {
+    setBassNotes(prev => prev.map(n => n.id === noteId ? { ...n, ...patch } : n));
+    const { error } = await supabase.from("bass_notes").update(patch).eq("id", noteId);
+    if (error) alert("No pude guardar la nota: " + error.message);
+  }
+  async function removeBassNote(noteId: string) {
+    setBassNotes(prev => prev.filter(n => n.id !== noteId));
+    await supabase.from("bass_notes").delete().eq("id", noteId);
+  }
+  /* Afinación real del tema: un Fa escrito suena Fa + semitonos + cents. */
+  async function saveTuning(patch: { tuning_semitones?: number; tuning_cents?: number }) {
+    setSong((s: any) => ({ ...s, ...patch }));
+    const { error } = await supabase.from("songs").update(patch).eq("id", id);
+    if (error) alert("No pude guardar la afinación (¿corriste migration_bass_notes.sql?): " + error.message);
+  }
+  const tuneSemis = Number(song?.tuning_semitones) || 0;
+  const tuneCents = Number(song?.tuning_cents) || 0;
+
   const chordItems = chords.map(c => ({
     id: c.id,
     text: c.chord_symbol,
@@ -1560,6 +1598,24 @@ export default function SongEditor() {
                 pinShowsText
                 contextLines={lyrics}
                 textPlaceholder="Am7, F/A, C#m…"
+                belowWave={bassNotesErr ? undefined : v => (
+                  <BassStaff
+                    notes={bassNotes}
+                    bpm={Number(song.bpm) || 0}
+                    beatsPerBar={chordBpb}
+                    offset={v.offset}
+                    pps={v.pps}
+                    fullW={v.fullW}
+                    getAudio={v.getAudio}
+                    tuningSemis={tuneSemis}
+                    tuningCents={tuneCents}
+                    preferFlats={FLAT_KEYS.has(String(song.key || "").trim())}
+                    playAlong={staffPlayAlong}
+                    onAdd={addBassNote}
+                    onUpdate={updateBassNote}
+                    onRemove={removeBassNote}
+                  />
+                )}
               />
             ) : waveUrlErr ? (
               <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3 mb-3">
@@ -1578,6 +1634,54 @@ export default function SongEditor() {
               </p>
             </div>
           )}
+
+          {/* ---------- Pentagrama: afinación del tema + sonido ---------- */}
+          {chordBarDur > 0 && (bassNotesErr ? (
+            <div className="card border-amber-400/40">
+              <p className="text-xs text-amber-300">
+                Para el pentagrama del bajo falta correr <b className="mono">migration_bass_notes.sql</b> en
+                Supabase (SQL Editor → Run). Después recargá la página.
+              </p>
+            </div>
+          ) : (
+            <div className="card flex flex-wrap items-center gap-2">
+              <span className="text-xs font-black text-amber-300 whitespace-nowrap">𝄢 Pentagrama</span>
+              <button onClick={() => setStaffPlayAlong(v => !v)} className="btn text-xs"
+                      style={staffPlayAlong ? { borderColor: "rgba(251,191,36,0.7)", color: "#fcd34d" } : undefined}
+                      title="Que las notas del pentagrama suenen junto con la pista">
+                {staffPlayAlong ? "♪ Notas con la pista ON" : "♪ Notas con la pista"}
+              </button>
+              <span className="text-[11px] text-neutral-500 ml-2">{bassNotes.length} notas</span>
+              <p className="basis-full order-last text-[10px] text-neutral-600 font-mono">
+                click en el pentagrama: nota en esa corchea (shift = ♯, alt = ♭) · click en una nota: suena · arrastrarla:
+                tiempo y altura · con una nota elegida: ↑/↓ semitono, shift+↑/↓ octava, − / = más corta / más larga,
+                Supr borra · el bajo se escribe una octava arriba de cómo suena · la afinación cambia solo el sonido, no lo escrito
+              </p>
+              <span className="flex-1" />
+              <span className="text-[11px] text-neutral-400 whitespace-nowrap" title="Cuánto se aparta la afinación real del tema de la escrita. Las notas se siguen viendo igual en el pentagrama; cambia solo cómo suenan.">
+                Afinación del tema
+              </span>
+              <select value={tuneSemis} onChange={e => saveTuning({ tuning_semitones: parseInt(e.target.value, 10) || 0 })}
+                      className="bg-black border border-neutral-800 rounded px-2 py-1 text-[11px]">
+                {Array.from({ length: 13 }, (_, i) => i - 6).map(v => (
+                  <option key={v} value={v}>{v > 0 ? `+${v}` : v} st{v === -1 ? " (½ tono abajo)" : v === -2 ? " (1 tono abajo)" : ""}</option>
+                ))}
+              </select>
+              <button onClick={() => saveTuning({ tuning_cents: Math.max(-50, tuneCents - 1) })} className="btn text-[11px] px-2">−1</button>
+              <input key={`cents-${tuneCents}`} defaultValue={tuneCents}
+                     onBlur={e => { const v = Math.max(-50, Math.min(50, parseFloat(e.target.value) || 0)); if (v !== tuneCents) saveTuning({ tuning_cents: v }); }}
+                     onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                     className="input w-14 text-center mono text-xs" />
+              <button onClick={() => saveTuning({ tuning_cents: Math.min(50, tuneCents + 1) })} className="btn text-[11px] px-2">+1</button>
+              <span className="text-[10px] text-neutral-500">cents</span>
+              <button onClick={() => saveTuning({ tuning_semitones: 0, tuning_cents: -32 })} className="btn text-[11px]"
+                      title="La = 432 Hz (−31,8 cents respecto de 440)">La 432</button>
+              <button onClick={() => playTone(soundingHz(81, tuneSemis, tuneCents), 1.2)} className="btn text-[11px]"
+                      title="Toca un La de referencia con la afinación del tema, para comparar de oído con la pista">
+                ♪ La {soundingHz(81, tuneSemis, tuneCents).toFixed(1)} Hz
+              </button>
+            </div>
+          ))}
 
           {chordsMismatch.length > 0 && (
             <div className="card flex flex-wrap items-center gap-2 border-amber-400/40">
