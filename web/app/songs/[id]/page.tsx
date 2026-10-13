@@ -197,6 +197,17 @@ function parseChordSymbol(raw: string) {
 }
 const chordShown = (c: any) => `${c.root_note ?? ""}${c.quality ?? ""}`;
 
+/* Clase de altura (0–11) de una raíz escrita: "A", "Bb", "F#", "B♭"… */
+function pitchClassOf(root: string): number | null {
+  const m = String(root || "").trim().match(/^([A-Ga-g])([#b♯♭]?)/);
+  if (!m) return null;
+  const base = ({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 } as any)[m[1].toUpperCase()];
+  const acc = m[2] === "#" || m[2] === "♯" ? 1 : m[2] === "b" || m[2] === "♭" ? -1 : 0;
+  return (base + acc + 12) % 12;
+}
+const ROOTS_SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const ROOTS_FLAT  = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+
 export default function SongEditor() {
   const supabase = createClient();
   const { id } = useParams<{ id: string }>();
@@ -209,6 +220,10 @@ export default function SongEditor() {
   chordsRef.current = chords;
   // --- Pentagrama del bajo ---
   const [bassNotes, setBassNotes] = useState<any[]>([]);
+  const bassNotesRef = useRef<any[]>([]);
+  bassNotesRef.current = bassNotes;
+  const chordSyncTimer = useRef<any>(null);
+  const chordSyncBusy = useRef<Promise<void>>(Promise.resolve());
   const [bassNotesErr, setBassNotesErr] = useState<string | null>(null);
   const [staffPlayAlong, setStaffPlayAlong] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -959,17 +974,83 @@ export default function SongEditor() {
       song_id: id, midi, start_beat: startBeat, duration_beats: 0.5,
     }).select().single();
     if (error || !data) { alert("No pude guardar la nota: " + (error?.message || "")); return null; }
-    setBassNotes(prev => [...prev, { ...data, start_beat: Number(data.start_beat), duration_beats: Number(data.duration_beats) }]);
+    const row = { ...data, start_beat: Number(data.start_beat), duration_beats: Number(data.duration_beats) };
+    bassNotesRef.current = [...bassNotesRef.current, row];
+    setBassNotes(bassNotesRef.current);
+    scheduleChordSync();
     return data.id;
   }
   async function updateBassNote(noteId: string, patch: { midi?: number; start_beat?: number; duration_beats?: number }) {
-    setBassNotes(prev => prev.map(n => n.id === noteId ? { ...n, ...patch } : n));
+    bassNotesRef.current = bassNotesRef.current.map(n => n.id === noteId ? { ...n, ...patch } : n);
+    setBassNotes(bassNotesRef.current);
+    if (patch.midi != null || patch.start_beat != null) scheduleChordSync();
     const { error } = await supabase.from("bass_notes").update(patch).eq("id", noteId);
     if (error) alert("No pude guardar la nota: " + error.message);
   }
   async function removeBassNote(noteId: string) {
-    setBassNotes(prev => prev.filter(n => n.id !== noteId));
+    bassNotesRef.current = bassNotesRef.current.filter(n => n.id !== noteId);
+    setBassNotes(bassNotesRef.current);
+    scheduleChordSync();
     await supabase.from("bass_notes").delete().eq("id", noteId);
+  }
+
+  /* ===== El pentagrama manda: cifrado automático =====
+   * La primera nota de cada compás es el acorde de ese compás; si se repite
+   * la misma nota en compases seguidos, queda un solo acorde que dura más.
+   * Si el acorde que ya estaba tiene la misma raíz (p.ej. "Bm7" y la nota es
+   * Si), se respeta su calidad. Sin notas no se toca nada. */
+  function scheduleChordSync() {
+    clearTimeout(chordSyncTimer.current);
+    chordSyncTimer.current = setTimeout(() => {
+      chordSyncBusy.current = chordSyncBusy.current.then(syncChordsFromNotes).catch(e => console.warn("[sync cifrado]", e));
+    }, 450);
+  }
+  async function syncChordsFromNotes() {
+    const notes = [...bassNotesRef.current].sort((a, b) => Number(a.start_beat) - Number(b.start_beat));
+    if (!notes.length || !chordBarDur) return;
+    const flats = FLAT_KEYS.has(String(song?.key || "").trim());
+    const desired: { bar: number; pc: number; name: string }[] = [];
+    const seenBars = new Set<number>();
+    for (const n of notes) {
+      const bar = Math.floor(Number(n.start_beat) / chordBpb + 1e-6);
+      if (seenBars.has(bar)) continue;
+      seenBars.add(bar);
+      const pc = ((n.midi % 12) + 12) % 12;
+      if (desired.length && desired[desired.length - 1].pc === pc) continue;   // misma nota: sigue el acorde
+      desired.push({ bar, pc, name: (flats ? ROOTS_FLAT : ROOTS_SHARP)[pc] });
+    }
+    const prev = chordsRef.current;
+    const byBar = new Map<number, any>();
+    const toDelete: string[] = [];
+    for (const c of [...prev].sort((a, b) => a.start_bar - b.start_bar)) {
+      if (byBar.has(c.start_bar)) toDelete.push(c.id); else byBar.set(c.start_bar, c);
+    }
+    // Solo se maneja el tramo escrito (de la primera a la última nota): los
+    // acordes cargados a mano antes o después de ese tramo no se tocan.
+    const firstBar = desired.length ? desired[0].bar : 0;
+    const lastBar = Math.max(...Array.from(seenBars));
+    const wanted = new Set(desired.map(d => d.bar));
+    byBar.forEach((c, bar) => { if (bar >= firstBar && bar <= lastBar && !wanted.has(bar)) toDelete.push(c.id); });
+
+    const kept: any[] = [];
+    const toInsert: any[] = [];
+    let order = prev.length ? Math.max(...prev.map(c => c.order_index ?? 0)) + 1 : 0;
+    for (const d of desired) {
+      const ex = byBar.get(d.bar);
+      if (ex && pitchClassOf(ex.root_note) === d.pc) kept.push(ex);
+      else if (ex) kept.push({ ...ex, ...parseChordSymbol(d.name) });
+      else toInsert.push({ song_id: id, order_index: order++, chord_symbol: d.name, root_note: d.name,
+                           quality: "", start_bar: d.bar, bar_count: 1 });
+    }
+    if (toDelete.length) await supabase.from("chord_charts").delete().in("id", toDelete);
+    let inserted: any[] = [];
+    if (toInsert.length) {
+      const { data, error } = await supabase.from("chord_charts").insert(toInsert).select();
+      if (error) { console.warn("[sync cifrado]", error.message); }
+      inserted = data || [];
+    }
+    const prevKept = prev.filter(c => !toDelete.includes(c.id));
+    await persistChords([...kept, ...inserted], [...prevKept, ...inserted]);
   }
   /* Afinación real del tema: un Fa escrito suena Fa + semitonos + cents. */
   async function saveTuning(patch: { tuning_semitones?: number; tuning_cents?: number }) {
@@ -1652,6 +1733,12 @@ export default function SongEditor() {
                 {staffPlayAlong ? "♪ Notas con la pista ON" : "♪ Notas con la pista"}
               </button>
               <span className="text-[11px] text-neutral-500 ml-2">{bassNotes.length} notas</span>
+              <p className="basis-full order-last text-[11px] text-amber-200/80">
+                Los acordes de arriba salen solos de la primera nota de cada compás (es lo que ve el bajista en el escenario),
+                en el tramo que va de tu primera a tu última nota; fuera de ese tramo no se toca nada.
+                Si querés sumarle la calidad, doble click en el acorde y escribí <span className="mono">Bm</span>, <span className="mono">E7</span>…:
+                se mantiene mientras no cambies esa nota.
+              </p>
               <p className="basis-full order-last text-[10px] text-neutral-600 font-mono">
                 click en el pentagrama: nota en esa corchea (shift = ♯, alt = ♭) · click en una nota: suena · arrastrarla:
                 tiempo y altura · con una nota elegida: ↑/↓ semitono, shift+↑/↓ octava, − / = más corta / más larga,
