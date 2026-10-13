@@ -41,6 +41,7 @@ const GRID_BAR = "rgba(167,139,250,0.75)";
 const GRID_LABEL = "rgba(196,181,253,0.9)";
 const LS_GRID = "camarage.wave.grid";
 const LS_CLICK = "camarage.wave.clickVol";
+const LS_MUSIC = "camarage.wave.musicVol";
 
 function lsGet(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k: string, v: string) { try { localStorage.setItem(k, v); } catch {} }
@@ -206,6 +207,16 @@ export default function WaveformLyricsEditor({
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = rate;
   }, [rate]);
+
+  // Volumen de la pista (se recuerda en este navegador)
+  const [musicVol, setMusicVol] = useState(1);
+  useEffect(() => {
+    const v = parseFloat(lsGet(LS_MUSIC) || "");
+    if (v >= 0 && v <= 1) setMusicVol(v);
+  }, []);
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = musicVol;
+  }, [musicVol, audioUrl]);
 
   /* ---------- bajar + decodificar el audio → picos ---------- */
   useEffect(() => {
@@ -834,6 +845,12 @@ export default function WaveformLyricsEditor({
           <option value={0.75}>0.75×</option>
           <option value={1}>1×</option>
         </select>
+        <label className="flex items-center gap-1.5 text-[11px] text-neutral-400 whitespace-nowrap" title="Volumen de la pista">
+          🔊 música
+          <input type="range" min={0} max={1} step={0.05} value={musicVol}
+                 onChange={e => { const v = parseFloat(e.target.value); setMusicVol(v); lsSet(LS_MUSIC, String(v)); }}
+                 className="w-20 accent-cyan-400" />
+        </label>
         <span className="flex-1" />
         {savedFlash && <span className="text-[11px] text-green-400 font-mono">{savedFlash}</span>}
         <button onClick={() => doInsert(posRef.current + offset)}

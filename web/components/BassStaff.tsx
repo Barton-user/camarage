@@ -61,10 +61,13 @@ function audioCtx() {
   sharedCtx.resume().catch(() => {});
   return sharedCtx;
 }
-/** Sonidito de bajo: diente de sierra filtrado, ataque corto. */
-export function playTone(hz: number, seconds = 0.45, vol = 0.5) {
+/** Sonidito de bajo: diente de sierra filtrado, ataque corto.
+ *  vol 0–1 (0 = mudo). when = instante del AudioContext (para agendar con precisión). */
+export function playTone(hz: number, seconds = 0.45, vol = 0.6, when?: number) {
+  if (!(vol > 0)) return;
   const ctx = audioCtx();
-  const t = ctx.currentTime + 0.005;
+  const t = Math.max(ctx.currentTime + 0.005, when ?? 0);
+  vol = vol * 1.4;
   const dur = Math.max(0.12, Math.min(1.6, seconds));
   const o = ctx.createOscillator();
   const o2 = ctx.createOscillator();
@@ -84,7 +87,7 @@ export function playTone(hz: number, seconds = 0.45, vol = 0.5) {
 
 export default function BassStaff({
   notes, bpm, beatsPerBar, offset, pps, fullW, getAudio,
-  tuningSemis = 0, tuningCents = 0, preferFlats = false, playAlong = false,
+  tuningSemis = 0, tuningCents = 0, preferFlats = false, volume = 0.6,
   onAdd, onUpdate, onRemove,
 }: {
   notes: BassNote[];
@@ -97,14 +100,16 @@ export default function BassStaff({
   tuningSemis?: number;
   tuningCents?: number;
   preferFlats?: boolean;
-  /** Que las notas suenen junto con la pista mientras reproduce. */
-  playAlong?: boolean;
+  /** Volumen de las notas (0–1). Suenan solas junto con la pista; 0 = mudas. */
+  volume?: number;
   onAdd: (midi: number, startBeat: number) => Promise<string | null | undefined> | void;
   onUpdate: (id: string, patch: { midi?: number; start_beat?: number; duration_beats?: number }) => void;
   onRemove: (id: string) => void;
 }) {
   const beatDur = bpm > 0 ? 60 / bpm : 0;
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const volRef = useRef(volume);
+  volRef.current = volume;
   const headRef = useRef<HTMLDivElement | null>(null);
   const [selId, setSelId] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ id: string; beat: number; midi: number } | null>(null);
@@ -117,7 +122,7 @@ export default function BassStaff({
 
   const hzOf = useCallback((midi: number) => soundingHz(midi, tuningSemis, tuningCents), [tuningSemis, tuningCents]);
   const sound = useCallback((midi: number, beats = 0.5) => {
-    playTone(hzOf(midi), Math.max(0.25, beats * beatDur));
+    playTone(hzOf(midi), Math.max(0.25, beats * beatDur), volRef.current);
   }, [hzOf, beatDur]);
 
   const sorted = [...notes].sort((a, b) => Number(a.start_beat) - Number(b.start_beat));
@@ -125,27 +130,58 @@ export default function BassStaff({
   /* ---------- playhead + reproducción junto con la pista ---------- */
   const notesRef = useRef(sorted);
   notesRef.current = sorted;
+  const hzRef = useRef(hzOf);
+  hzRef.current = hzOf;
   useEffect(() => {
     let raf = 0;
-    let prevT = -1;
     const tick = () => {
       const a = getAudio();
-      if (a) {
-        const t = a.currentTime;
-        if (headRef.current) headRef.current.style.left = t * pps + "px";
-        if (playAlong && beatDur && !a.paused && prevT >= 0 && t > prevT && t - prevT < 0.3) {
-          for (const n of notesRef.current) {
-            const nt = Number(n.start_beat) * beatDur - offset;
-            if (nt > prevT && nt <= t) playTone(hzOf(n.midi), Number(n.duration_beats) * beatDur / (a.playbackRate || 1), 0.45);
-          }
-        }
-        prevT = t;
-      }
+      if (a && headRef.current) headRef.current.style.left = a.currentTime * pps + "px";
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [getAudio, pps, playAlong, beatDur, offset, hzOf]);
+  }, [getAudio, pps]);
+
+  /* ---------- las notas suenan con la pista ----------
+   * Igual que el click del editor: se ancla (reloj de Web Audio, posición del
+   * audio), se proyecta, y cada nota se agenda ~120 ms antes con precisión de
+   * sample. Si el audio salta (seek) o se re-arranca, se re-ancla. */
+  const audible = volume > 0;
+  useEffect(() => {
+    if (!beatDur || !audible) return;
+    const ctx = audioCtx();
+    let anchor: { c: number; a: number } | null = null;
+    const done = new Set<string>();
+    const reset = () => { anchor = null; done.clear(); };
+    const a0 = getAudio();
+    a0?.addEventListener("seeking", reset);
+    a0?.addEventListener("play", reset);
+    const iv = setInterval(() => {
+      const a = getAudio();
+      if (!a || a.paused) { anchor = null; return; }
+      const r = a.playbackRate || 1;
+      const cNow = ctx.currentTime, aNow = a.currentTime;
+      if (!anchor || Math.abs(anchor.a + (cNow - anchor.c) * r - aNow) > 0.04) anchor = { c: cNow, a: aNow };
+      const aEst = anchor.a + (cNow - anchor.c) * r;
+      const horizon = aEst + 0.12 * r;
+      for (const n of notesRef.current) {
+        const nt = Number(n.start_beat) * beatDur - offset;
+        if (nt > horizon) break;                       // ordenadas por tiempo
+        if (nt < aEst - 0.01) continue;
+        const key = `${n.id}@${n.start_beat}`;
+        if (done.has(key)) continue;
+        done.add(key);
+        playTone(hzRef.current(n.midi), Number(n.duration_beats) * beatDur / r, volRef.current,
+                 anchor.c + (nt - anchor.a) / r);
+      }
+    }, 25);
+    return () => {
+      clearInterval(iv);
+      a0?.removeEventListener("seeking", reset);
+      a0?.removeEventListener("play", reset);
+    };
+  }, [getAudio, beatDur, offset, audible]);
 
   /* ---------- teclado sobre la nota seleccionada ---------- */
   useEffect(() => {

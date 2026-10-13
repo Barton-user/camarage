@@ -225,7 +225,15 @@ export default function SongEditor() {
   const chordSyncTimer = useRef<any>(null);
   const chordSyncBusy = useRef<Promise<void>>(Promise.resolve());
   const [bassNotesErr, setBassNotesErr] = useState<string | null>(null);
-  const [staffPlayAlong, setStaffPlayAlong] = useState(false);
+  // Volumen de las notas del pentagrama (0 = mudas), recordado en este navegador
+  const [staffVol, setStaffVol] = useState(0.6);
+  useEffect(() => {
+    try { const v = parseFloat(localStorage.getItem("camarage.staff.vol") || ""); if (v >= 0 && v <= 1) setStaffVol(v); } catch {}
+  }, []);
+  function changeStaffVol(v: number) {
+    setStaffVol(v);
+    try { localStorage.setItem("camarage.staff.vol", String(v)); } catch {}
+  }
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio"|"midiout">("meta");
   // --- Pistas de audio ---
@@ -1691,7 +1699,7 @@ export default function SongEditor() {
                     tuningSemis={tuneSemis}
                     tuningCents={tuneCents}
                     preferFlats={FLAT_KEYS.has(String(song.key || "").trim())}
-                    playAlong={staffPlayAlong}
+                    volume={staffVol}
                     onAdd={addBassNote}
                     onUpdate={updateBassNote}
                     onRemove={removeBassNote}
@@ -1727,11 +1735,14 @@ export default function SongEditor() {
           ) : (
             <div className="card flex flex-wrap items-center gap-2">
               <span className="text-xs font-black text-amber-300 whitespace-nowrap">𝄢 Pentagrama</span>
-              <button onClick={() => setStaffPlayAlong(v => !v)} className="btn text-xs"
-                      style={staffPlayAlong ? { borderColor: "rgba(251,191,36,0.7)", color: "#fcd34d" } : undefined}
-                      title="Que las notas del pentagrama suenen junto con la pista">
-                {staffPlayAlong ? "♪ Notas con la pista ON" : "♪ Notas con la pista"}
-              </button>
+              <label className="flex items-center gap-1.5 text-[11px] text-neutral-400 whitespace-nowrap"
+                     title="Volumen de las notas del pentagrama. Suenan solas cuando le das Play a la pista; en 0 quedan mudas.">
+                🔊 notas
+                <input type="range" min={0} max={1} step={0.05} value={staffVol}
+                       onChange={e => changeStaffVol(parseFloat(e.target.value))}
+                       onPointerUp={() => playTone(soundingHz(45 + 12, tuneSemis, tuneCents), 0.3, staffVol)}
+                       className="w-24 accent-amber-400" />
+              </label>
               <span className="text-[11px] text-neutral-500 ml-2">{bassNotes.length} notas</span>
               <p className="basis-full order-last text-[11px] text-amber-200/80">
                 Los acordes de arriba salen solos de la primera nota de cada compás (es lo que ve el bajista en el escenario),
@@ -1763,7 +1774,7 @@ export default function SongEditor() {
               <span className="text-[10px] text-neutral-500">cents</span>
               <button onClick={() => saveTuning({ tuning_semitones: 0, tuning_cents: -32 })} className="btn text-[11px]"
                       title="La = 432 Hz (−31,8 cents respecto de 440)">La 432</button>
-              <button onClick={() => playTone(soundingHz(81, tuneSemis, tuneCents), 1.2)} className="btn text-[11px]"
+              <button onClick={() => playTone(soundingHz(81, tuneSemis, tuneCents), 1.2, Math.max(staffVol, 0.3))} className="btn text-[11px]"
                       title="Toca un La de referencia con la afinación del tema, para comparar de oído con la pista">
                 ♪ La {soundingHz(81, tuneSemis, tuneCents).toFixed(1)} Hz
               </button>
