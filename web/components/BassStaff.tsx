@@ -24,6 +24,12 @@ export type BassNote = { id: string; midi: number; start_beat: number | string; 
 type Patch = { midi?: number; start_beat?: number; duration_beats?: number; accidental?: number | null };
 type NewNote = { midi: number; start_beat: number; duration_beats: number; accidental?: number | null };
 
+/** "1½ t", "2 t", "½ t" */
+function fmtBeats(b: number) {
+  const whole = Math.floor(b + 1e-6), half = b - whole > 0.25;
+  return `${whole || (half ? "" : "0")}${half ? "½" : ""} t`;
+}
+
 /* Portapapeles del pentagrama: vive mientras la página esté abierta (sirve para copiar entre canciones). */
 let CLIP: { midi: number; rel: number; dur: number; acc: number | null }[] = [];
 
@@ -129,6 +135,7 @@ export default function BassStaff({
   const [selIds, setSelIds] = useState<string[]>([]);
   const [drag, setDrag] = useState<{ ids: string[]; dBeat: number; dSteps: number; copy: boolean } | null>(null);
   const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [resize, setResize] = useState<{ ids: string[]; dDur: number } | null>(null);
   const [clipN, setClipN] = useState(CLIP.length);
   const [hover, setHover] = useState<{ beat: number; d: number } | null>(null);
 
@@ -265,6 +272,52 @@ export default function BassStaff({
     const first = sel[0];
     sound(Math.max(0, Math.min(127, first.midi + semis)), Number(first.duration_beats));
   }
+  /* Cada nota elegida dura hasta donde arranca la siguiente (línea ligada). */
+  function legatoSel() {
+    const sel = selected();
+    const all = notesRef.current;
+    const changes: { id: string; patch: Patch }[] = [];
+    for (const n of sel) {
+      const b = Number(n.start_beat);
+      const next = all.find(x => Number(x.start_beat) > b + 1e-3);
+      if (!next) continue;
+      const dur = Math.max(SNAP_BEATS, Number(next.start_beat) - b);
+      if (Math.abs(dur - Number(n.duration_beats)) > 1e-3) changes.push({ id: n.id, patch: { duration_beats: dur } });
+    }
+    updateMany(changes);
+    flash(changes.length ? `↦ ${changes.length} estiradas hasta la próxima` : "ya llegaban a la próxima");
+  }
+  /* Manija al final de la barra: arrastrar = cambiar el largo (de a corchea).
+   * Si la nota está en la selección, cambia todas por el mismo tanto. */
+  function startResize(e: React.PointerEvent, n: BassNote) {
+    e.preventDefault(); e.stopPropagation();
+    if (e.button !== 0) return;
+    const ids = selRef.current.includes(n.id) ? selRef.current : [n.id];
+    if (!selRef.current.includes(n.id)) setSelIds(ids);
+    const el = e.currentTarget as Element;
+    el.setPointerCapture(e.pointerId);
+    const p0 = local(e);
+    const group = notesRef.current.filter(x => ids.includes(x.id));
+    const minDur = Math.min(...group.map(x => Number(x.duration_beats)));
+    let dDur = 0;
+    const move = (ev: PointerEvent) => {
+      const p = local(ev);
+      dDur = Math.round(((p.x - p0.x) / pps / beatDur) / SNAP_BEATS) * SNAP_BEATS;
+      if (minDur + dDur < SNAP_BEATS) dDur = SNAP_BEATS - minDur;
+      setResize({ ids, dDur });
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move as any);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      setResize(null);
+      if (!dDur) return;
+      updateMany(group.map(x => ({ id: x.id, patch: { duration_beats: Math.max(SNAP_BEATS, Number(x.duration_beats) + dDur) } })));
+    };
+    el.addEventListener("pointermove", move as any);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  }
   function durationSel(delta: number) {
     const sel = selected();
     updateMany(sel.map(n => ({ id: n.id, patch: { duration_beats: Math.max(SNAP_BEATS, Number(n.duration_beats) + delta) } })));
@@ -332,8 +385,8 @@ export default function BassStaff({
 
   /* ---------- teclado ---------- */
   const hoverStaff = useRef(false);
-  const actionsRef = useRef({ shiftSel, transposeSel, durationSel, deleteSel, copySel, pasteAt, cursorBeat, duplicateSel, setAccidentalSel });
-  actionsRef.current = { shiftSel, transposeSel, durationSel, deleteSel, copySel, pasteAt, cursorBeat, duplicateSel, setAccidentalSel };
+  const actionsRef = useRef({ shiftSel, transposeSel, durationSel, deleteSel, copySel, pasteAt, cursorBeat, duplicateSel, setAccidentalSel, legatoSel });
+  actionsRef.current = { shiftSel, transposeSel, durationSel, deleteSel, copySel, pasteAt, cursorBeat, duplicateSel, setAccidentalSel, legatoSel };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement;
@@ -361,6 +414,7 @@ export default function BassStaff({
       } else if (!mod && !e.altKey && (e.key === "#" || k === "s")) { eat(); A.setAccidentalSel(1); }
       else if (!mod && !e.altKey && k === "b") { eat(); A.setAccidentalSel(-1); }
       else if (!mod && !e.altKey && k === "n") { eat(); A.setAccidentalSel(0); }
+      else if (!mod && !e.altKey && k === "l") { eat(); A.legatoSel(); }
       else if (e.key === "Delete" || e.key === "Backspace") { eat(); A.deleteSel(); }
       else if (e.key === "-" || e.key === "=" || e.key === "+") { eat(); A.durationSel(e.key === "-" ? -SNAP_BEATS : SNAP_BEATS); }
       else if (e.key === "Escape") { setSelIds([]); }
@@ -527,7 +581,9 @@ export default function BassStaff({
     const sp = spell(midi, preferFlats, n.accidental);
     const x = xOfBeat(beat);
     const y = yOfD(Math.max(D_MIN, Math.min(D_MAX, sp.d)));
-    const len = Number(n.duration_beats) * beatDur * pps;
+    const durNow = Number(n.duration_beats) + (resize && resize.ids.includes(n.id) ? resize.dDur : 0);
+    const len = durNow * beatDur * pps;
+    const isSelN = selSet.has(n.id);
     const ledgers: number[] = [];
     for (let d = 16; d >= sp.d; d -= 2) ledgers.push(d);
     for (let d = 28; d <= sp.d; d += 2) ledgers.push(d);
@@ -535,7 +591,7 @@ export default function BassStaff({
       <g key={key} opacity={opacity} style={{ cursor: interactive ? "grab" : undefined }}
          pointerEvents={interactive ? undefined : "none"}
          onPointerDown={interactive ? (e => startNoteDrag(e, n)) : undefined}>
-        <rect x={x} y={y - 1.5} width={Math.max(0, len - 2)} height={3} rx={1.5} fill={color} opacity={0.3} />
+        <rect x={x} y={y - 2} width={Math.max(0, len - 2)} height={4} rx={2} fill={color} opacity={isSelN ? 0.55 : 0.32} />
         {ledgers.map(d => (
           <line key={d} x1={x - 9} x2={x + 9} y1={yOfD(d)} y2={yOfD(d)} stroke={color} strokeWidth={1} />
         ))}
@@ -545,6 +601,19 @@ export default function BassStaff({
         <ellipse cx={x} cy={y} rx={5.5} ry={4} transform={`rotate(-20 ${x} ${y})`} fill={color} />
         {/* zona de agarre más grande que la cabeza */}
         <rect x={x - 9} y={y - 7} width={18} height={14} fill="transparent" />
+        {/* manija para estirar/achicar: al final de la barra */}
+        {interactive && (
+          <g style={{ cursor: "ew-resize" }} onPointerDown={e => startResize(e, n)}>
+            <rect x={x + Math.max(10, len - 2) - 5} y={y - 8} width={11} height={16} fill="transparent" />
+            <rect x={x + Math.max(10, len - 2) - 1.5} y={y - 5} width={3} height={10} rx={1.5}
+                  fill={color} opacity={isSelN ? 0.95 : 0.45} />
+          </g>
+        )}
+        {resize && resize.ids.includes(n.id) && (
+          <text x={x + len + 6} y={y - 7} fontSize={10} fontWeight={700} fill="#ffffff" fontFamily="ui-monospace, monospace">
+            {fmtBeats(durNow)}
+          </text>
+        )}
       </g>
     );
   };
@@ -656,7 +725,9 @@ export default function BassStaff({
           info = (
             <span className="text-neutral-200">
               <b className="text-amber-300 text-sm">{sp.name}{sp.oct}</b>
-              <span className="text-neutral-500"> · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · suena {hzOf(sel1.midi).toFixed(1)} Hz</span>
+              <span className="text-neutral-500"> · comp. {bar}.{(inBar + 1).toString().replace(".5", "½")} · dura </span>
+              <b className="text-neutral-200">{fmtBeats(Number(sel1.duration_beats))}</b>
+              <span className="text-neutral-500"> · suena {hzOf(sel1.midi).toFixed(1)} Hz</span>
             </span>
           );
         } else if (n > 1) {
@@ -679,6 +750,9 @@ export default function BassStaff({
             <span className="ml-2 truncate min-w-0">{info}</span>
             <span className="flex-1" />
             {msg && <span className="text-green-400 mr-1">{msg}</span>}
+            {btn("−", "Más corta, una corchea (tecla −)", () => durationSel(-SNAP_BEATS), { disabled: !n })}
+            {btn("+", "Más larga, una corchea (tecla =)", () => durationSel(SNAP_BEATS), { disabled: !n })}
+            {btn("↦ Hasta la próxima", "Estirar cada nota elegida hasta donde arranca la siguiente (tecla L)", () => legatoSel(), { wide: true, disabled: !n })}
             {btn("⧉ Copiar", "Copiar (⌘C)", () => copySel(false), { wide: true, disabled: !n })}
             {btn(`⎘ Pegar${clipN ? ` (${clipN})` : ""}`, "Pegar en el cursor de reproducción (⌘V)", () => pasteAt(cursorBeat()), { wide: true, disabled: !clipN })}
             {btn("⧺ Duplicar", "Duplicar a continuación, de a compases enteros (⌘D)", () => duplicateSel(), { wide: true, disabled: !n })}
