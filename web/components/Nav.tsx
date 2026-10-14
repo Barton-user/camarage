@@ -8,6 +8,7 @@ type NavItem = { href: string; label: string; icon: string; external?: boolean }
 const items: NavItem[] = [
   { href: "/dashboard", label: "Inicio", icon: "🏠" },
   { href: "/bands", label: "Bandas", icon: "🎸" },
+  { href: "/members", label: "Integrantes", icon: "👥" },
   { href: "/setlists", label: "Setlists", icon: "📋" },
   { href: "/songs", label: "Canciones", icon: "🎵" },
   { href: "/sl2/", label: "SL-2 Studio", icon: "🎛️", external: true },
