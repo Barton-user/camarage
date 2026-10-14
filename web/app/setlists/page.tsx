@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase-client";
+import { useBandPerms } from "@/lib/perms";
+import PermGate from "@/components/PermGate";
 import Link from "next/link";
 
 export default function SetlistsPage() {
@@ -8,6 +10,7 @@ export default function SetlistsPage() {
   const [setlists, setSetlists] = useState<any[]>([]);
   const [bands, setBands] = useState<any[]>([]);
   const [bandId, setBandId] = useState<string>("");
+  const bp = useBandPerms(bandId);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [showDate, setShowDate] = useState("");
@@ -145,8 +148,9 @@ export default function SetlistsPage() {
           <h1 className="text-3xl font-black">Setlists</h1>
           <p className="text-neutral-400 text-sm">Listas de canciones para cada show o ensayo</p>
         </div>
-        <button onClick={() => setCreating(true)} className="btn btn-primary">+ Nuevo setlist</button>
+        <button onClick={() => setCreating(true)} className="btn btn-primary" disabled={!bp.loading && !bp.perms.edit_setlists}>+ Nuevo setlist</button>
       </div>
+      <PermGate can={bp.perms.edit_setlists} loading={bp.loading} what="editar setlists" blockPointer={false}>
 
       {error && editId === null && (
         <div className="card mb-4 border-red-900">
@@ -244,6 +248,7 @@ export default function SetlistsPage() {
           ))}
         </div>
       )}
+      </PermGate>
     </div>
   );
 }

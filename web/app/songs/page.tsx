@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase-client";
+import { useBandPerms } from "@/lib/perms";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -10,6 +11,7 @@ export default function SongsPage() {
   const [songs, setSongs] = useState<any[]>([]);
   const [bands, setBands] = useState<any[]>([]);
   const [bandId, setBandId] = useState<string>("");
+  const bp = useBandPerms(bandId);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: "", key: "C", bpm: 120, time_signature: "4/4", program_change: "" });
 
@@ -61,7 +63,8 @@ export default function SongsPage() {
           <h1 className="text-3xl font-black">Canciones</h1>
           <p className="text-neutral-400 text-sm">Catálogo completo de la banda</p>
         </div>
-        <button onClick={() => setCreating(true)} className="btn btn-primary">+ Nueva canción</button>
+        <button onClick={() => setCreating(true)} className="btn btn-primary" disabled={!bp.loading && !bp.perms.edit_songs}
+                title={!bp.loading && !bp.perms.edit_songs ? "No tenés permiso para editar canciones" : undefined}>+ Nueva canción</button>
       </div>
 
       {bands.length > 1 && (

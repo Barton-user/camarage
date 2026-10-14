@@ -4,6 +4,7 @@
  * verifica que quien pide sea el dueño de la banda. */
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase-client";
+import { DEFAULT_PERMS, PERM_HELP, PERM_KEYS, PERM_LABELS, type Perms } from "@/lib/perms";
 
 const ROLES: { id: string; label: string }[] = [
   { id: "singer", label: "Cantante" },
@@ -20,6 +21,7 @@ const roleLabel = (r: string) => ROLES.find(x => x.id === r)?.label || r;
 type Member = {
   user_id: string; role: string; display_name: string | null; is_active: boolean;
   joined_at: string; email: string | null; last_sign_in_at: string | null; is_owner: boolean;
+  permissions: Perms;
 };
 
 function genPassword() {
@@ -37,6 +39,10 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [needsKey, setNeedsKey] = useState(false);
+  const [canManage, setCanManage] = useState(false);
+  const [iAmOwner, setIAmOwner] = useState(false);
+  const [permsReady, setPermsReady] = useState(true);
+  const [newPerms, setNewPerms] = useState<Perms>({ ...DEFAULT_PERMS });
 
   // Formulario de alta
   const [name, setName] = useState("");
@@ -66,11 +72,14 @@ export default function MembersPage() {
     const r = await fetch(`/api/members?bandId=${bandId}`);
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      setErr(j.error || "No pude cargar los integrantes.");
       setNeedsKey(/SERVICE_ROLE/.test(j.error || ""));
+      setCanManage(false);
+      // 403 = no tiene permiso: no es un error, es solo lectura
+      setErr(r.status === 403 ? null : (j.error || "No pude cargar los integrantes."));
       setMembers([]);
     } else {
       setMembers(j.members || []); setNeedsKey(false);
+      setCanManage(true); setIAmOwner(!!j.isOwner); setPermsReady(j.permsReady !== false);
     }
     setLoading(false);
   }, [bandId]);
@@ -90,9 +99,9 @@ export default function MembersPage() {
     e.preventDefault();
     setSaving(true); setErr(null); setDone(null);
     try {
-      const j = await call("POST", { email, name, role, password });
+      const j = await call("POST", { email, name, role, password, permissions: newPerms });
       setDone({ email: j.email, password: j.password, created: j.created });
-      setName(""); setEmail(""); setPassword(genPassword());
+      setName(""); setEmail(""); setPassword(genPassword()); setNewPerms({ ...DEFAULT_PERMS });
       await load();
     } catch (e: any) { setErr(e.message); }
     setSaving(false);
@@ -100,6 +109,12 @@ export default function MembersPage() {
 
   async function changeRole(m: Member, r: string) {
     try { await call("PATCH", { userId: m.user_id, role: r }); await load(); } catch (e: any) { alert(e.message); }
+  }
+  async function togglePerm(m: Member, k: keyof Perms) {
+    const next = { ...m.permissions, [k]: !m.permissions[k] };
+    setMembers(prev => prev.map(x => x.user_id === m.user_id ? { ...x, permissions: next } : x));
+    try { await call("PATCH", { userId: m.user_id, permissions: next }); }
+    catch (e: any) { alert(e.message); await load(); }
   }
   async function rename(m: Member) {
     const n = prompt("Nombre que se muestra en la app:", m.display_name || "");
@@ -118,7 +133,8 @@ export default function MembersPage() {
   }
 
   const band = bands.find(b => b.id === bandId);
-  const isOwner = !!band && band.owner_id === me;
+  // "isOwner" de acá en adelante = puede manejar integrantes (dueño o con ese permiso)
+  const isOwner = canManage;
 
   return (
     <div className="p-6 max-w-4xl">
@@ -148,8 +164,14 @@ export default function MembersPage() {
       )}
       {err && !needsKey && <p className="text-sm text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3 mb-4">{err}</p>}
 
-      {band && !isOwner && (
-        <p className="card text-sm text-neutral-400 mb-4">Solo el dueño de <b>{band.name}</b> puede agregar o sacar integrantes.</p>
+      {band && !isOwner && !loading && !needsKey && (
+        <p className="card text-sm text-neutral-400 mb-4">No tenés permiso para manejar los integrantes de <b>{band.name}</b>.</p>
+      )}
+      {isOwner && !permsReady && (
+        <div className="card mb-4 text-sm" style={{ borderColor: "rgba(251,191,36,0.4)" }}>
+          <p className="font-black text-amber-300 mb-1">Para usar los permisos falta un paso (una sola vez)</p>
+          <p className="text-neutral-300">En Supabase → SQL Editor, pegá <b className="mono">migration_permisos.sql</b> y dale Run. Después recargá.</p>
+        </div>
       )}
 
       {/* ---------- Alta ---------- */}
@@ -179,6 +201,22 @@ export default function MembersPage() {
               </div>
             </div>
           </div>
+          {permsReady && (
+            <div className="mt-4">
+              <label className="label">Permisos</label>
+              <div className="flex flex-wrap gap-2">
+                {PERM_KEYS.filter(k => k !== "manage_members" || iAmOwner).map(k => (
+                  <label key={k} title={PERM_HELP[k]}
+                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm cursor-pointer ${
+                           newPerms[k] ? "border-cyan-400/60 bg-cyan-400/10 text-white" : "border-neutral-800 text-neutral-500"}`}>
+                    <input type="checkbox" checked={newPerms[k]} onChange={() => setNewPerms(p => ({ ...p, [k]: !p[k] }))} />
+                    {PERM_LABELS[k]}
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-neutral-500 mt-1">Ver todo (web y app) lo pueden todos los integrantes; esto es solo para editar.</p>
+            </div>
+          )}
           <div className="flex items-center gap-3 mt-4">
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Agregando…" : "Agregar a la banda"}</button>
             <p className="text-xs text-neutral-500">Si ese mail ya tiene cuenta, solo se suma a la banda y conserva su contraseña.</p>
@@ -226,6 +264,23 @@ Contraseña: ${done.password}`}</pre>
                 </select>
               ) : (
                 <span className="text-sm text-neutral-300">{roleLabel(m.role)}</span>
+              )}
+              {permsReady && (
+                <div className="basis-full flex flex-wrap gap-2 order-last">
+                  {PERM_KEYS.map(k => {
+                    const on = m.permissions?.[k];
+                    const locked = m.is_owner || !isOwner || (k === "manage_members" && !iAmOwner) || m.user_id === me;
+                    return (
+                      <button key={k} type="button" disabled={locked} title={m.is_owner ? "El dueño tiene todo" : PERM_HELP[k]}
+                              onClick={() => togglePerm(m, k)}
+                              className={`px-2.5 py-1 rounded-md border text-xs font-bold transition ${
+                                on ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-200" : "border-neutral-800 text-neutral-600 line-through"
+                              } ${locked ? "opacity-60 cursor-default" : "hover:border-cyan-300"}`}>
+                        {on ? "✓ " : ""}{PERM_LABELS[k]}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
               {isOwner && (
                 <div className="flex gap-2">

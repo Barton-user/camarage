@@ -9,8 +9,11 @@
  * Recién ahí se usa la clave de admin.
  *
  *   GET    ?bandId=…                         lista con mails
- *   POST   { bandId, email, name, role, password? }   crea la cuenta (si no existe) y la suma
- *   PATCH  { bandId, userId, role?, name?, password? } cambia rol/nombre o la contraseña
+ *   POST   { bandId, email, name, role, password?, permissions? }   crea la cuenta (si no existe) y la suma
+ *   PATCH  { bandId, userId, role?, name?, password?, permissions? } cambia rol/nombre/permisos o la contraseña
+ *
+ * Puede usarla el dueño de la banda o quien tenga el permiso manage_members.
+ * Nadie (salvo el dueño) toca la fila del dueño.
  *   DELETE { bandId, userId }                saca de la banda (no borra la cuenta)
  * ========================================================================== */
 import { NextResponse } from "next/server";
@@ -18,6 +21,14 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase-server";
 
 const ROLES = ["owner", "singer", "bassist", "drummer", "guitarist", "keys", "fx", "other"] as const;
+const PERM_KEYS = ["edit_songs", "upload_audio", "edit_setlists", "manage_members"] as const;
+const DEFAULT_PERMS = { edit_songs: true, upload_audio: true, edit_setlists: true, manage_members: false };
+/** Solo las 4 casillas conocidas, en booleano. */
+function cleanPerms(p: any, base: Record<string, boolean> = DEFAULT_PERMS) {
+  const out: Record<string, boolean> = { ...base };
+  if (p && typeof p === "object") for (const k of PERM_KEYS) if (k in p) out[k] = !!p[k];
+  return out;
+}
 
 function admin() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -29,7 +40,7 @@ function admin() {
 
 const fail = (status: number, error: string) => NextResponse.json({ error }, { status });
 
-/** Quién pide + chequeo de que sea dueño de la banda. */
+/** Quién pide + chequeo de que sea dueño de la banda o tenga "manejar integrantes". */
 async function ownerGuard(bandId: string | null) {
   const db = admin();
   if (!db) return { err: fail(500, "Falta configurar SUPABASE_SERVICE_ROLE_KEY en Vercel (ver la página Integrantes).") };
@@ -39,8 +50,14 @@ async function ownerGuard(bandId: string | null) {
   if (!bandId) return { err: fail(400, "Falta la banda.") };
   const { data: band } = await db.from("bands").select("id, owner_id, name").eq("id", bandId).single();
   if (!band) return { err: fail(404, "No existe esa banda.") };
-  if (band.owner_id !== user.id) return { err: fail(403, "Solo el dueño de la banda puede manejar integrantes.") };
-  return { db, user, band };
+  const isOwner = band.owner_id === user.id;
+  if (!isOwner) {
+    const { data: me } = await db.from("band_members").select("*")
+      .eq("band_id", band.id).eq("user_id", user.id).maybeSingle();
+    const can = !!me && me.is_active !== false && !!(me as any).permissions?.manage_members;
+    if (!can) return { err: fail(403, "No tenés permiso para manejar integrantes de esta banda.") };
+  }
+  return { db, user, band, isOwner };
 }
 
 /** Busca una cuenta por mail (recorre las páginas del listado de Auth). */
@@ -64,20 +81,25 @@ export async function GET(req: Request) {
   if ("err" in g) return g.err;
   const { db, band } = g;
   const { data: rows, error } = await db.from("band_members")
-    .select("user_id, role, display_name, is_active, joined_at")
+    .select("*")
     .eq("band_id", band.id).order("joined_at");
   if (error) return fail(500, error.message);
   const members = await Promise.all((rows || []).map(async r => {
     const { data } = await db.auth.admin.getUserById(r.user_id);
     const u = data?.user;
+    const hasCol = "permissions" in r;
     return {
-      ...r,
+      user_id: r.user_id, role: r.role, display_name: r.display_name, is_active: r.is_active, joined_at: r.joined_at,
+      permissions: r.user_id === band.owner_id
+        ? { edit_songs: true, upload_audio: true, edit_setlists: true, manage_members: true }
+        : cleanPerms(hasCol ? r.permissions : null),
       email: u?.email || null,
       last_sign_in_at: u?.last_sign_in_at || null,
       is_owner: r.user_id === band.owner_id,
     };
   }));
-  return NextResponse.json({ band: { id: band.id, name: band.name }, members });
+  const permsReady = !rows?.length || "permissions" in (rows[0] as any);
+  return NextResponse.json({ band: { id: band.id, name: band.name }, members, isOwner: g.isOwner, permsReady });
 }
 
 export async function POST(req: Request) {
@@ -103,9 +125,16 @@ export async function POST(req: Request) {
     user = data.user;
     created = true;
   }
-  const { error: mErr } = await db.from("band_members").upsert({
+  if (user.id === band.owner_id) return fail(400, "Ese mail es el del dueño de la banda.");
+  const row: Record<string, unknown> = {
     band_id: band.id, user_id: user.id, role, display_name: name || null, is_active: true,
-  }, { onConflict: "band_id,user_id" });
+    permissions: cleanPerms(body.permissions),
+  };
+  let { error: mErr } = await db.from("band_members").upsert(row, { onConflict: "band_id,user_id" });
+  if (mErr && /permissions/.test(mErr.message)) {          // migración de permisos sin correr
+    delete row.permissions;
+    ({ error: mErr } = await db.from("band_members").upsert(row, { onConflict: "band_id,user_id" }));
+  }
   if (mErr) return fail(500, "La cuenta está, pero no pude sumarla a la banda: " + mErr.message);
   return NextResponse.json({ ok: true, created, email, password: created ? password : null });
 }
@@ -117,7 +146,15 @@ export async function PATCH(req: Request) {
   const { db, band } = g;
   const userId = String(body.userId || "");
   if (!userId) return fail(400, "Falta el integrante.");
+  if (userId === band.owner_id && !g.isOwner) return fail(403, "Al dueño de la banda no lo podés modificar.");
   const patch: Record<string, unknown> = {};
+  if (body.permissions !== undefined) {
+    if (userId === band.owner_id) return fail(400, "El dueño tiene todos los permisos siempre.");
+    const { data: cur } = await db.from("band_members").select("*").eq("band_id", band.id).eq("user_id", userId).maybeSingle();
+    if (!cur) return fail(404, "Esa persona no está en esta banda.");
+    if (!("permissions" in cur)) return fail(400, "Falta correr migration_permisos.sql en Supabase.");
+    patch.permissions = cleanPerms(body.permissions, cleanPerms((cur as any).permissions));
+  }
   if (body.role !== undefined) {
     if (!ROLES.includes(body.role)) return fail(400, "Rol inválido.");
     if (userId === band.owner_id && body.role !== "owner") return fail(400, "El dueño de la banda sigue siendo dueño.");

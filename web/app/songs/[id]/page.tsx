@@ -7,6 +7,8 @@ import { parseMidiFile, describeEvent, type MidiEvent } from "@/lib/midi-file";
 import WaveformLyricsEditor from "@/components/WaveformLyricsEditor";
 import BassStaff, { playTone, soundingHz } from "@/components/BassStaff";
 import NoteRecorder from "@/components/NoteRecorder";
+import PermGate from "@/components/PermGate";
+import { useBandPerms } from "@/lib/perms";
 
 const FLAT_KEYS = new Set(["F","Bb","Eb","Ab","Db","Gb","Dm","Gm","Cm","Fm","Bbm","Ebm"]);
 
@@ -245,6 +247,9 @@ export default function SongEditor() {
   }
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio"|"midiout">("meta");
+  // Permisos del usuario en la banda de esta canción (la base es la que manda; esto avisa y bloquea controles)
+  const bp = useBandPerms(song?.band_id);
+  const canEditSongs = bp.loading || bp.perms.edit_songs;
   // --- Pistas de audio ---
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
@@ -1159,8 +1164,9 @@ export default function SongEditor() {
       <Link href="/songs" className="text-xs text-neutral-500 hover:text-white mb-2 inline-block">← Canciones</Link>
       <div className="flex items-start justify-between mb-1">
         <input value={song.title} onChange={e => setSong({...song, title: e.target.value})} onBlur={saveSong}
+               readOnly={!canEditSongs}
                className="text-3xl font-black bg-transparent outline-none focus:bg-neutral-900 px-1 -mx-1 rounded transition" />
-        <button onClick={deleteSong} className="text-xs text-neutral-600 hover:text-red-400 mt-2">Borrar canción</button>
+        {canEditSongs && <button onClick={deleteSong} className="text-xs text-neutral-600 hover:text-red-400 mt-2">Borrar canción</button>}
       </div>
       <p className="mono text-[10px] uppercase tracking-widest text-neutral-500 mb-6">
         {saving ? 'guardando…' : 'auto-guardado al salir de cada campo'}
@@ -1183,6 +1189,10 @@ export default function SongEditor() {
         ))}
       </div>
 
+      <PermGate key={tab === "audio" ? "a" : "s"}
+                can={tab === "audio" ? bp.perms.upload_audio : bp.perms.edit_songs}
+                loading={bp.loading}
+                what={tab === "audio" ? "subir o cambiar audios" : "editar canciones"}>
       {tab === "meta" && (
         <div className="card space-y-3 max-w-2xl">
           <div className="grid grid-cols-2 gap-3">
@@ -1925,6 +1935,7 @@ export default function SongEditor() {
           </button>
         </div>
       )}
+      </PermGate>
     </div>
   );
 }

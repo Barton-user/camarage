@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-client";
+import { useBandPerms } from "@/lib/perms";
+import PermGate from "@/components/PermGate";
 import Link from "next/link";
 
 export default function SetlistDetailPage() {
@@ -9,6 +11,7 @@ export default function SetlistDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [setlist, setSetlist] = useState<any>(null);
+  const bp = useBandPerms(setlist?.band_id);
   const [items, setItems] = useState<any[]>([]); // setlist_songs joined with songs
   const [availableSongs, setAvailableSongs] = useState<any[]>([]);
   const [adding, setAdding] = useState(false);
@@ -102,6 +105,7 @@ export default function SetlistDetailPage() {
   return (
     <div className="p-6 max-w-4xl">
       <Link href="/setlists" className="text-xs text-neutral-500 hover:text-white mb-2 inline-block">← Setlists</Link>
+      <PermGate can={bp.perms.edit_setlists} loading={bp.loading} what="editar setlists">
 
       {editando ? (
         <form onSubmit={guardar} className="card mb-6 space-y-3">
@@ -197,6 +201,7 @@ export default function SetlistDetailPage() {
           </div>
         ))}
       </div>
+      </PermGate>
     </div>
   );
 }
