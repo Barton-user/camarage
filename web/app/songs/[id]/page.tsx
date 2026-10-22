@@ -246,7 +246,7 @@ export default function SongEditor() {
     try { localStorage.setItem("camarage.staff.vol", String(v)); } catch {}
   }
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio"|"midiout">("meta");
+  const [tab, setTab] = useState<"meta"|"lyrics"|"cues"|"chords"|"audio"|"midiout"|"pedal">("meta");
   // Permisos del usuario en la banda de esta canción (la base es la que manda; esto avisa y bloquea controles)
   const bp = useBandPerms(song?.band_id);
   const canEditSongs = bp.loading || bp.perms.edit_songs;
@@ -277,7 +277,7 @@ export default function SongEditor() {
 
   // URL firmada de la pista para el editor de onda (se pide al entrar a Letras)
   useEffect(() => {
-    if ((tab !== "lyrics" && tab !== "chords") || !song?.audio_path || waveUrl) return;
+    if ((tab !== "lyrics" && tab !== "chords" && tab !== "pedal") || !song?.audio_path || waveUrl) return;
     supabase.storage.from(AUDIO_BUCKET).createSignedUrl(song.audio_path, 3600)
       .then(({ data, error }) => {
         if (error) setWaveUrlErr(error.message);
@@ -315,7 +315,74 @@ export default function SongEditor() {
     { v: "drummer",   l: "Dispositivo del baterista" },
     { v: "singer",    l: "Dispositivo del cantante" },
     { v: "keys",      l: "Dispositivo del tecladista" },
+    { v: "pedal",     l: "Pedal del reloj (SL-2 vía WIDI Jack)" },
   ];
+
+  /* ===================== PEDAL SL-2 · eventos sobre la onda =====================
+   * Pedido de Pato (22 oct). El SL-2 por MIDI solo entiende:
+   *   CC#80 = efecto ON/OFF   ·   CC#16 = nivel del efecto (como pedal de expresión)
+   * (patrones y perillas NO se controlan por MIDI). Se guardan en midi_events con
+   * target 'pedal': la app los manda al MISMO aparato BLE que recibe el reloj.
+   * Tiempos = tiempo de contenido (igual que las letras). En el texto del pin:
+   *   ON · OFF · VOL 0-100 (porcentaje) · CC16=90 (crudo)
+   * ============================================================================ */
+  const pedalEvents = midiEvents
+    .filter(e => e.target === "pedal")
+    .sort((a, b) => Number(a.time_seconds) - Number(b.time_seconds));
+  const pedalCh = pedalEvents.length ? (Number(pedalEvents[0].channel) || 0) : 0;
+  function pedalText(e: any): string {
+    if (e.kind === "cc" && e.data1 === 80) return Number(e.data2) >= 64 ? "ON" : "OFF";
+    if (e.kind === "cc" && e.data1 === 16) return `VOL ${Math.round(Number(e.data2) * 100 / 127)}%`;
+    if (e.kind === "cc") return `CC${e.data1}=${e.data2}`;
+    return describeRow(e);
+  }
+  function parsePedalText(t: string): { data1: number; data2: number; label: string } | null {
+    const s = t.trim().toUpperCase().replace(/\s+/g, " ");
+    if (/^(ON|PRENDER|PRENDE|PRENDIDO)$/.test(s)) return { data1: 80, data2: 127, label: "ON" };
+    if (/^(OFF|APAGAR|APAGA|APAGADO)$/.test(s)) return { data1: 80, data2: 0, label: "OFF" };
+    let m = s.match(/^(?:VOL(?:UMEN)?|NIVEL|LEVEL)\s*(\d{1,3})\s*%?$/);
+    if (m) { const pc = Math.min(100, Number(m[1])); return { data1: 16, data2: Math.round(pc * 127 / 100), label: `VOL ${pc}%` }; }
+    m = s.match(/^CC\s*(\d{1,3})\s*[=: ]\s*(\d{1,3})$/);
+    if (m && Number(m[1]) <= 127 && Number(m[2]) <= 127) return { data1: Number(m[1]), data2: Number(m[2]), label: `CC${m[1]}=${m[2]}` };
+    return null;
+  }
+  const pedalItems = pedalEvents.map((e, i) => ({
+    id: e.id, text: pedalText(e), start_time_seconds: Number(e.time_seconds), order_index: i,
+  }));
+  const sortEv = (arr: any[]) => [...arr].sort((a, b) => Number(a.time_seconds) - Number(b.time_seconds));
+  async function pedalTime(evId: string, sec: number) {
+    const t = Math.max(0, Math.round(sec * 1000) / 1000);
+    setMidiEvents(prev => sortEv(prev.map(e => e.id === evId ? { ...e, time_seconds: t } : e)));
+    await supabase.from("midi_events").update({ time_seconds: t }).eq("id", evId);
+  }
+  async function pedalTimeMany(changes: { id: string; sec: number }[]) {
+    const m = new Map(changes.map(c => [c.id, Math.max(0, Math.round(c.sec * 1000) / 1000)]));
+    setMidiEvents(prev => sortEv(prev.map(e => m.has(e.id) ? { ...e, time_seconds: m.get(e.id) } : e)));
+    for (const [evId, t] of m) await supabase.from("midi_events").update({ time_seconds: t }).eq("id", evId);
+  }
+  async function pedalSetText(evId: string, text: string) {
+    const p = parsePedalText(text);
+    if (!p) { alert(`"${text}" no lo entiendo. Escribí ON, OFF o VOL 0-100 (por ejemplo VOL 60).`); setMidiEvents(prev => [...prev]); return; }
+    setMidiEvents(prev => prev.map(e => e.id === evId ? { ...e, kind: "cc", data1: p.data1, data2: p.data2, label: p.label } : e));
+    await supabase.from("midi_events").update({ kind: "cc", data1: p.data1, data2: p.data2, label: p.label }).eq("id", evId);
+  }
+  async function pedalInsert(sec: number) {
+    const t = Math.max(0, Math.round(sec * 1000) / 1000);
+    // Alterna: si el último ON/OFF antes de este punto es ON, el nuevo es OFF (y viceversa)
+    const prevOnOff = [...pedalEvents].reverse().find(e => Number(e.time_seconds) <= t && e.kind === "cc" && e.data1 === 80);
+    const on = !(prevOnOff && Number(prevOnOff.data2) >= 64);
+    const { data, error } = await supabase.from("midi_events").insert({
+      song_id: id, time_seconds: t, kind: "cc", channel: pedalCh,
+      data1: 80, data2: on ? 127 : 0, label: on ? "ON" : "OFF", target: "pedal", source: "editor",
+    }).select().single();
+    if (error) { setMidiErr(error.message); return; }
+    if (data) setMidiEvents(prev => sortEv([...prev, data]));
+    return data?.id as string | undefined;
+  }
+  async function pedalSetChannel(ch: number) {
+    setMidiEvents(prev => prev.map(e => e.target === "pedal" ? { ...e, channel: ch } : e));
+    await supabase.from("midi_events").update({ channel: ch }).eq("song_id", id).eq("target", "pedal");
+  }
 
   async function elegirMidi(file: File) {
     setMidiErr(null);
@@ -1181,6 +1248,7 @@ export default function SongEditor() {
           { id: "chords", label: `Cifrado (${chords.length})` },
           { id: "audio", label: song.audio_path ? "Audio ●" : "Audio" },
           { id: "midiout", label: `MIDI out (${midiEvents.length})` },
+          { id: "pedal", label: `Pedal SL-2 (${pedalEvents.length})` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
                   className={`px-4 py-2 text-sm font-bold border-b-2 transition ${
@@ -1366,6 +1434,70 @@ export default function SongEditor() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "pedal" && (
+        <div className="space-y-2">
+          <div className="card space-y-2">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="max-w-2xl">
+                <h2 className="text-lg font-black mb-1">Pedal SL-2 · prender, apagar y volumen</h2>
+                <p className="text-xs text-neutral-400">
+                  Doble click en la onda en el momento justo: se agrega un <b className="text-neutral-200">ON</b> (o un{" "}
+                  <b className="text-neutral-200">OFF</b> si el efecto ya venía prendido). Click en el pin para cambiarlo:
+                  escribí <span className="font-mono">ON</span>, <span className="font-mono">OFF</span> o{" "}
+                  <span className="font-mono">VOL 60</span> (nivel del efecto, 0-100). Arrastralo para corregir el tiempo.
+                  La app los manda al pedal conectado en ⚙ → Reloj MIDI.
+                </p>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  El SL-2 no cambia de patrón ni de perillas por MIDI: eso se elige en el pedal.
+                </p>
+              </div>
+              <label className="text-xs text-neutral-400 shrink-0">
+                Canal MIDI del SL-2
+                <select value={pedalCh} onChange={e => pedalSetChannel(Number(e.target.value))}
+                        className="input mt-1 !w-28">
+                  {Array.from({ length: 16 }, (_, i) => <option key={i} value={i}>{i + 1}</option>)}
+                </select>
+              </label>
+            </div>
+            {midiErr && <p className="text-xs text-red-400">{midiErr}</p>}
+          </div>
+          {song.audio_path ? (
+            waveUrl ? (
+              <WaveformLyricsEditor
+                audioUrl={waveUrl}
+                lyrics={pedalItems}
+                offsetSeconds={Number(song.offset_seconds) || 0}
+                endSeconds={song.audio_end_seconds != null ? Number(song.audio_end_seconds) : null}
+                onChangeTime={pedalTime}
+                onChangeTimeMany={pedalTimeMany}
+                onChangeText={pedalSetText}
+                onInsertAt={pedalInsert}
+                onRemove={borrarEvento}
+                bpm={Number(song.bpm) || 0}
+                timeSignature={song.time_signature || "4/4"}
+                itemNoun="evento"
+                itemNounPlural="eventos"
+                pinShowsText
+                contextLines={lyrics}
+                textPlaceholder="ON · OFF · VOL 60"
+              />
+            ) : waveUrlErr ? (
+              <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 rounded-lg p-3">
+                No pude firmar la URL del audio: {waveUrlErr}
+              </p>
+            ) : (
+              <div className="card"><p className="text-xs text-neutral-500 animate-pulse">Preparando el editor de onda…</p></div>
+            )
+          ) : (
+            <div className="card">
+              <p className="text-xs text-neutral-500">
+                Subí la pista en la solapa <b className="text-neutral-300">Audio</b> para marcar los eventos del pedal sobre la onda.
+              </p>
             </div>
           )}
         </div>
