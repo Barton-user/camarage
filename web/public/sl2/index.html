@@ -1561,13 +1561,16 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
 
   const labelDiv=document.createElement("div"); labelDiv.style.cssText="font-size:10px; color:var(--mut); margin-top:5px; font-weight:700; text-transform:uppercase;";
   if(scaleActive){
-    labelDiv.textContent="Escala: "+ss.scale+" ("+NOTE_NAMES[ss.root]+")";
+    labelDiv.textContent="Escala: "+ss.scale+" ("+NOTE_NAMES[ss.root]+")"+(key==="pitch"
+      ? " · click en nota: elegir · arrastrar nota: mover · Shift+arrastrar: elegir varias · ⌘/Ctrl+click: sumar · ↑↓ semitono (Shift ↑↓ octava) · Esc: soltar"
+      : "");
   }else{
     labelDiv.textContent="Arrastra para pintar "+lab+" ("+min+" a "+max+")";
   }
   box.appendChild(labelDiv);
 
-  let W=0,H=0,ctx=null,activeStep=-1;
+  let W=0,H=0,ctx=null,activeStep=-1,staffBand=null;
+  if(key==="pitch"){ if(!ss.sel) ss.sel=[]; ss.sel=ss.sel.filter(i=>i<nSteps); }
   const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#888";
   /* ---------- Pentagrama (Pitch Shift) · pedido de Pato 24 oct ----------
      Valor 0..24 = -12..+12 semitonos sobre la TÓNICA elegida. Se escribe en
@@ -1595,7 +1598,8 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
     for(let i=0;i<nSteps;i++){
       const v=arr[s+i], lvl=arr[lv+i], n=staffNote(v);
       const cx=i*w+w/2+(i===0?6:0), cy=yOfD(n.d);
-      const on=i===activeStep, col=on?accC:okC;
+      const on=i===activeStep, sel=(ss.sel||[]).includes(i), col=on?accC:okC;
+      if(sel){ ctx.fillStyle=lineC; ctx.globalAlpha=0.08; ctx.fillRect(i*w,0,w,H); ctx.globalAlpha=1; }
       // líneas adicionales
       ctx.strokeStyle=lineC; ctx.globalAlpha=0.55;
       for(let d=28; d>=n.d; d-=2){ if(d%2===0){const y=Math.round(yOfD(d))+0.5; ctx.beginPath(); ctx.moveTo(cx-sp*2.2,y); ctx.lineTo(cx+sp*2.2,y); ctx.stroke();} }
@@ -1607,6 +1611,7 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
       ctx.globalAlpha=0.35+0.65*Math.min(1,lvl/100);
       ctx.fillStyle=col;
       ctx.beginPath(); ctx.ellipse(cx,cy,sp*1.35,sp*0.95,-0.35,0,Math.PI*2); ctx.fill();
+      if(sel){ ctx.save(); ctx.globalAlpha=1; ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(cx,cy,sp*1.35+3,sp*0.95+3,-0.35,0,Math.PI*2); ctx.stroke(); ctx.restore(); }
       // plica
       ctx.strokeStyle=col; ctx.lineWidth=1.4; ctx.beginPath();
       if(n.d>=34){ ctx.moveTo(cx-sp*1.25,cy); ctx.lineTo(cx-sp*1.25,cy+sp*7); }
@@ -1621,13 +1626,20 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
   function redraw(){
     W=cnv.width=pad.clientWidth; H=cnv.height=pad.clientHeight; ctx=cnv.getContext("2d");
     ctx.clearRect(0,0,W,H);
+    if(H<40||W<40) return;          // todavía sin tamaño (recién creado): se redibuja en el setTimeout
     // Paso que está sonando: columna iluminada
     if(activeStep>=0 && activeStep<nSteps){
       ctx.fillStyle=css("--acc"); ctx.globalAlpha=0.18; ctx.fillRect(activeStep*W/nSteps,0,W/nSteps,H); ctx.globalAlpha=1;
     }
     ctx.strokeStyle=css("--line"); ctx.lineWidth=1;
     for(let i=1;i<nSteps;i++){const x=Math.round(W*i/nSteps)+0.5; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();}
-    if(key==="pitch"){ drawStaff(); return; }
+    if(key==="pitch"){
+      drawStaff();
+      if(staffBand){ const x0=Math.min(staffBand.x0,staffBand.x1), x1=Math.max(staffBand.x0,staffBand.x1);
+        ctx.fillStyle="rgba(255,255,255,0.10)"; ctx.fillRect(x0,0,x1-x0,H);
+        ctx.strokeStyle="rgba(255,255,255,0.6)"; ctx.setLineDash([4,3]); ctx.strokeRect(x0+0.5,0.5,x1-x0,H-1); ctx.setLineDash([]); }
+      return;
+    }
     const s=SL[key][0];
     for(let i=0;i<nSteps;i++){
       const val=arr[s+i], frac=val/max, w=W/nSteps, x=i*w, h=H*frac;
@@ -1675,6 +1687,91 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
     ps[chKey]=int2arr(arr);
     redraw();
     renderBlocks();
+  }
+  /* ---------- PENTAGRAMA: elegir y mover notas (pedido de Pato 24 oct) ----------
+     · click en una nota: la elige (⌘/Ctrl+click suma o saca)
+     · arrastrar una nota: mueve TODAS las elegidas, de a semitono (o de a grado
+       si hay escala elegida), cada una desde su altura
+     · Shift+arrastrar: recuadro para elegir varias
+     · click en lugar vacío: pone una nota ahí (como antes)
+     · teclado: ↑↓ semitono/grado, Shift+↑↓ octava, Esc suelta la selección */
+  if(key==="pitch"){
+    const S0=SL.pitch[0], LV=SL.lvl[0];
+    const cands=()=>scaleActive?allowedPitchFor(ss.scale):Array.from({length:25},(_,k)=>k);
+    const ptr=e=>{const r=pad.getBoundingClientRect();
+      return {x:Math.max(0,Math.min(r.width-1,e.clientX-r.left))*W/r.width, y:Math.max(0,Math.min(r.height-1,e.clientY-r.top))*H/r.height};};
+    const stepAt=x=>Math.min(nSteps-1,Math.max(0,Math.floor(x/(W/nSteps))));
+    const pitchAtY=y=>{let best=12,bd=1e9; cands().forEach(c=>{const d=Math.abs(yOfD(staffNote(c).d)-y); if(d<bd){bd=d;best=c;}}); return best;};
+    const onNote=(i,y)=>arr[LV+i]>0 && Math.abs(yOfD(staffNote(arr[S0+i]).d)-y) <= Math.max(9,(yOfD(0)-yOfD(1))*2.4);
+    const idxOf=(v,c)=>c.indexOf(nearest(v,c));
+    function commit(){ if(arr[SL.fx]===0) arr[SL.fx]=1; ps[chKey]=int2arr(arr); renderBlocks(); if(typeof Audio!=="undefined"&&Audio.refreshAll)Audio.refreshAll(); }
+    let mode=null, anchor=-1, orig=null, undoHecho=false;
+    const tocar=()=>{ if(!undoHecho){ pushUndo(); undoHecho=true; } };
+    // Mueve el grupo SIN deformarlo: si alguna nota se saldría del rango (±1 octava),
+    // el grupo entero se frena en el límite.
+    function moverSel(delta, octava){
+      const c=cands();
+      const v0s=ss.sel.map((k,j)=>orig?orig[j]:arr[S0+k]);
+      if(octava){
+        if(v0s.some(v=>v+delta*12<0||v+delta*12>24)) return false;
+        ss.sel.forEach((k,j)=>{ arr[S0+k]=v0s[j]+delta*12; }); return true;
+      }
+      const ix=v0s.map(v=>idxOf(v,c));
+      const lo=-Math.min(...ix), hi=c.length-1-Math.max(...ix);
+      const d=Math.max(lo,Math.min(hi,delta));
+      ss.sel.forEach((k,j)=>{ arr[S0+k]=c[ix[j]+d]; });
+      return d!==0;
+    }
+    pad.onpointerdown=e=>{
+      const p=ptr(e), i=stepAt(p.x);
+      window.__staffFocus=chKey; undoHecho=false;
+      try{pad.setPointerCapture(e.pointerId);}catch(_){}
+      if(e.shiftKey){ mode="band"; staffBand={x0:p.x,x1:p.x}; redraw(); return; }
+      if(onNote(i,p.y)){
+        if(e.metaKey||e.ctrlKey){ ss.sel=ss.sel.includes(i)?ss.sel.filter(k=>k!==i):[...ss.sel,i]; mode=null; redraw(); return; }
+        if(!ss.sel.includes(i)) ss.sel=[i];
+        mode="move"; anchor=i; orig=ss.sel.map(k=>arr[S0+k]); redraw(); return;
+      }
+      ss.sel=[]; mode="paint"; tocar(); arr[S0+i]=pitchAtY(p.y); ss.sel=[i]; redraw();
+    };
+    pad.onpointermove=e=>{
+      if(!mode) return;
+      const p=ptr(e);
+      if(mode==="band"){
+        staffBand.x1=p.x;
+        const a=stepAt(Math.min(staffBand.x0,staffBand.x1)), b=stepAt(Math.max(staffBand.x0,staffBand.x1));
+        ss.sel=[]; for(let k=a;k<=b;k++) if(arr[LV+k]>0) ss.sel.push(k);
+        redraw(); return;
+      }
+      if(mode==="move"){
+        const c=cands(), j=ss.sel.indexOf(anchor);
+        const delta=idxOf(pitchAtY(p.y),c)-idxOf(orig[j],c);
+        if(delta!==0) tocar();
+        moverSel(delta,false); redraw(); return;
+      }
+      if(mode==="paint"){ const i=stepAt(p.x); arr[S0+i]=pitchAtY(p.y); if(!ss.sel.includes(i)) ss.sel.push(i); redraw(); }
+    };
+    const fin=()=>{
+      const m=mode; mode=null; orig=null;
+      if(m==="band"){ staffBand=null; redraw(); return; }
+      if((m==="move"||m==="paint") && undoHecho) commit();
+    };
+    pad.onpointerup=fin; pad.onpointercancel=fin;
+    // Teclado (lo despacha el keydown global al pentagrama que se tocó último)
+    window.__staffPads=window.__staffPads||{};
+    window.__staffPads[chKey]=e=>{
+      if(!ss.sel.length) return false;
+      if(e.key==="Escape"){ ss.sel=[]; redraw(); return true; }
+      if(e.key==="ArrowUp"||e.key==="ArrowDown"){
+        orig=null;
+        const prev=snapshot();
+        if(moverSel(e.key==="ArrowUp"?1:-1, e.shiftKey)){ undoStack.push(prev); if(undoStack.length>60)undoStack.shift(); commit(); }
+        else toast("Llegaste al límite (±1 octava)", true);
+        return true;
+      }
+      return false;
+    };
+    return box;
   }
   let down=false;
   pad.onpointerdown=e=>{down=true; drag(e); try{pad.setPointerCapture(e.pointerId);}catch(_){}}
@@ -2330,6 +2427,10 @@ document.getElementById("btnUndo").onclick=doUndo;
 // Keyboard shortcuts global handler
 document.addEventListener("keydown", e => {
   if (document.activeElement.tagName === "INPUT" && document.activeElement.type === "text") return;
+  // Pentagrama: ↑↓ mueven las notas elegidas, Esc suelta la selección
+  if (window.__staffFocus && window.__staffPads && window.__staffPads[window.__staffFocus]
+      && document.activeElement.tagName !== "SELECT"
+      && window.__staffPads[window.__staffFocus](e)) { e.preventDefault(); return; }
   
   if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
     e.preventDefault();
