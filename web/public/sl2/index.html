@@ -1555,7 +1555,7 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
   const key=ss.drawKey, [lab,max]=META[key], min=0;
   const scaleActive = (key==="pitch"), sa=scaleActive?SCALES[ss.scale]:null;
   const pad=document.createElement("div");
-  pad.style.cssText="height:92px; background:var(--screen); border:1px solid #000; border-radius:4px; position:relative; cursor:crosshair; user-select:none; touch-action:none; box-shadow:inset 0 1.5px 3px rgba(0,0,0,0.9);";
+  pad.style.cssText="height:"+(key==="pitch"?150:92)+"px; background:var(--screen); border:1px solid #000; border-radius:4px; position:relative; cursor:crosshair; user-select:none; touch-action:none; box-shadow:inset 0 1.5px 3px rgba(0,0,0,0.9);";
   const cnv=document.createElement("canvas"); cnv.style.width="100%"; cnv.style.height="100%"; cnv.style.display="block";
   pad.appendChild(cnv); box.appendChild(pad);
 
@@ -1567,18 +1567,74 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
   }
   box.appendChild(labelDiv);
 
-  let W=0,H=0,ctx=null;
+  let W=0,H=0,ctx=null,activeStep=-1;
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim()||"#888";
+  /* ---------- Pentagrama (Pitch Shift) · pedido de Pato 24 oct ----------
+     Valor 0..24 = -12..+12 semitonos sobre la TÓNICA elegida. Se escribe en
+     clave de sol como guitarra (la tónica en la 4ª octava escrita), con
+     sostenidos. Los pasos con nivel 0 se dibujan como silencio. */
+  const LETTER_POS={C:0,D:1,E:2,F:3,G:4,A:5,B:6};
+  function staffNote(v){
+    const midi=60+ss.root+(v-12);
+    const name=NOTE_NAMES[((midi%12)+12)%12];
+    const oct=Math.floor(midi/12)-1;
+    return { d: oct*7+LETTER_POS[name[0]], sharp: name.length>1, name: name+oct };
+  }
+  const D_TOP=43, D_BOT=21;                       // F6 … C3 (rango -12..+12 con cualquier tónica)
+  function yOfD(d){ const top=10, bot=H-16; return top+(D_TOP-d)*(bot-top)/(D_TOP-D_BOT); }
+  function drawStaff(){
+    const s=SL[key][0], lv=SL.lvl[0], w=W/nSteps, sp=yOfD(0)-yOfD(1);   // medio espacio
+    const lineC=css("--screen-txt");
+    // 5 líneas de la clave de sol: E4 G4 B4 D5 F5 (d = 30,32,34,36,38)
+    ctx.strokeStyle=lineC; ctx.globalAlpha=0.55; ctx.lineWidth=1;
+    [30,32,34,36,38].forEach(d=>{const y=Math.round(yOfD(d))+0.5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();});
+    ctx.globalAlpha=1;
+    ctx.fillStyle=lineC; ctx.font=Math.round(sp*9)+"px serif"; ctx.textBaseline="alphabetic";
+    ctx.globalAlpha=0.35; ctx.fillText("𝄞",2,yOfD(28)+sp*0.5); ctx.globalAlpha=1;
+    const okC=css("--ok"), accC=css("--acc");
+    for(let i=0;i<nSteps;i++){
+      const v=arr[s+i], lvl=arr[lv+i], n=staffNote(v);
+      const cx=i*w+w/2+(i===0?6:0), cy=yOfD(n.d);
+      const on=i===activeStep, col=on?accC:okC;
+      // líneas adicionales
+      ctx.strokeStyle=lineC; ctx.globalAlpha=0.55;
+      for(let d=28; d>=n.d; d-=2){ if(d%2===0){const y=Math.round(yOfD(d))+0.5; ctx.beginPath(); ctx.moveTo(cx-sp*2.2,y); ctx.lineTo(cx+sp*2.2,y); ctx.stroke();} }
+      for(let d=40; d<=n.d; d+=2){ const y=Math.round(yOfD(d))+0.5; ctx.beginPath(); ctx.moveTo(cx-sp*2.2,y); ctx.lineTo(cx+sp*2.2,y); ctx.stroke(); }
+      ctx.globalAlpha=1;
+      if(lvl<=0){                                   // silencio
+        ctx.fillStyle=col; ctx.globalAlpha=0.6; ctx.fillRect(cx-sp*1.2,yOfD(35)-sp*0.5,sp*2.4,sp); ctx.globalAlpha=1; continue;
+      }
+      ctx.globalAlpha=0.35+0.65*Math.min(1,lvl/100);
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.ellipse(cx,cy,sp*1.35,sp*0.95,-0.35,0,Math.PI*2); ctx.fill();
+      // plica
+      ctx.strokeStyle=col; ctx.lineWidth=1.4; ctx.beginPath();
+      if(n.d>=34){ ctx.moveTo(cx-sp*1.25,cy); ctx.lineTo(cx-sp*1.25,cy+sp*7); }
+      else { ctx.moveTo(cx+sp*1.25,cy); ctx.lineTo(cx+sp*1.25,cy-sp*7); }
+      ctx.stroke(); ctx.lineWidth=1;
+      if(n.sharp){ ctx.font="bold "+Math.round(sp*3)+"px serif"; ctx.fillText("♯",cx-sp*4,cy+sp*1.1); }
+      ctx.globalAlpha=1;
+      ctx.font=(on?"bold ":"")+"9px monospace"; ctx.fillStyle=on?accC:css("--mut");
+      const t=n.name; ctx.fillText(t,i*w+w/2-ctx.measureText(t).width/2,H-4);
+    }
+  }
   function redraw(){
     W=cnv.width=pad.clientWidth; H=cnv.height=pad.clientHeight; ctx=cnv.getContext("2d");
     ctx.clearRect(0,0,W,H);
-    ctx.strokeStyle="var(--line)"; ctx.lineWidth=1;
-    for(let i=1;i<nSteps;i++){const x=W*i/nSteps; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();}
+    // Paso que está sonando: columna iluminada
+    if(activeStep>=0 && activeStep<nSteps){
+      ctx.fillStyle=css("--acc"); ctx.globalAlpha=0.18; ctx.fillRect(activeStep*W/nSteps,0,W/nSteps,H); ctx.globalAlpha=1;
+    }
+    ctx.strokeStyle=css("--line"); ctx.lineWidth=1;
+    for(let i=1;i<nSteps;i++){const x=Math.round(W*i/nSteps)+0.5; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();}
+    if(key==="pitch"){ drawStaff(); return; }
     const s=SL[key][0];
     for(let i=0;i<nSteps;i++){
       const val=arr[s+i], frac=val/max, w=W/nSteps, x=i*w, h=H*frac;
-      ctx.fillStyle="rgba(54,192,214,0.16)"; ctx.fillRect(x,H-h,w,h);
-      ctx.fillStyle="var(--ok)"; ctx.fillRect(x,H-h,w,3);
-      ctx.fillStyle="var(--txt)"; ctx.font="9px monospace";
+      const on=i===activeStep;
+      ctx.fillStyle=on?"rgba(236,139,46,0.30)":"rgba(54,192,214,0.16)"; ctx.fillRect(x,H-h,w,h);
+      ctx.fillStyle=on?css("--acc"):css("--ok"); ctx.fillRect(x,H-h,w,3);
+      ctx.fillStyle=css("--screen-txt"); ctx.font="9px monospace";
       let txt=String(val);
       if(key==="pitch")txt=pitchNote(val,ss.root);
       else if(key==="band"&&val===0)txt="OFF";
@@ -1587,6 +1643,10 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
   }
   setTimeout(redraw,20);
   window.addEventListener("resize",redraw);
+  // El loop de animación (vu) le avisa el paso que suena; solo se redibuja si cambió
+  cnv.dataset.drawpad="1";
+  cnv._chKey=chKey; cnv._nSteps=nSteps;
+  cnv._setActive=i=>{ if(i!==activeStep){ activeStep=i; if(pad.isConnected) redraw(); } };
 
   function drag(e){
     const rect=pad.getBoundingClientRect();
@@ -1596,12 +1656,17 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
     if(step<0||step>=nSteps)return;
     const s=SL[key][0];
     let val=0;
-    if(ss.gate){
+    if(key==="pitch"){
+      const cand=scaleActive?allowedPitchFor(ss.scale):Array.from({length:25},(_,k)=>k);
+      let best=12,bd=1e9;
+      cand.forEach(c=>{const yy=yOfD(staffNote(c).d)*rect.height/H; const dd=Math.abs(yy-my)+(staffNote(c).sharp?0.01:0); if(dd<bd){bd=dd;best=c;}});
+      val=best;
+    } else if(ss.gate){
       val= (my < rect.height * 0.5) ? max : 0;
     }else{
       val=Math.round((1-my/rect.height)*max);
     }
-    if(scaleActive){
+    if(scaleActive && key!=="pitch"){
       val=nearest(val,allowedPitchFor(ss.scale));
     }
     pushUndo();
@@ -2447,7 +2512,11 @@ renderAll();
         }
       });
     }
+    document.querySelectorAll("canvas[data-drawpad]").forEach(c => {
+      if (c._setActive) c._setActive(Audio.currentStep(c._nSteps || 8));
+    });
   } else {
+    document.querySelectorAll("canvas[data-drawpad]").forEach(c => { if (c._setActive) c._setActive(-1); });
     // Clear highlights when stopped
     const wraps = document.querySelectorAll(".stepwrap.active-step");
     wraps.forEach(w => w.classList.remove("active-step"));
