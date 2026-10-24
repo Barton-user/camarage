@@ -1555,7 +1555,7 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
   const key=ss.drawKey, [lab,max]=META[key], min=0;
   const scaleActive = (key==="pitch"), sa=scaleActive?SCALES[ss.scale]:null;
   const pad=document.createElement("div");
-  pad.style.cssText="height:"+(key==="pitch"?150:92)+"px; background:var(--screen); border:1px solid #000; border-radius:4px; position:relative; cursor:crosshair; user-select:none; touch-action:none; box-shadow:inset 0 1.5px 3px rgba(0,0,0,0.9);";
+  pad.style.cssText="height:"+(key==="pitch"?240:92)+"px; background:var(--screen); border:1px solid #000; border-radius:4px; position:relative; cursor:crosshair; user-select:none; touch-action:none; box-shadow:inset 0 1.5px 3px rgba(0,0,0,0.9);";
   const cnv=document.createElement("canvas"); cnv.style.width="100%"; cnv.style.height="100%"; cnv.style.display="block";
   pad.appendChild(cnv); box.appendChild(pad);
 
@@ -1595,6 +1595,31 @@ function makeDrawPad(chKey, arr, ss, nSteps, ps){
     ctx.fillStyle=lineC; ctx.font=Math.round(sp*9)+"px serif"; ctx.textBaseline="alphabetic";
     ctx.globalAlpha=0.35; ctx.fillText("𝄞",2,yOfD(28)+sp*0.5); ctx.globalAlpha=1;
     const okC=css("--ok"), accC=css("--acc");
+    /* Renglones de la ESCALA elegida (pedido de Pato 24 oct): una guía punteada a
+       la altura de cada nota permitida, con su nombre a la derecha. La tónica va
+       en naranja. Si dos notas caen en la misma altura (F y F♯) se muestran juntas. */
+    if(ss.scale && ss.scale!=="Cromática"){
+      const rows=new Map();
+      allowedPitchFor(ss.scale).forEach(v=>{
+        const n=staffNote(v), r=rows.get(n.d)||{names:[],tonic:false};
+        const nm=n.name.replace(/-?\d+$/,"").replace("#","♯");
+        if(!r.names.includes(nm)) r.names.push(nm);
+        if(((v-12)%12+12)%12===0) r.tonic=true;
+        rows.set(n.d,r);
+      });
+      ctx.save();
+      ctx.font="8px monospace"; ctx.textBaseline="middle";
+      rows.forEach((r,d)=>{
+        const y=Math.round(yOfD(d))+0.5;
+        ctx.strokeStyle=r.tonic?accC:okC; ctx.globalAlpha=r.tonic?0.55:0.28; ctx.lineWidth=1;
+        ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); ctx.setLineDash([]);
+        const t=r.names.join("/"); ctx.globalAlpha=r.tonic?0.95:0.7; ctx.fillStyle=r.tonic?accC:okC;
+        const tw=ctx.measureText(t).width;
+        ctx.fillStyle=css("--screen"); ctx.globalAlpha=0.85; ctx.fillRect(W-tw-6,y-4.5,tw+4,9);
+        ctx.fillStyle=r.tonic?accC:okC; ctx.globalAlpha=r.tonic?1:0.8; ctx.fillText(t,W-tw-4,y);
+      });
+      ctx.restore();
+    }
     for(let i=0;i<nSteps;i++){
       const v=arr[s+i], lvl=arr[lv+i], n=staffNote(v);
       const cx=i*w+w/2+(i===0?6:0), cy=yOfD(n.d);
