@@ -32,7 +32,9 @@ if [ ! -f tw-input.css ]; then
 fi
 
 echo "▸ compilando Tailwind sobre index.html…"
-npx tailwindcss -c tailwind.config.js -i tw-input.css -o tw.css --minify >/dev/null 2>&1
+if ! npx -y tailwindcss@3.4.19 -c tailwind.config.js -i tw-input.css -o tw.css --minify >/tmp/camarage-tw.log 2>&1; then
+  echo "✗ falló Tailwind:"; cat /tmp/camarage-tw.log; exit 1
+fi
 echo "  CSS generado: $(wc -c < tw.css) bytes"
 
 # --- 2 · Inyectar el CSS y estampar la versión -------------------------------
