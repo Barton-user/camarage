@@ -173,7 +173,7 @@ export default function SetlistDetailPage() {
                         className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-900 transition">
                   <p className="font-bold text-sm">{s.title}</p>
                   <p className="mono text-[10px] text-neutral-500">
-                    {s.key} · {s.bpm} BPM · PC#{String(s.program_change ?? '–').padStart(2,'0')}
+                    {s.key}{s.transpose_semitones ? ` (${s.transpose_semitones > 0 ? '+' : ''}${s.transpose_semitones})` : ''} · {s.bpm} BPM · PC#{String(s.program_change ?? '–').padStart(2,'0')}
                   </p>
                 </button>
               ))}
@@ -190,7 +190,7 @@ export default function SetlistDetailPage() {
             <Link href={`/songs/${item.song_id}`} className="flex-1 min-w-0">
               <p className="font-bold truncate">{item.songs.title}</p>
               <p className="mono text-[10px] text-neutral-500">
-                {item.songs.key} · {item.songs.bpm} BPM · {item.songs.time_signature} · PC#{String(item.songs.program_change ?? '–').padStart(2,'0')}
+                {item.songs.key}{item.songs.transpose_semitones ? ` (${item.songs.transpose_semitones > 0 ? "+" : ""}${item.songs.transpose_semitones})` : ""} · {item.songs.bpm} BPM · {item.songs.time_signature} · PC#{String(item.songs.program_change ?? '–').padStart(2,'0')}
               </p>
             </Link>
             <div className="flex items-center gap-1">

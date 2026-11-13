@@ -544,6 +544,13 @@ export default function SongEditor() {
     return () => clearInterval(iv);
   }, [tapOn]);
 
+  async function guardarTono(v: number) {
+    const val = Math.max(-12, Math.min(12, Math.round(v)));
+    setSong({ ...song, transpose_semitones: val });
+    const { error } = await supabase.from("songs").update({ transpose_semitones: val }).eq("id", id);
+    if (error) alert("No se pudo guardar el tono: " + error.message + "\n¿Corriste migration_tono.sql en Supabase?");
+  }
+
   async function guardarOffset(v: number) {
     const val = Math.max(-30, Math.min(30, Number(v.toFixed(3))));
     setSong({ ...song, offset_seconds: val });
@@ -1268,6 +1275,21 @@ export default function SongEditor() {
             <div><label className="label">Tonalidad</label><input value={song.key || ""} onChange={e => setSong({...song, key: e.target.value})} onBlur={saveSong} className="input" /></div>
             <div><label className="label">BPM</label><input type="number" min="40" max="240" value={song.bpm} onChange={e => setSong({...song, bpm: parseFloat(e.target.value)||120})} onBlur={saveSong} className="input" /></div>
             <div><label className="label">Time signature</label><input value={song.time_signature} onChange={e => setSong({...song, time_signature: e.target.value})} onBlur={saveSong} className="input" /></div>
+            <div className="col-span-2">
+              <label className="label">Tono para tocar (semitonos)</label>
+              <select value={Number(song.transpose_semitones) || 0}
+                      onChange={e => guardarTono(parseInt(e.target.value, 10) || 0)}
+                      className="input" style={{maxWidth: 220}}>
+                {Array.from({ length: 13 }, (_, i) => i - 6).map(v => (
+                  <option key={v} value={v}>{v === 0 ? "Original" : `${v > 0 ? "+" : ""}${v} semitono${Math.abs(v) === 1 ? "" : "s"}`}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-neutral-500 mt-1 leading-snug">
+                La app baja o sube la pista esta cantidad de semitonos sin cambiar el tempo (la letra y el
+                metrónomo no se mueven) y transpone el pentagrama, el cifrado y la tonalidad que se muestra.
+                La primera vez cada aparato tarda unos segundos en procesarla. Se cambia también desde la app.
+              </p>
+            </div>
             <div className="col-span-2">
               <label className="label">Program Change (PC#) — opcional</label>
               <input type="number" min="0" max="127" value={song.program_change ?? ""} onChange={e => setSong({...song, program_change: e.target.value ? parseInt(e.target.value) : null})} onBlur={saveSong} className="input" placeholder="0-127" />

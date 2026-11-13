@@ -104,7 +104,7 @@ export default function SongsPage() {
               <div>
                 <p className="font-bold">{s.title}</p>
                 <p className="mono text-[10px] text-neutral-500">
-                  {s.key || '—'} · {s.bpm} BPM · {s.time_signature} · PC#{String(s.program_change ?? '–').padStart(2,'0')}
+                  {s.key || '—'}{s.transpose_semitones ? ` (${s.transpose_semitones > 0 ? '+' : ''}${s.transpose_semitones})` : ''} · {s.bpm} BPM · {s.time_signature} · PC#{String(s.program_change ?? '–').padStart(2,'0')}
                 </p>
               </div>
               <span className="text-neutral-600">→</span>

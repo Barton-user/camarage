@@ -64,6 +64,7 @@ export interface Song {
   bpm: number;
   time_signature: string;
   program_change?: number;
+  transpose_semitones?: number;   // tono para tocar: la app transpone la pista y el pentagrama
   daw_session_name?: string;
   duration_seconds?: number;
   has_click_track: boolean;
