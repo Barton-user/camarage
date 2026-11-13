@@ -2703,6 +2703,13 @@ if (typeof exports === 'object' && typeof module === 'object') {
   };
 
   function currentSong(){ return setlist.songs[setlist.currentSongIdx]; }
+  /* Tiempos por compás de la canción (numerador del compás: 3/4 → 3, 6/8 → 6).
+   * Antes el click, la cuenta previa y el disco del baterista tenían 4 fijo. */
+  function compasDe(song){
+    try { song = song || currentSong(); } catch(e){ song = null; }
+    const n = parseInt(String((song && song.timeSig) || '4/4').split('/')[0], 10);
+    return n > 0 && n <= 16 ? n : 4;
+  }
 
   /* Escritura null-safe: al rediseñar la vista se sacaron elementos de pantalla y
      un getElementById nulo tiraba todo el arranque de la app. */
@@ -3830,7 +3837,8 @@ if (typeof exports === 'object' && typeof module === 'object') {
     const lyrics = song.lyrics || [];
     const beatsPerSec = state.bpm / 60;
     const totalBeats = sec * beatsPerSec;
-    const currentBar = Math.floor(totalBeats / 4);
+    const bpbS = compasDe(song);
+    const currentBar = Math.floor(totalBeats / bpbS);
 
     // Encontrar chord actual
     let idx = 0;
@@ -3863,7 +3871,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
     if (next){
       document.getElementById('bassNextRoot').textContent = next.root;
       document.getElementById('bassNextQuality').textContent = next.quality;
-      const beatsTo = (next.bar - currentBar) * 4 - (totalBeats % 4);
+      const beatsTo = (next.bar - currentBar) * bpbS - (totalBeats % bpbS);
       document.getElementById('bassNextIn').textContent = 'en ' + Math.max(1, Math.ceil(beatsTo)) + ' beats';
     }
 
@@ -3906,11 +3914,13 @@ if (typeof exports === 'object' && typeof module === 'object') {
   const drumSubdivEl = document.getElementById('drumSubdiv');
   const drumPerim = document.getElementById('drumPerimeter');
 
-  // Pinta 4 puntos en el perímetro
-  function paintPerimeter(){
+  // Pinta un punto por tiempo del compás en el perímetro
+  let drumPerimN = 4;
+  function paintPerimeter(n){
+    drumPerimN = n = n || 4;
     drumPerim.innerHTML = '';
-    for (let i=0;i<4;i++){
-      const angle = (i/4) * 360 - 90; // empieza arriba
+    for (let i=0;i<n;i++){
+      const angle = (i/n) * 360 - 90; // empieza arriba
       const dot = document.createElement('div');
       dot.className = 'absolute rounded-full bg-neutral-700';
       dot.style.width = '18px'; dot.style.height = '18px';
@@ -4212,11 +4222,13 @@ if (typeof exports === 'object' && typeof module === 'object') {
     const beatsPerSec = state.bpm / 60;
     const totalBeats = sec * beatsPerSec;
     const beatIdx = Math.floor(totalBeats);
-    const beatInBar = beatIdx % 4;
+    const bpbD = compasDe();
+    if (bpbD !== drumPerimN) paintPerimeter(bpbD);
+    const beatInBar = beatIdx % bpbD;
     const beatPhase = totalBeats - beatIdx;
 
-    // Aguja giratoria — 360° por bar
-    const angle = ((beatInBar + beatPhase) / 4) * 360;
+    // Aguja giratoria — 360° por compás
+    const angle = ((beatInBar + beatPhase) / bpbD) * 360;
     drumHand.parentElement.style.transform = `rotate(${angle}deg)`;
 
     // Centro + flash en cada beat
@@ -4268,12 +4280,12 @@ if (typeof exports === 'object' && typeof module === 'object') {
       }
     }
     let curSec = song.chords[0].section, secStartBar = 0;
-    for (const c of song.chords){ if (c.bar <= Math.floor(totalBeats/4)){ curSec = c.section; secStartBar = c.bar; } }
+    for (const c of song.chords){ if (c.bar <= Math.floor(totalBeats/bpbD)){ curSec = c.section; secStartBar = c.bar; } }
     document.getElementById('drumSectionTag').textContent = curSec;
-    const nxt = song.chords.find(c => c.section !== curSec && c.bar > Math.floor(totalBeats/4));
+    const nxt = song.chords.find(c => c.section !== curSec && c.bar > Math.floor(totalBeats/bpbD));
     if (nxt){
       document.getElementById('drumNextSection').textContent = nxt.section;
-      document.getElementById('drumNextIn').textContent = (nxt.bar - Math.floor(totalBeats/4));
+      document.getElementById('drumNextIn').textContent = (nxt.bar - Math.floor(totalBeats/bpbD));
     } else {
       document.getElementById('drumNextSection').textContent = '— fin —';
       document.getElementById('drumNextIn').textContent = '–';
@@ -4351,7 +4363,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       const secUntil = (beatN - currentBeatPos) * beatDurSec;
       const audioTime = audioCtx.currentTime + secUntil - offsetSec;
       if (audioTime > audioCtx.currentTime + 0.001){
-        playClickAt(audioTime, beatN % 4 === 0);
+        playClickAt(audioTime, beatN % compasDe() === 0);
         _lastScheduledBeat = beatN;
       }
     }
@@ -4458,12 +4470,13 @@ if (typeof exports === 'object' && typeof module === 'object') {
     const beatsPerSec = state.bpm / 60;
     const totalBeats = sec * beatsPerSec;
     const beatIdx = Math.floor(totalBeats);
-    const beatInBar = beatIdx % 4;
+    const bpbG = compasDe();
+    const beatInBar = beatIdx % bpbG;
     const beatPhase = totalBeats - beatIdx;
-    const barPhase = (beatInBar + beatPhase) / 4;
+    const barPhase = (beatInBar + beatPhase) / bpbG;
 
     document.getElementById('globalBarProgress').style.width = `${(barPhase*100).toFixed(1)}%`;
-    document.getElementById('globalBar').textContent = String(Math.floor(beatIdx/4)+1).padStart(3,'0');
+    document.getElementById('globalBar').textContent = String(Math.floor(beatIdx/bpbG)+1).padStart(3,'0');
     document.getElementById('globalBeat').textContent = beatInBar+1;
     const m = Math.floor(sec/60).toString().padStart(2,'0');
     const s = Math.floor(sec%60).toString().padStart(2,'0');
@@ -4473,11 +4486,13 @@ if (typeof exports === 'object' && typeof module === 'object') {
       lastGlobalBeat = beatIdx;
       updateStageInfo();
       globalDots.forEach(d => { d.style.background = ''; d.classList.remove('beat-pulse'); });
-      const dot = globalDots[beatInBar];
+      const dot = globalDots[beatInBar];          // hay 4: en 6/8 o 7/8 los tiempos de más no tienen punto
       const accent = beatInBar===0;
-      dot.style.background = accent ? 'var(--accent-yellow)' : 'var(--accent-cyan)';
-      dot.style.boxShadow = `0 0 8px ${accent?'var(--accent-yellow)':'var(--accent-cyan)'}`;
-      void dot.offsetWidth; dot.classList.add('beat-pulse');
+      if (dot){
+        dot.style.background = accent ? 'var(--accent-yellow)' : 'var(--accent-cyan)';
+        dot.style.boxShadow = `0 0 8px ${accent?'var(--accent-yellow)':'var(--accent-cyan)'}`;
+        void dot.offsetWidth; dot.classList.add('beat-pulse');
+      }
       // Click reactivo SOLO si no estamos sincronizados al MIDI clock.
       // Si sí, scheduleAheadFromMidi() los agenda con anticipación (latency compensated).
       // En Modo Pistas el click lo agenda TRACKS sobre el reloj del audio (sample-accurate);
@@ -4685,7 +4700,8 @@ if (typeof exports === 'object' && typeof module === 'object') {
         if (when > horizon) break;
         if (when > audioCtx.currentTime + 0.001){
           const inCountIn = when < st.countInEndsAt - 0.001;
-          if (state.metroOn || inCountIn) clickAt(when, ((n % 4) + 4) % 4 === 0);
+          const bpbK = compasDe();
+          if (state.metroOn || inCountIn) clickAt(when, ((n % bpbK) + bpbK) % bpbK === 0);
         }
         st.lastSchedBeat = n;
         n++;
@@ -4845,7 +4861,7 @@ if (typeof exports === 'object' && typeof module === 'object') {
       const offset = Math.max(0, Math.min(fromSec != null ? fromSec : st.pausedAt, st.buffer.duration - 0.01));
       const beatDur = 60 / (state.bpm || 120);
       // La cuenta previa solo tiene sentido arrancando de cero
-      const countIn = (offset < 0.05 ? st.countInBars * 4 * beatDur : 0);
+      const countIn = (offset < 0.05 ? st.countInBars * compasDe() * beatDur : 0);
       const startAt = audioCtx.currentTime + 0.08 + countIn;   // 80ms de aire para agendar
 
       const src = audioCtx.createBufferSource();
